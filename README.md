@@ -13,11 +13,26 @@ openpyxl for Excel output, and PyMuPDF for PDF text replacement.
 
 ## Run it
 
+### One-line install (Windows)
+
+Open **PowerShell** and paste:
+
+```powershell
+irm https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/install.ps1 | iex
+```
+
+This downloads the tool to `%USERPROFILE%\finance-pii-redactor`, then starts it.
+Re-running the command updates to the latest version (your local
+`master_list.csv` is preserved). To install elsewhere, set `$env:FPR_INSTALL_DIR`
+first.
+
+### Or run from a copy you already have
+
 - **Windows:** double-click `run.bat`
 - **macOS / Linux:** run `run.sh`
 
-The first run installs the Python environment and downloads the spaCy model
-(~380 MB); later starts are fast. The launcher opens the app in your browser.
+The first run installs the Python environment and the spaCy model (~380 MB, once,
+via `uv sync`); later starts are fast. The launcher opens the app in your browser.
 
 ## Sharing with your team
 
