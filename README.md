@@ -1,79 +1,50 @@
 # Finance PII Redactor
 
-An offline desktop tool that **pseudonymizes** names and organization names in
-Excel and PDF files locally. Each detected name is replaced with a stable ID
-(e.g. `STF-91345`, `VND-1045`, `FND-7745`) rather than a generic `[PERSON]`
-label, so the same entity maps to the same ID everywhere — cross-row and
-cross-file patterns survive for error-checking and fraud monitoring while the
-real identities are removed. All processing happens on your machine; no data
-leaves the laptop.
+A desktop tool that replaces people's names and organization names in Excel and
+PDF files with stable ID codes (e.g. `STF-91345`). The same name always gets the
+same code, so you can still spot patterns in the data for error-checking and
+fraud monitoring — without exposing real identities. Everything runs on your own
+computer; no data is uploaded anywhere.
 
-It uses Microsoft Presidio with a spaCy `en_core_web_lg` model for detection,
-openpyxl for Excel output, and PyMuPDF for PDF text replacement.
+## Install & run
 
-## Run it
-
-### One-line install (Windows)
-
-Open **PowerShell** and paste:
+**Windows** — open PowerShell and paste:
 
 ```powershell
 irm https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/install.ps1 | iex
 ```
 
-It asks where to install (a folder picker, defaulting to the Desktop), then
-downloads and starts the tool. Re-running the command updates to the latest
-version (your local `master_list.csv` is preserved). To skip the prompt, set
-`$env:FPR_INSTALL_DIR` first.
-
-### One-line install (macOS / Linux)
-
-Open a **terminal** and paste:
+**macOS / Linux** — open a terminal and paste:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/install.sh | bash
 ```
 
-It prompts for a location (defaulting to the Desktop), downloads there, and
-launches `run.sh`. Set `FPR_INSTALL_DIR` to skip the prompt.
+The installer asks where to put the tool (default: Desktop), downloads it, and
+starts it. The first launch sets everything up (~400 MB, a few minutes, needs
+internet once); after that it is fast and works offline. Run the same command
+again anytime to update.
 
-### Or run from a copy you already have
+Already have a copy? Just double-click **`run.bat`** (Windows) or run
+**`./run.sh`** (macOS / Linux).
 
-- **Windows:** double-click `run.bat`
-- **macOS / Linux:** run `run.sh`
+## Sharing it
 
-The first run installs the Python environment and the spaCy model (~380 MB, once,
-via `uv sync`); later starts are fast. The launcher opens the app in your browser.
+Send people the one-line command above, or point them to the repo's **Download
+ZIP** button. The first run installs everything automatically — nothing else to
+set up.
 
-## Sharing with your team
+## Using it
 
-To hand the tool to non-technical colleagues:
+See **[GUIDE.md](GUIDE.md)** for a step-by-step walkthrough. Developer and
+architecture notes are in **[CLAUDE.md](CLAUDE.md)**; known issues in
+**[GOTCHA.md](GOTCHA.md)**.
 
-1. Run **`package.bat`** (Windows) or **`./package.sh`** (macOS/Linux). This builds
-   a lightweight source zip at `../finance-pii-redactor.zip` (no environment or
-   model bundled — just the code).
-2. Share that zip (email, shared drive, etc.). Each teammate extracts it and
-   double-clicks `run.bat`.
-3. Their **first run** installs everything automatically — the Python environment
-   *and* the language model — in one step (~400 MB, a few minutes, internet needed
-   once). Every run after that is fast and fully offline.
+## Handling sensitive data
 
-Because the spaCy model is now a tracked dependency, there is no separate
-model-download step to fail — the first `run.bat` handles it end to end.
+Approved for **Internal** data only under IPA's data-classification policy — not
+for Confidential or Highly Confidential data.
 
-## Documentation
-
-- **[GUIDE.md](GUIDE.md)** — plain-language walkthrough for end users: what the
-  tool does, how to run it, and data-handling caveats.
-- **[CLAUDE.md](CLAUDE.md)** — architecture and developer reference (clean-
-  architecture layers, master list, dev commands).
-- **[GOTCHA.md](GOTCHA.md)** — known issues and fixes.
-
-## Data classification
-
-Approved for **Internal** data only under IPA's data-classification policy — do
-not use for Confidential or Highly Confidential data.
-
-**Important:** the name → pseudonym **crosswalk** the tool produces is the
-re-identification key and is itself **Confidential**. Store and handle it
-accordingly, and never share it alongside the pseudonymized output file.
+The **name-to-code mapping** (crosswalk) the tool can export is the key that
+re-identifies people, so it is itself **Confidential**: store it securely and
+never send it alongside the pseudonymized file.
