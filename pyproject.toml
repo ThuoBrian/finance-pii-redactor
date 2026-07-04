@@ -1,0 +1,76 @@
+[project]
+name = "finance-pii-redactor"
+version = "0.1.0"
+description = "Local Streamlit tool that pseudonymizes names in Excel and PDF files"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "openpyxl>=3.1.0,<4.0",
+    "pandas>=3.0,<4.0",
+    "presidio-analyzer>=2.2.354,<3.0",
+    "spacy>=3.7.0,<4.0",
+    "streamlit>=1.35.0,<2.0",
+    "pymupdf>=1.24.0,<2.0",
+    # The spaCy NER model is a tracked dependency (pinned wheel) so `uv sync`
+    # installs it and never prunes it. This replaces the separate, fragile
+    # `python -m spacy download` step in run.bat / run.sh.
+    "en_core_web_lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl",
+]
+
+
+[dependency-groups]
+dev = ["codespell>=2.4.1", "pytest>=8.0.0", "ruff>=0.7.4"]
+
+[tool.ruff]
+line-length = 88
+fix = true
+# Assume Python 3.12
+target-version = "py312"
+
+[tool.ruff.lint]
+# docs: https://docs.astral.sh/ruff/rules/
+select = [
+    "F",   # Pyflakes
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "D",   # flake8-docstrings
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+]
+
+ignore = [
+    # do not enable if formatting
+    # docs: https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules
+    "W191",   # tab indentation
+    "E111",   # indentation
+    "E114",   # indentation
+    "E117",   # over indented
+    "D206",   # indent with spaces
+    "D300",   # triple single quotes
+    "E501",   # line length regulated by formatter
+    "D105",   # missing docstring in magic method
+    "D100",   # missing docstring in public module
+    "D104",   # missing docstring in public package
+    "SIM110", # Use all instead of `for` loop
+    "TRY003", # Avoid specifying long messages outside the exception class
+    "D205",   # 1 blank line required between summary line and description
+    "D203",
+    "D213",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Test functions are self-describing by name; don't require docstrings.
+"tests/**" = ["D103"]
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 88
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.codespell]
+builtin = "clear,rare,informal,usage,code,names"
+ignore-words-list = "jupyter,ipa,spacy,ws,thead,GOTCHA,gotcha,master"
+skip = "uv.lock,*.txt,*.csv"

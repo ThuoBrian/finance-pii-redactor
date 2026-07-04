@@ -1,0 +1,10 @@
+# Normalize text files to LF in the repo; let Git pick native endings on checkout.
+* text=auto
+
+# Launcher scripts must keep LF endings on every platform. run.sh breaks with
+# CRLF, and both launchers are validated as pure-ASCII/LF (see CLAUDE.md).
+*.sh text eol=lf
+*.bat text eol=lf
+
+# Lockfile is generated; keep diffs quiet.
+uv.lock linguist-generated=true

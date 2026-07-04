@@ -1,0 +1,65 @@
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# ── Virtual environments ─────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Packaging / build artifacts ──────────────────────────────────────────────
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+finance-pii-redactor.zip
+*.zip
+
+# ── Tooling caches ───────────────────────────────────────────────────────────
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+
+# ── Editors / IDEs ───────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*~
+
+# ── OS cruft ─────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Secrets / local env ──────────────────────────────────────────────────────
+.env
+.env.*
+
+# ── Claude Code local files ──────────────────────────────────────────────────
+.claude/
+
+# ── Legacy source (excluded from packaging too) ──────────────────────────────
+_legacy/
+
+# ── Sensitive data — NEVER commit ────────────────────────────────────────────
+# This is a PII tool. Real spreadsheets, PDFs, the name→pseudonym crosswalk (the
+# re-identification KEY), and the master list (real staff names + IDs) are all
+# Confidential under IPA's data-classification policy and must never enter version
+# control. The app reads the master list from a local file that each machine
+# supplies out-of-band; MasterListRepository tolerates its absence.
+*.xlsx
+*.xls
+*.xlsm
+*.pdf
+*_crosswalk.csv
+# Master list and any other data CSVs (real names) — keep local, never commit.
+finance_redactor/infrastructure/names/data/*.csv
