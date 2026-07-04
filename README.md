@@ -21,10 +21,21 @@ Open **PowerShell** and paste:
 irm https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/install.ps1 | iex
 ```
 
-This downloads the tool to `%USERPROFILE%\finance-pii-redactor`, then starts it.
-Re-running the command updates to the latest version (your local
-`master_list.csv` is preserved). To install elsewhere, set `$env:FPR_INSTALL_DIR`
-first.
+It asks where to install (a folder picker, defaulting to the Desktop), then
+downloads and starts the tool. Re-running the command updates to the latest
+version (your local `master_list.csv` is preserved). To skip the prompt, set
+`$env:FPR_INSTALL_DIR` first.
+
+### One-line install (macOS / Linux)
+
+Open a **terminal** and paste:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/install.sh | bash
+```
+
+It prompts for a location (defaulting to the Desktop), downloads there, and
+launches `run.sh`. Set `FPR_INSTALL_DIR` to skip the prompt.
 
 ### Or run from a copy you already have
 
