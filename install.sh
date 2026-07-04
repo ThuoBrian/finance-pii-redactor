@@ -14,7 +14,7 @@ set -euo pipefail
 REPO="ThuoBrian/finance-pii-redactor"
 BRANCH="main"
 APP_NAME="finance-pii-redactor"
-DATA_REL="finance_redactor/infrastructure/names/data/master_list.csv"
+DATA_REL="data/master_list.csv"
 
 # Colors, but only when writing to a real terminal.
 if [ -t 1 ]; then

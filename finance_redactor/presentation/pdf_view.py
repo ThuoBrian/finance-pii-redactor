@@ -24,7 +24,7 @@ def _name_list_help(counts: Mapping[str, int]) -> str:
     by_cat = ", ".join(f"{n:,} {cat}" for cat, n in sorted(counts.items())) or "none"
     return (
         f"Loaded {total:,} master-list entr(y/ies): {by_cat}. Edit "
-        "`finance_redactor/infrastructure/names/data/master_list.csv` "
+        "`data/master_list.csv` "
         "(columns: category, name, id) and restart the app to update them."
     )
 

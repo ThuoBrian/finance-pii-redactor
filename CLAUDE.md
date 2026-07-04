@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Streamlit application that **pseudonymizes** names and organization names in Excel and PDF files locally — each detected name is replaced with a stable ID (e.g. `STF-91345`, `VND-1045`, `FND-7745`) rather than a generic `[PERSON]` label, so the same entity maps to the same ID everywhere and cross-row/cross-file patterns survive for error-checking and fraud monitoring. It uses Microsoft Presidio with a spaCy `en_core_web_lg` model for PII detection, openpyxl for Excel output, and PyMuPDF for PDF text replacement. This is distributed as an offline-capable desktop tool: users double-click `run.bat` (Windows) or `run.sh` (macOS/Linux) to start the local web server and open the browser.
 
-IDs come from a maintained **master list** (`finance_redactor/infrastructure/names/data/master_list.csv`). Names not in the list are still pseudonymized with a stable, flagged auto-id and surfaced in a downloadable name→pseudonym **crosswalk** (the re-identification key — treat as Confidential).
+IDs come from a maintained **master list** (`data/master_list.csv`, a top-level user-owned folder outside the package). Names not in the list are still pseudonymized with a stable, flagged auto-id and surfaced in a downloadable name→pseudonym **crosswalk** (the re-identification key — treat as Confidential).
 
 ## Common development commands
 
@@ -103,7 +103,9 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   (category → (prefix, entity_type)), `auto_prefixes`, `custom_match_score`,
   default threshold, `master_list_file`). Replaces scattered module-level
   constants and the duplicated `0.9` magic number.
-- **Master list:** `finance_redactor/infrastructure/names/data/master_list.csv`
+- **Master list:** `data/master_list.csv` — a **top-level, user-owned folder**
+  outside the package (resolved by `Settings.names_dir` from `config.py`), so it
+  is easy to find/edit and stays separate from the code (and out of git).
   (columns `category,name,id`; `#` comments and blank lines ignored). It is the
   **single source** for both detection and pseudonym IDs. `category` maps via
   `Settings.categories` to a prefix + entity type (`Staff`→`STF`/PERSON,

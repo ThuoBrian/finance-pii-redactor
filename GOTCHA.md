@@ -49,7 +49,7 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Solution:** Always run from the repository root with `uv run streamlit run app.py`. If you need a standalone script, adjust `PYTHONPATH` first.
 
 ### Master list changes are not being applied
-- **Symptom:** Names or IDs edited in `finance_redactor/infrastructure/names/data/master_list.csv` are not reflected.
+- **Symptom:** Names or IDs edited in `data/master_list.csv` are not reflected.
 - **Cause:** The analyzer is cached via `@st.cache_resource`, so changes to the CSV are not picked up until the Streamlit server restarts.
 - **Solution:** Stop and restart the app after editing the master list. The Advanced settings panel shows the loaded entry counts by category.
 

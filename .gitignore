@@ -62,4 +62,4 @@ _legacy/
 *.pdf
 *_crosswalk.csv
 # Master list and any other data CSVs (real names) — keep local, never commit.
-finance_redactor/infrastructure/names/data/*.csv
+data/*.csv

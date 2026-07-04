@@ -13,7 +13,7 @@ $ErrorActionPreference = 'Stop'
 $Repo    = 'ThuoBrian/finance-pii-redactor'
 $Branch  = 'main'
 $AppName = 'finance-pii-redactor'
-$DataRel = 'finance_redactor\infrastructure\names\data\master_list.csv'
+$DataRel = 'data\master_list.csv'
 
 $green = @{ ForegroundColor = 'Green' }
 $cyan  = @{ ForegroundColor = 'Cyan' }

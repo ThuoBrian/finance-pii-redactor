@@ -22,13 +22,7 @@ import csv
 import re
 from pathlib import Path
 
-_DATA_DIR = (
-    Path(__file__).resolve().parent.parent
-    / "finance_redactor"
-    / "infrastructure"
-    / "names"
-    / "data"
-)
+_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 _PERSON = _DATA_DIR / "person.txt"
 _ORGANIZATION = _DATA_DIR / "organization.txt"
 _OUTPUT = _DATA_DIR / "master_list.csv"

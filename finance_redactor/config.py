@@ -12,8 +12,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 
-# The master list (and the file repository that reads it) ship together.
-_DATA_DIR = Path(__file__).parent / "infrastructure" / "names" / "data"
+# The master list lives in a top-level ``data/`` folder next to the package -
+# user-owned config, kept separate from the code and out of git. (Resolved from
+# this file: finance_redactor/config.py -> repo root -> data/.)
+_DATA_DIR = Path(__file__).parent.parent / "data"
 
 # Maps a master-list ``category`` to its pseudonym prefix and the entity type the
 # detector uses for it. Several categories may share one entity type (Vendor and
