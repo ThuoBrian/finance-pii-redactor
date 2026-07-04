@@ -47,8 +47,6 @@ This project uses `uv` for environment management and Python 3.12.
 
 - **Check known issues:** see `GOTCHA.md` for recurring errors and solutions.
 
-- **End-user documentation:** `GUIDE.md` is the non-technical walkthrough handed to IPA staff (what the tool does, how to run it, data-handling caveats). Keep it in plain language and in sync with UI changes.
-
 - **The spaCy model is a pinned dependency**, so `uv sync` installs it (and never
   prunes it). It is declared in `pyproject.toml` as a wheel-URL requirement
   (`en_core_web_lg @ https://.../en_core_web_lg-3.8.0-...whl`); there is no longer

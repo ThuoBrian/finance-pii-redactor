@@ -36,9 +36,9 @@ set up.
 
 ## Using it
 
-See **[GUIDE.md](GUIDE.md)** for a step-by-step walkthrough. Developer and
-architecture notes are in **[CLAUDE.md](CLAUDE.md)**; known issues in
-**[GOTCHA.md](GOTCHA.md)**.
+Upload an Excel or PDF file, choose what to pseudonymize, review the results,
+and download the cleaned copy. Developer and architecture notes are in
+**[CLAUDE.md](CLAUDE.md)**; known issues in **[GOTCHA.md](GOTCHA.md)**.
 
 ## Handling sensitive data
 
