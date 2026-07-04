@@ -4,9 +4,9 @@
 #
 #   irm https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/install.ps1 | iex
 #
-# It downloads the latest version, extracts it to your user folder, and starts
-# the app. The first launch sets up the environment (a few minutes, once).
-# To install somewhere else, set $env:FPR_INSTALL_DIR before running.
+# It asks where to install, downloads the latest version there, and starts the
+# app. The first launch sets up the environment (a few minutes, once).
+# To skip the prompt, set $env:FPR_INSTALL_DIR before running.
 
 $ErrorActionPreference = 'Stop'
 
@@ -15,15 +15,61 @@ $Branch  = 'main'
 $AppName = 'finance-pii-redactor'
 $DataRel = 'finance_redactor\infrastructure\names\data\master_list.csv'
 
-$InstallRoot = if ($env:FPR_INSTALL_DIR) { $env:FPR_INSTALL_DIR } else { $env:USERPROFILE }
-$Target      = Join-Path $InstallRoot $AppName
-
 $green = @{ ForegroundColor = 'Green' }
 $cyan  = @{ ForegroundColor = 'Cyan' }
 
+function Get-InstallRoot {
+    # Ask which parent folder to install into; the app folder is created inside it.
+    # An explicit override wins and skips the prompt (scriptable / non-interactive).
+    if ($env:FPR_INSTALL_DIR) { return $env:FPR_INSTALL_DIR }
+
+    $desktop = [Environment]::GetFolderPath('Desktop')
+
+    # Preferred: a graphical "Browse For Folder" dialog.
+    try {
+        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+        $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+        $dlg.Description = "Choose where to install Finance PII Redactor (a 'finance-pii-redactor' folder will be created inside)."
+        $dlg.ShowNewFolderButton = $true
+        try { $dlg.SelectedPath = $desktop } catch { }
+        # Owned by a TopMost form so the dialog appears in front of the console.
+        $owner  = New-Object System.Windows.Forms.Form -Property @{ TopMost = $true }
+        $result = $dlg.ShowDialog($owner)
+        $owner.Dispose()
+        if ($result -eq [System.Windows.Forms.DialogResult]::OK -and $dlg.SelectedPath) {
+            return $dlg.SelectedPath
+        }
+        Write-Host "No folder chosen - installing to the Desktop." @cyan
+        return $desktop
+    }
+    catch {
+        # Fallback for hosts without a usable WinForms dialog (e.g. PowerShell 7
+        # running MTA, or a headless session): a simple numbered menu.
+        Write-Host ""
+        Write-Host "Where should Finance PII Redactor be installed?"
+        Write-Host "  [1] Desktop (default)"
+        Write-Host "  [2] Documents"
+        Write-Host "  [3] Home folder"
+        Write-Host "  [4] Type a path"
+        switch (Read-Host "Enter 1-4 (or press Enter for Desktop)") {
+            '2' { return [Environment]::GetFolderPath('MyDocuments') }
+            '3' { return [Environment]::GetFolderPath('UserProfile') }
+            '4' {
+                $p = Read-Host "Full path to the folder to install into"
+                if ([string]::IsNullOrWhiteSpace($p)) { return $desktop } else { return $p }
+            }
+            default { return $desktop }
+        }
+    }
+}
+
 Write-Host ""
 Write-Host "Finance PII Redactor - installer" @green
-Write-Host "Installing to: $Target"
+
+$InstallRoot = Get-InstallRoot
+$Target      = Join-Path $InstallRoot $AppName
+
+Write-Host "Installing to: $Target" @green
 Write-Host ""
 
 # 1. Download the current source as a zip (works for a public repo, no login).
