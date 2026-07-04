@@ -38,7 +38,7 @@ set up.
 
 Upload an Excel or PDF file, choose what to pseudonymize, review the results,
 and download the cleaned copy. Developer and architecture notes are in
-**[CLAUDE.md](CLAUDE.md)**; known issues in **[GOTCHA.md](GOTCHA.md)**.
+**[CLAUDE.md](CLAUDE.md)**; known issues in **[GOTCHA.md](docs/GOTCHA.md)**.
 
 ## Handling sensitive data
 

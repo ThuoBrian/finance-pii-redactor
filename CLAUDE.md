@@ -45,7 +45,7 @@ This project uses `uv` for environment management and Python 3.12.
   uv run python scripts/migrate_to_master_list.py
   ```
 
-- **Check known issues:** see `GOTCHA.md` for recurring errors and solutions.
+- **Check known issues:** see `docs/GOTCHA.md` for recurring errors and solutions.
 
 - **The spaCy model is a pinned dependency**, so `uv sync` installs it (and never
   prunes it). It is declared in `pyproject.toml` as a wheel-URL requirement
