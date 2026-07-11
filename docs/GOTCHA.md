@@ -48,15 +48,11 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Cause:** Running `python app.py` directly instead of via `streamlit run app.py`, or not running from the project root.
 - **Solution:** Always run from the repository root with `uv run streamlit run app.py`. If you need a standalone script, adjust `PYTHONPATH` first.
 
-### Master list changes are not being applied
-- **Symptom:** Names or IDs edited in `data/master_list.csv` are not reflected.
-- **Cause:** The analyzer is cached via `@st.cache_resource`, so changes to the CSV are not picked up until the Streamlit server restarts.
-- **Solution:** Stop and restart the app after editing the master list. The Advanced settings panel shows the loaded entry counts by category.
 
 ### A name gets a flagged `*-AUTO-*` code instead of my curated ID
 - **Symptom:** A name shows up in the crosswalk as e.g. `PSN-AUTO-3F9A1` with **Flagged = yes**, not the `STF-12345` you expected.
 - **Cause:** The name was detected but is **not in the master list with a curated `id`** — either it is missing, the `id` column is blank, or the spelling/spacing in the master list does not match the document text. Matching is case-insensitive and whitespace-normalized, but otherwise exact.
-- **Solution:** Add the name to `master_list.csv` with the correct `category` and a non-blank `id`, using the exact text as it appears in the data, then restart. Auto-codes are deterministic (the same unknown name always yields the same code, even across files), so existing outputs stay consistent until you re-run.
+- **Solution:** Add the name to `master_list.csv` with the correct `category` and a non-blank `id`, using the exact text as it appears in the data, then refresh the app in the browser. Edits to the master list take effect on the next Streamlit rerun (the CSV is reloaded each time; only the heavy spaCy model is cached). Auto-codes are deterministic (the same unknown name always yields the same code, even across files), so existing outputs stay consistent until you re-run.
 
 ### Long multi-word names are not matched
 - **Symptom:** A phrase like `Kenya Commercial Bank` is not detected even though it is in the master list.

@@ -33,17 +33,21 @@ def _main() -> None:
     settings = DEFAULT_SETTINGS
 
     @st.cache_resource(show_spinner="Loading NLP model (first run only)...")
-    def _get_engine() -> PresidioEngine:
-        repo = MasterListRepository(settings.master_list_file, settings.categories)
-        names = repo.names_by_entity()
-        recognizers = build_custom_recognizers(
-            names.get("PERSON", []),
-            names.get("ORGANIZATION", []),
-            settings.custom_match_score,
-        )
-        return PresidioEngine(settings, recognizers)
+    def _get_nlp_engine():
+        """Load the heavy spaCy model once and reuse it across reruns."""
+        return PresidioEngine._create_nlp_engine(settings)
 
+    # The master list is lightweight and user-editable: reload it on every rerun
+    # so edits to data/master_list.csv take effect without a server restart.
     repo = MasterListRepository(settings.master_list_file, settings.categories)
+    names = repo.names_by_entity()
+    recognizers = build_custom_recognizers(
+        names.get("PERSON", []),
+        names.get("ORGANIZATION", []),
+        settings.custom_match_score,
+    )
+    engine = PresidioEngine(settings, recognizers, nlp_engine=_get_nlp_engine())
+
     master_map = repo.master_map()
     name_counts = repo.counts_by_category()
 
@@ -68,7 +72,6 @@ def _main() -> None:
         st.stop()
 
     extension = uploaded.name.rsplit(".", 1)[-1].lower()
-    engine = _get_engine()
 
     if extension in {"xlsx", "xls"}:
         run_excel_flow(

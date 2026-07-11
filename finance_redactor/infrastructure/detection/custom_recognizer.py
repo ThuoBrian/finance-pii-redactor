@@ -66,7 +66,7 @@ class CustomNameRecognizer(EntityRecognizer):
 
         results: list[RecognizerResult] = []
         for raw_name, pattern in self._patterns.items():
-            escaped = re.escape(raw_name)
+            escaped_name = re.escape(raw_name)
             for match in pattern.finditer(text):
                 results.append(
                     RecognizerResult(
@@ -78,8 +78,10 @@ class CustomNameRecognizer(EntityRecognizer):
                             recognizer=self.__class__.__name__,
                             original_score=self._score,
                             pattern_name=f"custom list: {raw_name}",
-                            pattern=escaped,
-                            textual_explanation=f"Name matched custom {supported_entity.lower()} list",
+                            pattern=escaped_name,
+                            textual_explanation=(
+                                f"Name matched custom {supported_entity.lower()} list"
+                            ),
                         ),
                     )
                 )

@@ -61,9 +61,11 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
 
 - **`app.py`** — the Streamlit entry point **and composition root**. It builds the
   object graph (wires concrete adapters into use cases via constructor injection),
-  caches the heavy NLP engine with `@st.cache_resource`, and routes the upload to
-  the Excel or PDF flow by extension. The `get_script_run_ctx()` guard at the
-  bottom keeps `_main()` from running on import (tests/linters).
+  routes the upload to the Excel or PDF flow by extension. The `get_script_run_ctx()`
+  guard at the bottom keeps `_main()` from running on import (tests/linters). It
+  caches only the heavy spaCy NLP model with `@st.cache_resource`; the master list
+  and its custom recognizers are rebuilt on every Streamlit rerun so edits to
+  `data/master_list.csv` take effect immediately without a server restart.
 - **`finance_redactor/domain/`** — framework-free core. `entities.py`
   (`PiiDetection`, `Span`, `Finding`, `DetectionSource` = `MODEL`/`MASTER_LIST`) is
   the one representation of a finding all layers speak. `rules.py` holds
@@ -155,7 +157,3 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
 - Both launchers must stay **strictly ASCII**. They previously crashed (`'────' is not recognized` / `do was unexpected at this time`) because `chcp 65001` + multi-byte box-drawing/em-dash characters desynchronized cmd.exe's byte-offset file parser. Do **not** reintroduce `chcp 65001` or non-ASCII decoration. Verify after editing: a byte scan should report zero bytes > 127, `run.sh` must keep LF line endings.
 - Both use 24-bit truecolor ANSI escapes (`ESC[38;2;R;G;Bm`) for **IPA brand green `#49ac57`** (RGB `73;172;87`); semantic status colors stay distinct (yellow = waiting, red = problem). Truecolor relies on a Windows 11+ console.
 
-### Known cleanup items (verify before acting)
-
-- `pyproject.toml` declares `readme = "README.md"`, but **no `README.md` exists** — this breaks `uv build`/packaging until a README is added or the field is removed.
-- `jinja2` and `polars` are declared dependencies but are **not imported anywhere** in `app.py` or `finance_redactor/` (the Excel comparison builds HTML by hand in `presentation/presenters.py`, not via pandas `Styler`). They appear safe to remove, but confirm they aren't pulled in indirectly first.
