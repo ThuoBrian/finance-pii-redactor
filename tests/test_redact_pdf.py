@@ -1,4 +1,4 @@
-"""Tests for the PDF pseudonymization use case.
+"""Tests for the PDF pseudonymization / blackout use case.
 
 Framework-free: a fake :class:`PdfDocument` and detector stand in for PyMuPDF
 and Presidio, so these tests run without the heavy language model.
@@ -8,17 +8,21 @@ from __future__ import annotations
 
 import pytest
 
-from finance_redactor.application.redact_pdf import RedactPdfService
+from finance_redactor.application.redact_pdf import RedactionStyle, RedactPdfService
 from finance_redactor.domain.entities import DetectionSource, PiiDetection, Span
 
 
 class FakePdfDocument:
     """In-memory PDF double for testing RedactPdfService."""
 
-    def __init__(self, pages: list[str]) -> None:
-        """Create a fake document with the given page texts."""
+    def __init__(
+        self, pages: list[str], image_rects: dict[int, list[tuple]] | None = None
+    ) -> None:
+        """Create a fake document with the given page texts and image rectangles."""
         self._pages = pages
+        self._image_rects = image_rects or {}
         self.redactions_by_page: dict[int, list[tuple[str, str]]] = {}
+        self.blackout_by_page: dict[int, bool] = {}
         self.closed = False
 
     @property
@@ -30,9 +34,24 @@ class FakePdfDocument:
         """Return the text of the requested page."""
         return self._pages[page_index]
 
-    def redact_page(self, page_index: int, redactions: list[tuple[str, str]]) -> None:
-        """Record the redactions applied to this page."""
+    def page_image_rects(
+        self, page_index: int
+    ) -> list[tuple[float, float, float, float]]:
+        """Return image rectangles recorded for this page."""
+        return [
+            tuple(float(c) for c in r) for r in self._image_rects.get(page_index, [])
+        ]
+
+    def redact_page(
+        self,
+        page_index: int,
+        redactions: list[tuple[str, str]],
+        *,
+        blackout: bool = False,
+    ) -> None:
+        """Record the redactions and blackout flag applied to this page."""
         self.redactions_by_page[page_index] = redactions
+        self.blackout_by_page[page_index] = blackout
 
     def to_bytes(self) -> bytes:
         """Render the document to bytes (here, the joined page texts)."""
@@ -150,3 +169,45 @@ def test_document_is_closed_even_on_detector_error() -> None:
         service.execute(doc, ["PERSON"], 0.35)
 
     assert doc.closed is True
+
+
+def test_blackout_mode_passes_blackout_flag() -> None:
+    """Blackout mode instructs the gateway to cover text with black boxes."""
+    doc = FakePdfDocument(["John paid"])
+    _service().execute(
+        doc, ["PERSON"], 0.35, style=RedactionStyle.BLACKOUT, redact_images=False
+    )
+
+    assert doc.blackout_by_page[0] is True
+    # Text redaction still records the detected text and assigned pseudonym.
+    assert doc.redactions_by_page[0][0][0] == "John"
+    assert doc.redactions_by_page[0][0][1].startswith("PSN-AUTO-")
+
+
+def test_blackout_mode_can_redact_images() -> None:
+    """Blackout mode adds an image sentinel redaction when images are present."""
+    doc = FakePdfDocument(
+        ["John paid"],
+        image_rects={0: [(10.0, 10.0, 50.0, 50.0)]},
+    )
+    _service().execute(
+        doc, ["PERSON"], 0.35, style=RedactionStyle.BLACKOUT, redact_images=True
+    )
+
+    sentinels = [r for r, _ in doc.redactions_by_page[0] if r == "__IMAGE__"]
+    assert sentinels == ["__IMAGE__"]
+
+
+def test_pseudonymize_mode_does_not_blackout_images() -> None:
+    """Pseudonymize mode never adds image redactions, even when requested."""
+    doc = FakePdfDocument(
+        ["John paid"],
+        image_rects={0: [(10.0, 10.0, 50.0, 50.0)]},
+    )
+    _service().execute(
+        doc, ["PERSON"], 0.35, style=RedactionStyle.PSEUDONYMIZE, redact_images=True
+    )
+
+    sentinels = [r for r, _ in doc.redactions_by_page[0] if r == "__IMAGE__"]
+    assert sentinels == []
+    assert doc.blackout_by_page[0] is False

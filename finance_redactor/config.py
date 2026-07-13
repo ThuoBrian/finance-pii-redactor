@@ -31,7 +31,7 @@ _DEFAULT_CATEGORIES: Mapping[str, tuple[str, str]] = MappingProxyType(
 # Prefix used when a detected name is not in the master list and an auto/placeholder
 # pseudonym must be generated (keyed by entity type).
 _DEFAULT_AUTO_PREFIXES: Mapping[str, str] = MappingProxyType(
-    {"PERSON": "PSN", "ORGANIZATION": "ORG"}
+    {"PERSON": "PSN", "ORGANIZATION": "ORG", "EMAIL_ADDRESS": "EML"}
 )
 
 
@@ -45,7 +45,7 @@ class Settings:
 
     language: str = "en"
     spacy_model: str = "en_core_web_lg"
-    supported_entities: tuple[str, ...] = ("PERSON", "ORGANIZATION")
+    supported_entities: tuple[str, ...] = ("PERSON", "ORGANIZATION", "EMAIL_ADDRESS")
     categories: Mapping[str, tuple[str, str]] = _DEFAULT_CATEGORIES
     auto_prefixes: Mapping[str, str] = _DEFAULT_AUTO_PREFIXES
     custom_match_score: float = 0.9

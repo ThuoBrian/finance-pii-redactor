@@ -13,7 +13,7 @@ from typing import Any
 
 import streamlit as st
 
-from finance_redactor.application.redact_pdf import RedactPdfService
+from finance_redactor.application.redact_pdf import RedactionStyle, RedactPdfService
 from finance_redactor.config import Settings
 from finance_redactor.presentation.crosswalk_view import render_crosswalk_section
 from finance_redactor.presentation.presenters import pdf_findings_dataframe
@@ -57,6 +57,20 @@ def run_pdf_flow(
 
     st.subheader("Configuration")
     with st.expander("Advanced settings", expanded=True):
+        style = st.radio(
+            "Redaction style",
+            options=[RedactionStyle.PSEUDONYMIZE, RedactionStyle.BLACKOUT],
+            format_func=lambda s: (
+                "Pseudonymize (replace with stable IDs)"
+                if s == RedactionStyle.PSEUDONYMIZE
+                else "Black out (cover with black boxes)"
+            ),
+            help=(
+                "Pseudonymize replaces names with stable IDs like STF-91345. "
+                "Black out covers detected text and images with a black shade."
+            ),
+            key="pdf_style",
+        )
         threshold = st.slider(
             "Confidence threshold",
             min_value=0.1,
@@ -67,22 +81,41 @@ def run_pdf_flow(
             key="pdf_threshold",
         )
         entity_options = st.multiselect(
-            "Entity types to pseudonymize",
+            "Text to redact",
             options=list(settings.supported_entities),
             default=list(settings.supported_entities),
             key="pdf_entities",
         )
+        redact_images = st.checkbox(
+            "Also black out images / logos",
+            value=False,
+            help=(
+                "Covers every image on each page with a black box. Only applies "
+                "when Black out is selected; in Pseudonymize mode this is ignored."
+            ),
+            key="pdf_redact_images",
+        )
         st.markdown("**Master list**")
         st.caption(_name_list_help(name_counts))
 
-    if st.button("Pseudonymize PDF", type="primary", width="stretch"):
+    button_label = (
+        "Black out PDF" if style == RedactionStyle.BLACKOUT else "Pseudonymize PDF"
+    )
+    if st.button(button_label, type="primary", width="stretch"):
         uploaded.seek(0)
         with st.spinner("Scanning PDF for PII..."):
-            result = pdf_service.execute(uploaded, entity_options, threshold)
+            result = pdf_service.execute(
+                uploaded,
+                entity_options,
+                threshold,
+                style=style,
+                redact_images=(redact_images and style == RedactionStyle.BLACKOUT),
+            )
         st.session_state.pdf_buffer = result.data
         st.session_state.pdf_findings = result.findings
         st.session_state.pdf_pages = result.page_count
         st.session_state.pdf_crosswalk = result.crosswalk
+        st.session_state.pdf_style = style.value
 
     if "pdf_buffer" not in st.session_state or st.session_state.pdf_buffer is None:
         st.stop()
@@ -97,7 +130,14 @@ def run_pdf_flow(
         )
         st.stop()
 
-    st.success(f"Found {n_entities} PII instance(s) across {total_pages} page(s).")
+    style_value = st.session_state.get("pdf_style", RedactionStyle.PSEUDONYMIZE.value)
+    if style_value == RedactionStyle.BLACKOUT.value:
+        st.success(
+            f"Found {n_entities} PII instance(s) across {total_pages} page(s); "
+            "detected areas will be blacked out in the downloaded PDF."
+        )
+    else:
+        st.success(f"Found {n_entities} PII instance(s) across {total_pages} page(s).")
 
     base_name = re.sub(r"[^\w\-]", "_", uploaded.name.rsplit(".", 1)[0])
     render_crosswalk_section(
@@ -110,15 +150,26 @@ def run_pdf_flow(
         )
 
     st.subheader("Download")
+    if style_value == RedactionStyle.BLACKOUT.value:
+        label = "Download blacked-out PDF"
+        file_name = f"{base_name}_blacked_out.pdf"
+        caption = (
+            "Detected text and selected images are covered with a black shade "
+            "in the downloaded PDF."
+        )
+    else:
+        label = "Download pseudonymized PDF"
+        file_name = f"{base_name}_pseudonymized.pdf"
+        caption = (
+            "Detected names and organizations are replaced with their pseudonyms "
+            "(e.g. STF-91345) directly in the PDF text layer."
+        )
     st.download_button(
-        label="Download pseudonymized PDF",
+        label=label,
         data=st.session_state.pdf_buffer,
-        file_name=f"{base_name}_pseudonymized.pdf",
+        file_name=file_name,
         mime="application/pdf",
         type="primary",
         width="stretch",
     )
-    st.caption(
-        "Detected names and organizations are replaced with their pseudonyms "
-        "(e.g. STF-91345) directly in the PDF text layer."
-    )
+    st.caption(caption)

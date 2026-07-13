@@ -12,6 +12,8 @@ from io import BytesIO
 
 import fitz  # PyMuPDF
 
+_IMAGE_SENTINEL = "__IMAGE__"
+
 
 class PyMuPdfDocument:
     """A single open PDF being redacted in place."""
@@ -35,25 +37,54 @@ class PyMuPdfDocument:
         """Extract the selectable text of one page."""
         return self._doc.load_page(page_index).get_text()
 
-    def redact_page(self, page_index: int, redactions: list[tuple[str, str]]) -> None:
-        """Search for each text and overlay its label, then apply redactions.
+    def page_image_rects(
+        self, page_index: int
+    ) -> list[tuple[float, float, float, float]]:
+        """Return image bounding boxes on one page as (x0, y0, x1, y1) tuples."""
+        page = self._doc.load_page(page_index)
+        rects: list[tuple[float, float, float, float]] = []
+        for _img_index, img in enumerate(page.get_images(full=True), start=1):
+            xref = img[0]
+            for rect in page.get_image_rects(xref):
+                rects.append((rect.x0, rect.y0, rect.x1, rect.y1))
+        return rects
 
-        Texts that cannot be located on the page are skipped (the caller still
-        reports them as findings). Redactions are applied once per page.
+    def redact_page(
+        self,
+        page_index: int,
+        redactions: list[tuple[str, str]],
+        *,
+        blackout: bool = False,
+    ) -> None:
+        """Apply redactions to one page.
+
+        Each text redaction is ``(search_text, label)``. When ``blackout`` is True,
+        matched text is covered with a black box instead of labeled. Images are
+        always blacked out; they appear in ``redactions`` as
+        ``("__IMAGE__", "")``.
         """
         page = self._doc.load_page(page_index)
         for search_text, label in redactions:
+            if search_text == _IMAGE_SENTINEL:
+                for x0, y0, x1, y1 in self.page_image_rects(page_index):
+                    page.add_redact_annot(
+                        fitz.Rect(x0, y0, x1, y1),
+                        text=None,
+                        fill=(0, 0, 0),
+                    )
+                continue
+
             rects = page.search_for(search_text)
             if not rects:
                 continue
             for rect in rects:
                 page.add_redact_annot(
                     rect,
-                    text=label,
+                    text=None if blackout else label,
                     fontname="helv",
                     fontsize=11,
                     text_color=(0, 0, 0),
-                    fill=(1, 1, 1),
+                    fill=(0, 0, 0) if blackout else (1, 1, 1),
                 )
         page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
 

@@ -57,8 +57,25 @@ class PdfDocument(Protocol):
         """Extract the selectable text of one page."""
         ...
 
-    def redact_page(self, page_index: int, redactions: list[tuple[str, str]]) -> None:
-        """Apply (search_text, label) redactions to one page."""
+    def page_image_rects(
+        self, page_index: int
+    ) -> list[tuple[float, float, float, float]]:
+        """Return image bounding boxes on one page as (x0, y0, x1, y1) tuples."""
+        ...
+
+    def redact_page(
+        self,
+        page_index: int,
+        redactions: list[tuple[str, str]],
+        *,
+        blackout: bool = False,
+    ) -> None:
+        """Apply redactions to one page.
+
+        Each text redaction is ``(search_text, label)``. When ``blackout`` is True,
+        matched text is covered with a black box instead of labeled; images are
+        always blacked out when present in ``redactions`` as ``("__IMAGE__", "")``.
+        """
         ...
 
     def to_bytes(self) -> bytes:
