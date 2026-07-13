@@ -115,7 +115,8 @@ def run_pdf_flow(
         st.session_state.pdf_findings = result.findings
         st.session_state.pdf_pages = result.page_count
         st.session_state.pdf_crosswalk = result.crosswalk
-        st.session_state.pdf_style = style.value
+        # The radio widget already stores pdf_style in session_state; do not
+        # overwrite it after the widget has been instantiated.
 
     if "pdf_buffer" not in st.session_state or st.session_state.pdf_buffer is None:
         st.stop()
