@@ -157,3 +157,6 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
 - Both launchers must stay **strictly ASCII**. They previously crashed (`'────' is not recognized` / `do was unexpected at this time`) because `chcp 65001` + multi-byte box-drawing/em-dash characters desynchronized cmd.exe's byte-offset file parser. Do **not** reintroduce `chcp 65001` or non-ASCII decoration. Verify after editing: a byte scan should report zero bytes > 127, `run.sh` must keep LF line endings.
 - Both use 24-bit truecolor ANSI escapes (`ESC[38;2;R;G;Bm`) for **IPA brand green `#49ac57`** (RGB `73;172;87`); semantic status colors stay distinct (yellow = waiting, red = problem). Truecolor relies on a Windows 11+ console.
 
+## Git attribution
+
+Commits made with assistance from Claude Code should be attributed to the human user only. Do **not** append a `Co-Authored-By: Claude ...` trailer to commit messages, and do not commit under an Anthropic/Claude identity. Ensure `user.name` and `user.email` in this repository point to Brian Thuo’s GitHub identity.
