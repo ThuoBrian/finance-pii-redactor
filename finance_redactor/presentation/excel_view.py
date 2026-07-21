@@ -33,6 +33,24 @@ def _name_list_help(counts: Mapping[str, int]) -> str:
     )
 
 
+def _render_duplicate_warning(duplicate_names: Mapping[str, list[str]]) -> None:
+    if not duplicate_names:
+        return
+    total = len(duplicate_names)
+    examples = list(duplicate_names.items())[:5]
+    lines = "\n".join(
+        f"- `{name}` appears in: {', '.join(categories)}"
+        for name, categories in examples
+    )
+    remaining = total - len(examples)
+    if remaining > 0:
+        lines += f"\n- ... and {remaining} more"
+    st.warning(
+        f"{total} name(s) appear under multiple categories. This can cause "
+        "conflicting pseudonyms. Keep each name in a single category.\n\n" + lines
+    )
+
+
 def run_excel_flow(
     uploaded: Any,
     *,
@@ -40,6 +58,7 @@ def run_excel_flow(
     excel_gateway: ExcelGateway,
     settings: Settings,
     name_counts: Mapping[str, int],
+    duplicate_names: Mapping[str, list[str]] | None = None,
 ) -> None:
     """Render the Excel pseudonymization flow in Streamlit."""
     if (
@@ -88,6 +107,7 @@ def run_excel_flow(
         )
         st.markdown("**Master list**")
         st.caption(_name_list_help(name_counts))
+        _render_duplicate_warning(duplicate_names or {})
 
     if not selected_cols:
         st.warning("Select at least one column to scan.")

@@ -40,7 +40,11 @@ def _main() -> None:
     # The master list is lightweight and user-editable: reload it on every rerun
     # so edits to data/Names List - Organized.xlsx take effect without a server
     # restart.
-    repo = MasterListRepository(settings.master_list_file, settings.categories)
+    repo = MasterListRepository(
+        settings.master_list_file,
+        settings.categories,
+        category_sheets=settings.category_sheets,
+    )
     names = repo.names_by_entity()
     recognizers = build_custom_recognizers(
         names.get("PERSON", []),
@@ -51,6 +55,7 @@ def _main() -> None:
 
     master_map = repo.master_map()
     name_counts = repo.counts_by_category()
+    duplicate_names = repo.duplicate_names()
 
     st.set_page_config(
         page_title="Finance PII Redactor", page_icon=":shield:", layout="wide"
@@ -83,6 +88,7 @@ def _main() -> None:
             excel_gateway=OpenpyxlExcelGateway(),
             settings=settings,
             name_counts=name_counts,
+            duplicate_names=duplicate_names,
         )
     elif extension == "pdf":
         run_pdf_flow(
@@ -92,6 +98,7 @@ def _main() -> None:
             ),
             settings=settings,
             name_counts=name_counts,
+            duplicate_names=duplicate_names,
         )
     else:
         st.error("Unsupported file type. Please upload an Excel or PDF file.")

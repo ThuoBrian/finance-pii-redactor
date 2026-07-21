@@ -1,4 +1,4 @@
-"""Reads the Excel master list (sheets: Vendors, Funders, Staff).
+"""Reads the Excel master list (sheets configured in ``Settings.category_sheets``).
 
 The master list is the single source of truth for both detection and
 pseudonymization. From one workbook this repository derives:
@@ -10,7 +10,8 @@ pseudonymization. From one workbook this repository derives:
 Format: one sheet per category, with columns ``Category``, ``Internal ID``,
 ``Name``, ``Primary Subsidiary``, ``Country``. ``Internal ID`` may be blank
 (the name is still detected, but pseudonymizes to a flagged auto-id). A missing
-file yields empty results. Parsing is done once and cached per instance.
+file yields empty results. Parsing is cached per instance and refreshed when the
+file modification time changes.
 
 Staff names imported from legacy sources sometimes embed the ID inside the
 ``Name`` column (``Isaac Henry - 22463``). Those suffixes are stripped and the
@@ -46,16 +47,32 @@ class MasterRow:
 class MasterListRepository:
     """Loads and indexes the Excel master list."""
 
-    def __init__(self, path: Path, categories: Mapping[str, tuple[str, str]]) -> None:
-        """Store the file path and the category -> (prefix, entity_type) map."""
+    def __init__(
+        self,
+        path: Path,
+        categories: Mapping[str, tuple[str, str]],
+        category_sheets: Mapping[str, str] | None = None,
+    ) -> None:
+        """Store the file path and the category -> (prefix, entity_type) map.
+
+        ``category_sheets`` maps each category to the Excel sheet name that
+        contains it. When omitted, the sheet name is assumed to be the same as
+        the category name.
+        """
         self._path = path
         self._categories = categories
+        self._category_sheets = category_sheets or {
+            category: category for category in categories
+        }
         self._rows: list[MasterRow] | None = None
+        self._cached_mtime: float | None = None
 
     def rows(self) -> list[MasterRow]:
-        """Return the parsed rows for known categories (cached)."""
-        if self._rows is None:
+        """Return the parsed rows for known categories (cached by mtime)."""
+        mtime = self._file_mtime()
+        if self._rows is None or self._cached_mtime != mtime:
             self._rows = self._parse()
+            self._cached_mtime = mtime
         return self._rows
 
     def names_by_entity(self) -> dict[str, list[str]]:
@@ -91,23 +108,52 @@ class MasterListRepository:
             counts[row.category] = counts.get(row.category, 0) + 1
         return counts
 
+    def duplicate_names(self) -> dict[str, list[str]]:
+        """Return names that appear under more than one category.
+
+        The returned dictionary maps each duplicated normalized name to the
+        sorted list of categories it appears in. Duplicates can cause detection
+        conflicts because the pseudonymizer keeps only one entry per name.
+        """
+        by_name: dict[str, set[str]] = {}
+        for row in self.rows():
+            key = normalize(row.name)
+            by_name.setdefault(key, set()).add(row.category)
+        return {
+            name: sorted(categories)
+            for name, categories in by_name.items()
+            if len(categories) > 1
+        }
+
+    def _file_mtime(self) -> float | None:
+        try:
+            return self._path.stat().st_mtime
+        except (FileNotFoundError, OSError):
+            return None
+
     def _parse(self) -> list[MasterRow]:
         try:
-            sheets = pd.read_excel(self._path, sheet_name=None, engine="openpyxl")
+            workbook = pd.read_excel(self._path, sheet_name=None, engine="openpyxl")
         except FileNotFoundError:
             return []
 
         rows: list[MasterRow] = []
-        for sheet_df in sheets.values():
-            rows.extend(self._parse_sheet(sheet_df))
+        for category, sheet_name in self._category_sheets.items():
+            if category not in self._categories:
+                continue
+            sheet_df = workbook.get(sheet_name)
+            if sheet_df is None or sheet_df.empty:
+                continue
+            rows.extend(self._parse_sheet(category, sheet_df))
         return rows
 
-    def _parse_sheet(self, sheet_df: pd.DataFrame) -> list[MasterRow]:
-        if sheet_df.empty:
-            return []
-        if "Category" not in sheet_df.columns or "Name" not in sheet_df.columns:
+    def _parse_sheet(
+        self, expected_category: str, sheet_df: pd.DataFrame
+    ) -> list[MasterRow]:
+        if "Name" not in sheet_df.columns:
             return []
 
+        prefix, entity_type = self._categories[expected_category]
         rows: list[MasterRow] = []
         for _, raw in sheet_df.iterrows():
             category = self._clean_str(raw.get("Category"))
@@ -115,10 +161,9 @@ class MasterListRepository:
             id_value = self._clean_id(raw.get("Internal ID"))
             if not name:
                 continue
-            resolved = self._categories.get(category)
-            if resolved is None:
+            if category != expected_category:
+                # Allow the row only if its Category cell matches the sheet.
                 continue
-            prefix, entity_type = resolved
             pseudonym = f"{prefix}-{id_value}" if id_value else None
             rows.append(MasterRow(category, name, entity_type, pseudonym))
         return rows

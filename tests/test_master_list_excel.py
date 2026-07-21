@@ -19,13 +19,19 @@ _CATEGORIES = {
     "Funder": ("FND", "ORGANIZATION"),
 }
 
+_CATEGORY_SHEETS = {
+    "Staff": "Staff",
+    "Vendor": "Vendors",
+    "Funder": "Funders",
+}
+
 
 def _repo_with_sheets(tmp_path, sheets: dict[str, pd.DataFrame]):
     path = tmp_path / "master.xlsx"
     with pd.ExcelWriter(path, engine="openpyxl") as writer:
         for sheet_name, df in sheets.items():
             df.to_excel(writer, sheet_name=sheet_name, index=False)
-    return MasterListRepository(path, _CATEGORIES)
+    return MasterListRepository(path, _CATEGORIES, category_sheets=_CATEGORY_SHEETS)
 
 
 def test_legacy_staff_suffix_is_stripped(tmp_path):
@@ -61,7 +67,7 @@ def test_legacy_staff_suffix_is_stripped(tmp_path):
 
 def test_numeric_internal_id_without_decimal_point(tmp_path):
     sheets = {
-        "Vendor": pd.DataFrame(
+        "Vendors": pd.DataFrame(
             {
                 "Category": ["Vendor"],
                 "Internal ID": [520638.0],  # pandas may read numeric IDs as float
@@ -79,7 +85,7 @@ def test_numeric_internal_id_without_decimal_point(tmp_path):
 
 def test_blank_internal_id_yields_none_pseudonym(tmp_path):
     sheets = {
-        "Funder": pd.DataFrame(
+        "Funders": pd.DataFrame(
             {
                 "Category": ["Funder"],
                 "Internal ID": [None],

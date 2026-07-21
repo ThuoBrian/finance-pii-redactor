@@ -35,6 +35,15 @@ _DEFAULT_AUTO_PREFIXES: Mapping[str, str] = MappingProxyType(
     {"PERSON": "PSN", "ORGANIZATION": "ORG", "EMAIL_ADDRESS": "EML"}
 )
 
+# Maps a master-list ``category`` to the Excel sheet name that contains it.
+_DEFAULT_CATEGORY_SHEETS: Mapping[str, str] = MappingProxyType(
+    {
+        "Staff": "Staff",
+        "Vendor": "Vendors",
+        "Funder": "Funders",
+    }
+)
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -48,6 +57,7 @@ class Settings:
     spacy_model: str = "en_core_web_lg"
     supported_entities: tuple[str, ...] = ("PERSON", "ORGANIZATION", "EMAIL_ADDRESS")
     categories: Mapping[str, tuple[str, str]] = _DEFAULT_CATEGORIES
+    category_sheets: Mapping[str, str] = _DEFAULT_CATEGORY_SHEETS
     auto_prefixes: Mapping[str, str] = _DEFAULT_AUTO_PREFIXES
     custom_match_score: float = 0.9
     default_threshold: float = 0.35
