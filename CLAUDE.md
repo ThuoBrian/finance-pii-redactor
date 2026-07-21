@@ -117,7 +117,15 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   detected but pseudonymizes to a flagged auto-id. Trailing legacy ID suffixes in
   `Staff` names (e.g. `Jane Doe - 22463`) are stripped and the `Internal ID` column
   is always used as the curated ID. Edit the workbook and restart; counts by
-  category show in the Advanced settings panel.
+  category show in the Advanced settings panel. **Duplicate-name detection:** the
+  repository also reports any name that appears under more than one category, and
+  the Excel/PDF flows show a warning in Advanced settings because such duplicates
+  can create conflicting pseudonyms.
+- **Master-list caching:** `MasterListRepository` caches parsed rows keyed by the
+  workbook's file modification time. The first parse of the full ~26k-row workbook
+  takes a few seconds; subsequent Streamlit reruns reuse the cache until the file
+  changes, so widget interactions stay fast while edits to the Excel file still
+  take effect immediately on refresh.
 - **Pseudonyms & crosswalk:** a name in the master list resolves to its curated ID;
   an unknown name gets a deterministic, stable auto-id (`PSN-AUTO-<hash>` /
   `ORG-AUTO-<hash>`, same input → same id across files) and is flagged for review.
