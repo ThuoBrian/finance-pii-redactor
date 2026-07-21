@@ -36,6 +36,11 @@ This file records known errors, edge cases, and their solutions when developing 
   uv run streamlit run app.py --server.address=127.0.0.1 --server.port 8502
   ```
 
+### The app fails to read the master list while it is open in Excel
+- **Symptom:** A `PermissionError`, `FileNotFoundError`, or a "failed to read Excel" message appears when the app starts or after refreshing the page.
+- **Cause:** Microsoft Excel locks the workbook while it is open, so the app's `pd.read_excel` call cannot access it.
+- **Solution:** Save and close the Excel workbook before launching or refreshing the app. You can edit the workbook, save it, close Excel, then refresh the browser to pick up the changes.
+
 ## Code and dependencies
 
 ### Presidio `AnalysisExplanation` keyword arguments changed across versions
@@ -51,8 +56,8 @@ This file records known errors, edge cases, and their solutions when developing 
 
 ### A name gets a flagged `*-AUTO-*` code instead of my curated ID
 - **Symptom:** A name shows up in the crosswalk as e.g. `PSN-AUTO-3F9A1` with **Flagged = yes**, not the `STF-12345` you expected.
-- **Cause:** The name was detected but is **not in the master list with a curated `id`** — either it is missing, the `id` column is blank, or the spelling/spacing in the master list does not match the document text. Matching is case-insensitive and whitespace-normalized, but otherwise exact.
-- **Solution:** Add the name to `master_list.csv` with the correct `category` and a non-blank `id`, using the exact text as it appears in the data, then refresh the app in the browser. Edits to the master list take effect on the next Streamlit rerun (the CSV is reloaded each time; only the heavy spaCy model is cached). Auto-codes are deterministic (the same unknown name always yields the same code, even across files), so existing outputs stay consistent until you re-run.
+- **Cause:** The name was detected but is **not in the master list with a curated `Internal ID`** — either it is missing, the `Internal ID` column is blank, or the spelling/spacing in the master list does not match the document text. Matching is case-insensitive and whitespace-normalized, but otherwise exact.
+- **Solution:** Add the name to `data/Names List - Organized.xlsx` with the correct sheet/category and a non-blank `Internal ID`, using the exact text as it appears in the data, then refresh the app in the browser. Edits to the master list take effect on the next Streamlit rerun (the Excel workbook is reloaded each time; only the heavy spaCy model is cached). Auto-codes are deterministic (the same unknown name always yields the same code, even across files), so existing outputs stay consistent until you re-run.
 
 ### Long multi-word names are not matched
 - **Symptom:** A phrase like `Kenya Commercial Bank` is not detected even though it is in the master list.
@@ -62,7 +67,7 @@ This file records known errors, edge cases, and their solutions when developing 
 ### A legacy name in the old `person.txt` had an ID appended (`Name - 90863`)
 - **Symptom:** After migrating, a name that previously "never matched" now does.
 - **Cause:** The old plain-text lists sometimes embedded an ID in the name itself (`Aaron Elijah Mutungi - 90863`). The recognizer searched for the *whole string* including ` - 90863`, so it almost never matched real document text — a latent bug.
-- **Solution:** `scripts/migrate_to_master_list.py` splits a trailing ` - <digits>` into the `name` and `id` columns, so the name now matches and the digits become the curated ID. Re-run the migration if you still have the legacy `.txt` files.
+- **Solution:** The app now reads `data/Names List - Organized.xlsx` directly and strips trailing ` - <anything>` from `Staff` names, using the `Internal ID` column as the curated ID. If you still have legacy `.txt` lists, update `scripts/migrate_to_master_list.py` to write to the Excel workbook, or migrate manually.
 
 ### Mixed-language text causes spaCy NER to miss names
 - **Symptom:** English names are detected but non-English names are not.

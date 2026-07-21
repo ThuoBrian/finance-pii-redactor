@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Streamlit application that **pseudonymizes** names and organization names in Excel and PDF files locally — each detected name is replaced with a stable ID (e.g. `STF-91345`, `VND-1045`, `FND-7745`) rather than a generic `[PERSON]` label, so the same entity maps to the same ID everywhere and cross-row/cross-file patterns survive for error-checking and fraud monitoring. It uses Microsoft Presidio with a spaCy `en_core_web_lg` model for PII detection, openpyxl for Excel output, and PyMuPDF for PDF text replacement. This is distributed as an offline-capable desktop tool: users double-click `run.bat` (Windows) or `run.sh` (macOS/Linux) to start the local web server and open the browser.
 
-IDs come from a maintained **master list** (`data/master_list.csv`, a top-level user-owned folder outside the package). Names not in the list are still pseudonymized with a stable, flagged auto-id and surfaced in a downloadable name→pseudonym **crosswalk** (the re-identification key — treat as Confidential).
+IDs come from a maintained **master list** (`data/Names List - Organized.xlsx`, a top-level user-owned folder outside the package). Names not in the list are still pseudonymized with a stable, flagged auto-id and surfaced in a downloadable name→pseudonym **crosswalk** (the re-identification key — treat as Confidential).
 
 ## Common development commands
 
@@ -40,7 +40,8 @@ This project uses `uv` for environment management and Python 3.12.
   Tests under `tests/` cover the framework-free logic (pseudonym assignment,
   span replacement, master-list parsing) and run without the spaCy model.
 
-- **Regenerate the master list from legacy `.txt` lists** (one-off migration helper):
+- **Regenerate the master list from legacy `.txt` lists** (one-off migration helper,
+  only useful when migrating old plain-text lists to the Excel format):
   ```bash
   uv run python scripts/migrate_to_master_list.py
   ```
@@ -65,7 +66,7 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   guard at the bottom keeps `_main()` from running on import (tests/linters). It
   caches only the heavy spaCy NLP model with `@st.cache_resource`; the master list
   and its custom recognizers are rebuilt on every Streamlit rerun so edits to
-  `data/master_list.csv` take effect immediately without a server restart.
+  `data/Names List - Organized.xlsx` take effect immediately without a server restart.
 - **`finance_redactor/domain/`** — framework-free core. `entities.py`
   (`PiiDetection`, `Span`, `Finding`, `DetectionSource` = `MODEL`/`MASTER_LIST`) is
   the one representation of a finding all layers speak. `rules.py` holds
@@ -86,7 +87,7 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   ports. `detection/` (`PresidioEngine` for `PiiDetector` only — detection, no
   anonymizer; `CustomNameRecognizer`; `recasing.py`), `documents/`
   (`OpenpyxlExcelGateway`, `PyMuPdfDocument`), `names/` (`MasterListRepository` +
-  `data/master_list.csv`). Presidio's `RecognizerResult` is translated to the
+  `data/Names List - Organized.xlsx`). Presidio's `RecognizerResult` is translated to the
   domain `PiiDetection` **only** here. `PresidioEngine.analyze` runs spaCy on the
   raw text and — when ALL-CAPS tokens are present — a **second pass on a
   length-preserving recased copy** (`recase_uppercase`, `MARY` → `Mary`) so the
@@ -103,18 +104,20 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   (category → (prefix, entity_type)), `auto_prefixes`, `custom_match_score`,
   default threshold, `master_list_file`). Replaces scattered module-level
   constants and the duplicated `0.9` magic number.
-- **Master list:** `data/master_list.csv` — a **top-level, user-owned folder**
+- **Master list:** `data/Names List - Organized.xlsx` — a **top-level, user-owned folder**
   outside the package (resolved by `Settings.names_dir` from `config.py`), so it
-  is easy to find/edit and stays separate from the code (and out of git).
-  (columns `category,name,id`; `#` comments and blank lines ignored). It is the
-  **single source** for both detection and pseudonym IDs. `category` maps via
+  is easy to find/edit and stays separate from the code (and out of git). The
+  workbook has one sheet per category (`Vendors`, `Funders`, `Staff`) with columns
+  `Category`, `Internal ID`, `Name`, `Primary Subsidiary`, `Country`. It is the
+  **single source** for both detection and pseudonym IDs. `Category` maps via
   `Settings.categories` to a prefix + entity type (`Staff`→`STF`/PERSON,
   `Vendor`→`VND`/ORGANIZATION, `Funder`→`FND`/ORGANIZATION); pseudonym =
-  `f"{prefix}-{id}"`. Every name drives detection (custom recognizer, fixed score
-  `0.9` = `Settings.custom_match_score`); a row with a **blank `id`** is still
-  detected but pseudonymizes to a flagged auto-id. Edit the CSV and restart; counts
-  by category show in the Advanced settings panel. (Regenerate from legacy lists
-  with `scripts/migrate_to_master_list.py`.)
+  `f"{prefix}-{Internal ID}"`. Every name drives detection (custom recognizer, fixed score
+  `0.9` = `Settings.custom_match_score`); a row with a **blank `Internal ID`** is still
+  detected but pseudonymizes to a flagged auto-id. Trailing legacy ID suffixes in
+  `Staff` names (e.g. `Jane Doe - 22463`) are stripped and the `Internal ID` column
+  is always used as the curated ID. Edit the workbook and restart; counts by
+  category show in the Advanced settings panel.
 - **Pseudonyms & crosswalk:** a name in the master list resolves to its curated ID;
   an unknown name gets a deterministic, stable auto-id (`PSN-AUTO-<hash>` /
   `ORG-AUTO-<hash>`, same input → same id across files) and is flagged for review.
@@ -149,7 +152,7 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
 - The tool is targeted at Windows 11+ end users. `run.bat` is the canonical launch method.
 - First run downloads `uv` and installs the Python environment including the `en_core_web_lg` spaCy model (~380 MB), all via `uv sync`. Subsequent starts are fast.
 - PyMuPDF (`pymupdf`) is added for PDF support; it is installed automatically by `uv sync`.
-- **Sharing the tool:** distribution is via the one-line installers (`install.ps1` for Windows, `install.sh` for macOS/Linux) that download the source from the public GitHub repo and launch `run.bat`/`run.sh`. Each installer prompts for an install location, preserves any local `master_list.csv`, and re-running updates to the latest `main`. For a plain source zip, GitHub's **Download ZIP** button on the repo works too. (The old `package.sh`/`package.bat`/`package.ps1` zip-builder scripts were removed as redundant.)
+- **Sharing the tool:** distribution is via the one-line installers (`install.ps1` for Windows, `install.sh` for macOS/Linux) that download the source from the public GitHub repo and launch `run.bat`/`run.sh`. Each installer prompts for an install location, preserves any local `Names List - Organized.xlsx`, and re-running updates to the latest `main`. For a plain source zip, GitHub's **Download ZIP** button on the repo works too. (The old `package.sh`/`package.bat`/`package.ps1` zip-builder scripts were removed as redundant.)
 - Approved for **Internal** data only under IPA's data classification policy; do not use for Confidential or Highly Confidential data. **Caveat:** the name→pseudonym **crosswalk** the tool produces is itself the re-identification key and is **Confidential** — it must be stored/handled accordingly and never shared alongside the pseudonymized output.
 
 ### Launcher scripts (`run.bat` / `run.sh`) — keep them pure ASCII

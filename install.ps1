@@ -13,7 +13,7 @@ $ErrorActionPreference = 'Stop'
 $Repo    = 'ThuoBrian/finance-pii-redactor'
 $Branch  = 'main'
 $AppName = 'finance-pii-redactor'
-$DataRel = 'data\master_list.csv'
+$DataRel = 'data\Names List - Organized.xlsx'
 
 $green = @{ ForegroundColor = 'Green' }
 $cyan  = @{ ForegroundColor = 'Cyan' }
@@ -89,8 +89,8 @@ $extracted = Get-ChildItem $tmpExtract -Directory | Select-Object -First 1
 $savedMaster = $null
 $existingMaster = Join-Path $Target $DataRel
 if (Test-Path $existingMaster) {
-    Write-Host "Preserving your existing master_list.csv..." @cyan
-    $savedMaster = Join-Path $env:TEMP 'master_list.csv.bak'
+    Write-Host "Preserving your existing master list..." @cyan
+    $savedMaster = Join-Path $env:TEMP 'Names List - Organized.xlsx.bak'
     Copy-Item $existingMaster $savedMaster -Force
 }
 

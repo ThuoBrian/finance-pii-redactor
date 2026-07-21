@@ -1,31 +1,41 @@
-"""Reads the CSV master list (category, name, id).
+"""Reads the Excel master list (sheets: Vendors, Funders, Staff).
 
 The master list is the single source of truth for both detection and
-pseudonymization. From one file this repository derives:
+pseudonymization. From one workbook this repository derives:
 
 - the per-entity-type name lists that drive the custom recognizer, and
 - the ``(entity_type, normalized_name) -> MasterEntry`` map the pseudonymizer
   uses to resolve curated IDs.
 
-Format: a header row ``category,name,id``; one entity per row. ``id`` may be left
-blank (the name is still detected, but pseudonymizes to a flagged auto-id). Blank
-lines and rows whose first cell starts with ``#`` are ignored. A missing file
-yields empty results. Parsing is done once and cached per instance.
+Format: one sheet per category, with columns ``Category``, ``Internal ID``,
+``Name``, ``Primary Subsidiary``, ``Country``. ``Internal ID`` may be blank
+(the name is still detected, but pseudonymizes to a flagged auto-id). A missing
+file yields empty results. Parsing is done once and cached per instance.
+
+Staff names imported from legacy sources sometimes embed the ID inside the
+``Name`` column (``Isaac Henry - 22463``). Those suffixes are stripped and the
+``Internal ID`` column is always used as the curated ID.
 """
 
 from __future__ import annotations
 
-import csv
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+import pandas as pd
+
 from finance_redactor.domain.pseudonyms import MasterEntry, normalize
+
+_WHITESPACE = re.compile(r"\s+")
+# Strip a trailing legacy ID suffix such as "Isaac Henry - 22463".
+_LEGACY_SUFFIX = re.compile(r"\s+-\s+.*$")
 
 
 @dataclass(frozen=True)
 class MasterRow:
-    """One parsed, validated master-list row mapped to its entity type."""
+    """A parsed, validated master-list row mapped to its entity type."""
 
     category: str
     name: str
@@ -34,7 +44,7 @@ class MasterRow:
 
 
 class MasterListRepository:
-    """Loads and indexes the CSV master list."""
+    """Loads and indexes the Excel master list."""
 
     def __init__(self, path: Path, categories: Mapping[str, tuple[str, str]]) -> None:
         """Store the file path and the category -> (prefix, entity_type) map."""
@@ -83,25 +93,30 @@ class MasterListRepository:
 
     def _parse(self) -> list[MasterRow]:
         try:
-            with open(self._path, encoding="utf-8-sig", newline="") as handle:
-                return self._parse_handle(handle)
+            sheets = pd.read_excel(self._path, sheet_name=None, engine="openpyxl")
         except FileNotFoundError:
             return []
 
-    def _parse_handle(self, handle) -> list[MasterRow]:
         rows: list[MasterRow] = []
-        reader = csv.DictReader(self._normalize_lines(handle))
-        if reader.fieldnames is None:
-            return rows
-        for raw in reader:
-            category = (raw.get("category") or "").strip()
-            name = (raw.get("name") or "").strip()
-            id_value = (raw.get("id") or "").strip()
+        for sheet_df in sheets.values():
+            rows.extend(self._parse_sheet(sheet_df))
+        return rows
+
+    def _parse_sheet(self, sheet_df: pd.DataFrame) -> list[MasterRow]:
+        if sheet_df.empty:
+            return []
+        if "Category" not in sheet_df.columns or "Name" not in sheet_df.columns:
+            return []
+
+        rows: list[MasterRow] = []
+        for _, raw in sheet_df.iterrows():
+            category = self._clean_str(raw.get("Category"))
+            name = self._clean_name(raw.get("Name"))
+            id_value = self._clean_id(raw.get("Internal ID"))
             if not name:
                 continue
             resolved = self._categories.get(category)
             if resolved is None:
-                # Unknown/blank category: cannot determine entity type, skip.
                 continue
             prefix, entity_type = resolved
             pseudonym = f"{prefix}-{id_value}" if id_value else None
@@ -109,10 +124,29 @@ class MasterListRepository:
         return rows
 
     @staticmethod
-    def _normalize_lines(handle):
-        # Drop comment and blank lines before the CSV reader sees them.
-        for line in handle:
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
-                continue
-            yield line
+    def _clean_str(value: object) -> str:
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            return ""
+        return str(value).strip()
+
+    @staticmethod
+    def _clean_name(value: object) -> str:
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            return ""
+        name = str(value).strip()
+        name = _LEGACY_SUFFIX.sub("", name)
+        name = _WHITESPACE.sub(" ", name).strip()
+        return name
+
+    @staticmethod
+    def _clean_id(value: object) -> str | None:
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            return None
+        if isinstance(value, float):
+            if value.is_integer():
+                return str(int(value))
+            return str(value)
+        cleaned = str(value).strip()
+        if not cleaned:
+            return None
+        return cleaned

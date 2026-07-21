@@ -1,23 +1,28 @@
 # Data folder
 
-Put your **master list** here as **`master_list.csv`**. This is the one file you
-edit to control which names get which ID codes. After editing it, restart the app.
+Put your **master list** here as **`Names List - Organized.xlsx`**. This is the one
+file you edit to control which names get which ID codes. After editing it,
+restart the app.
 
-The file has three columns:
+The workbook has one sheet per category:
 
-```csv
-category,name,id
-Staff,Jane Doe,91345
-Vendor,Example Supplies Ltd,1045
-Funder,Example Foundation,7745
-```
+| Sheet | Category column | Entity type | Pseudonym prefix |
+|-------|-----------------|-------------|------------------|
+| `Vendors` | `Vendor` | organization | `VND-` |
+| `Funders` | `Funder` | organization | `FND-` |
+| `Staff` | `Staff` | person | `STF-` |
 
-- **category** — one of `Staff`, `Vendor`, or `Funder`.
-- **name** — the exact name as it appears in your files.
-- **id** — the number you assign. The app builds the code as `<prefix>-<id>`
-  (Staff `91345` → `STF-91345`, Vendor → `VND-…`, Funder → `FND-…`). Leave `id`
-  blank to still detect the name but give it a flagged auto-code for now.
-- Lines starting with `#` and blank lines are ignored.
+Each sheet must have these columns:
 
-**`master_list.csv` contains real names, so it is Confidential and is never
-committed to git** (it is gitignored). Keep it stored securely.
+- **Category** — `Staff`, `Vendor`, or `Funder`.
+- **Internal ID** — the number you assign. The app builds the code as
+  `<prefix>-<Internal ID>` (Staff `91345` → `STF-91345`). Leave blank to still
+  detect the name but give it a flagged auto-code for now.
+- **Name** — the name as it appears in your files. For `Staff`, legacy entries
+  sometimes embed the ID inside the name (e.g. `Jane Doe - 22463`). The app
+  strips the trailing ` - <anything>` and uses the `Internal ID` column as the
+  curated ID.
+- **Primary Subsidiary** and **Country** — ignored by the app; kept for reference.
+
+**`Names List - Organized.xlsx` contains real names, so it is Confidential and is**
+**never committed to git** (it is gitignored). Keep it stored securely.

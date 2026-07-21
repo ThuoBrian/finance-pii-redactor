@@ -13,8 +13,9 @@ from pathlib import Path
 from types import MappingProxyType
 
 # The master list lives in a top-level ``data/`` folder next to the package -
-# user-owned config, kept separate from the code and out of git. (Resolved from
-# this file: finance_redactor/config.py -> repo root -> data/.)
+# user-owned config, kept separate from the code and out of git. It is now an
+# Excel workbook with one sheet per category. (Resolved from this file:
+# finance_redactor/config.py -> repo root -> data/.)
 _DATA_DIR = Path(__file__).parent.parent / "data"
 
 # Maps a master-list ``category`` to its pseudonym prefix and the entity type the
@@ -54,8 +55,8 @@ class Settings:
 
     @property
     def master_list_file(self) -> Path:
-        """Path to the CSV master list (category, name, id)."""
-        return self.names_dir / "master_list.csv"
+        """Path to the Excel master list (sheets: Vendors, Funders, Staff)."""
+        return self.names_dir / "Names List - Organized.xlsx"
 
 
 DEFAULT_SETTINGS = Settings()

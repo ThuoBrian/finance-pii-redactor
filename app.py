@@ -38,7 +38,8 @@ def _main() -> None:
         return PresidioEngine._create_nlp_engine(settings)
 
     # The master list is lightweight and user-editable: reload it on every rerun
-    # so edits to data/master_list.csv take effect without a server restart.
+    # so edits to data/Names List - Organized.xlsx take effect without a server
+    # restart.
     repo = MasterListRepository(settings.master_list_file, settings.categories)
     names = repo.names_by_entity()
     recognizers = build_custom_recognizers(

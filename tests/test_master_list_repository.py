@@ -1,6 +1,8 @@
-"""Unit tests for the CSV master-list repository."""
+"""Unit tests for the Excel master-list repository."""
 
 from __future__ import annotations
+
+import pandas as pd
 
 from finance_redactor.domain.pseudonyms import normalize
 from finance_redactor.infrastructure.names.master_list_repository import (
@@ -13,26 +15,50 @@ _CATEGORIES = {
     "Funder": ("FND", "ORGANIZATION"),
 }
 
-_CSV = """# comment line is ignored
-category,name,id
-Staff,Brian Thuo,91345
-Vendor,Safaricom LTD,1045
-Funder,Gates Foundation,7745
 
-Staff,No Id Person,
-Mystery,Unknown Category,5
-Staff,,99
-"""
+def _make_excel(path, sheets: dict[str, pd.DataFrame]) -> None:
+    with pd.ExcelWriter(path, engine="openpyxl") as writer:
+        for sheet_name, df in sheets.items():
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
 
 
 def _repo(tmp_path):
-    path = tmp_path / "master_list.csv"
-    path.write_text(_CSV, encoding="utf-8")
+    sheets = {
+        "Staff": pd.DataFrame(
+            {
+                "Category": ["Staff", "Staff", "Staff"],
+                "Internal ID": [91345, None, 99],
+                "Name": ["Brian Thuo", "No Id Person", ""],
+                "Primary Subsidiary": ["IPA-Kenya", "", ""],
+                "Country": ["Kenya", "", ""],
+            }
+        ),
+        "Vendors": pd.DataFrame(
+            {
+                "Category": ["Vendor"],
+                "Internal ID": [1045],
+                "Name": ["Safaricom LTD"],
+                "Primary Subsidiary": ["IPA-Kenya"],
+                "Country": ["Kenya"],
+            }
+        ),
+        "Funders": pd.DataFrame(
+            {
+                "Category": ["Funder", "Mystery"],
+                "Internal ID": [7745, 5],
+                "Name": ["Gates Foundation", "Unknown Category"],
+                "Primary Subsidiary": ["", ""],
+                "Country": ["", ""],
+            }
+        ),
+    }
+    path = tmp_path / "master_list.xlsx"
+    _make_excel(path, sheets)
     return MasterListRepository(path, _CATEGORIES)
 
 
 def test_missing_file_yields_empty(tmp_path):
-    repo = MasterListRepository(tmp_path / "nope.csv", _CATEGORIES)
+    repo = MasterListRepository(tmp_path / "nope.xlsx", _CATEGORIES)
     assert repo.rows() == []
     assert repo.master_map() == {}
     assert repo.names_by_entity() == {}
@@ -41,7 +67,7 @@ def test_missing_file_yields_empty(tmp_path):
 def test_names_grouped_by_entity_includes_blank_id(tmp_path):
     grouped = _repo(tmp_path).names_by_entity()
     assert grouped["PERSON"] == ["Brian Thuo", "No Id Person"]
-    assert set(grouped["ORGANIZATION"]) == {"Safaricom LTD", "Gates Foundation"}
+    assert grouped["ORGANIZATION"] == ["Safaricom LTD", "Gates Foundation"]
 
 
 def test_master_map_only_includes_curated_ids(tmp_path):

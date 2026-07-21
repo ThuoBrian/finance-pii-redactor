@@ -14,7 +14,7 @@ set -euo pipefail
 REPO="ThuoBrian/finance-pii-redactor"
 BRANCH="main"
 APP_NAME="finance-pii-redactor"
-DATA_REL="data/master_list.csv"
+DATA_REL="data/Names List - Organized.xlsx"
 
 # Colors, but only when writing to a real terminal.
 if [ -t 1 ]; then
@@ -97,8 +97,8 @@ EXTRACTED="$(find "$TMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
 # 3. Preserve a local master list (it is intentionally not shipped in the repo).
 SAVED_MASTER=""
 if [ -f "$TARGET/$DATA_REL" ]; then
-    printf '%sPreserving your existing master_list.csv...%s\n' "$CYAN" "$RESET"
-    SAVED_MASTER="$TMP_DIR/master_list.csv.bak"
+    printf '%sPreserving your existing master list...%s\n' "$CYAN" "$RESET"
+    SAVED_MASTER="$TMP_DIR/Names List - Organized.xlsx.bak"
     cp "$TARGET/$DATA_REL" "$SAVED_MASTER"
 fi
 

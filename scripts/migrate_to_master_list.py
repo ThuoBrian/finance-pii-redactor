@@ -1,34 +1,55 @@
-"""One-off migration: person.txt + organization.txt -> master_list.csv.
+"""One-off migration: person.txt + organization.txt -> Names List - Organized.xlsx.
 
-Converts the legacy plain-text name lists into the structured master list.
+Converts the legacy plain-text name lists into the structured Excel master list,
+merging them with any existing workbook.
 
-- person.txt -> category ``Staff``. A trailing `` - <digits>`` suffix (e.g.
-  ``Aaron Elijah Mutungi - 90863``) is parsed into a separate ``id`` column and
+- person.txt -> sheet ``Staff``. A trailing `` - <digits>`` suffix (e.g.
+  ``Aaron Elijah Mutungi - 90863``) is parsed into the ``Internal ID`` column and
   stripped from the name, fixing the latent bug where the recognizer searched for
   the whole string including the ID.
-- organization.txt -> category ``Vendor`` with a blank ``id`` (review and split
-  Vendor vs Funder, and assign IDs, by hand afterwards).
+- organization.txt -> sheet ``Vendors`` with a blank ``Internal ID`` (review and
+  split Vendor vs Funder, and assign IDs, by hand afterwards).
 
-Names with a blank ``id`` are still detected; they pseudonymize to a flagged
-auto-id until a curated ID is filled in.
+Names with a blank ``Internal ID`` are still detected; they pseudonymize to a
+flagged auto-id until a curated ID is filled in.
 
-Run once from the repo root:  ``uv run python scripts/migrate_to_master_list.py``
-Then delete the two .txt files and commit ``master_list.csv``.
+Run once from the repo root:
+
+    uv run python scripts/migrate_to_master_list.py
+
+Then delete the two ``.txt`` files. The resulting ``data/Names List - Organized.xlsx``
+is gitignored because it contains real names.
 """
 
 from __future__ import annotations
 
-import csv
 import re
 from pathlib import Path
+
+import pandas as pd
 
 _DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 _PERSON = _DATA_DIR / "person.txt"
 _ORGANIZATION = _DATA_DIR / "organization.txt"
-_OUTPUT = _DATA_DIR / "master_list.csv"
+_OUTPUT = _DATA_DIR / "Names List - Organized.xlsx"
 
 # Trailing " - 90863" style staff id.
 _ID_SUFFIX = re.compile(r"^(.*?)\s+-\s+(\d+)\s*$")
+
+# Expected columns in the Excel master list.
+_COLUMNS = [
+    "Category",
+    "Internal ID",
+    "Name",
+    "Primary Subsidiary",
+    "Country",
+]
+
+_SHEET_MAP = {
+    "Staff": "Staff",
+    "Vendor": "Vendors",
+    "Funder": "Funders",
+}
 
 
 def _read_lines(path: Path) -> list[str]:
@@ -42,60 +63,93 @@ def _read_lines(path: Path) -> list[str]:
         ]
 
 
-def _person_rows() -> list[tuple[str, str, str]]:
-    rows: list[tuple[str, str, str]] = []
+def _person_rows() -> list[tuple[str, int | None, str]]:
+    rows: list[tuple[str, int | None, str]] = []
     for line in _read_lines(_PERSON):
         if line.lower() == "name":  # stray header artifact in the legacy file
             continue
         match = _ID_SUFFIX.match(line)
         if match:
-            rows.append(("Staff", match.group(1).strip(), match.group(2)))
+            rows.append(("Staff", int(match.group(2)), match.group(1).strip()))
         else:
-            rows.append(("Staff", line, ""))
+            rows.append(("Staff", None, line))
     return rows
 
 
-def _organization_rows() -> list[tuple[str, str, str]]:
-    return [("Vendor", line, "") for line in _read_lines(_ORGANIZATION)]
+def _organization_rows() -> list[tuple[str, int | None, str]]:
+    return [("Vendor", None, line) for line in _read_lines(_ORGANIZATION)]
 
 
-def _dedupe(rows: list[tuple[str, str, str]]) -> list[tuple[str, str, str]]:
-    """Drop duplicate (category, name); prefer the variant that carries an id."""
-    best: dict[tuple[str, str], tuple[str, str, str]] = {}
-    for category, name, id_value in rows:
-        key = (category, name.casefold())
-        existing = best.get(key)
-        if existing is None or (not existing[2] and id_value):
-            best[key] = (category, name, id_value)
-    return list(best.values())
+def _load_existing_sheets() -> dict[str, pd.DataFrame]:
+    if not _OUTPUT.exists():
+        return {}
+    try:
+        return pd.read_excel(_OUTPUT, sheet_name=None, engine="openpyxl")
+    except FileNotFoundError:
+        return {}
+
+
+def _normalize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Ensure the dataframe has the expected columns, adding blanks if missing."""
+    for col in _COLUMNS:
+        if col not in df.columns:
+            df[col] = None
+    return df[_COLUMNS].copy()
+
+
+def _merge_rows(
+    existing: pd.DataFrame, new_rows: list[tuple[str, int | None, str]]
+) -> pd.DataFrame:
+    """Append legacy rows to an existing sheet dataframe, deduplicating by name."""
+    new_df = pd.DataFrame(
+        new_rows,
+        columns=["Category", "Internal ID", "Name"],
+    )
+    new_df["Primary Subsidiary"] = None
+    new_df["Country"] = None
+    new_df = new_df[_COLUMNS]
+
+    combined = pd.concat([existing, new_df], ignore_index=True)
+    # Prefer the row that has an Internal ID when the same (category, name) appears.
+    combined = combined.sort_values(
+        by=["Category", "Name", "Internal ID"],
+        key=lambda col: col.isna() if col.name == "Internal ID" else col,
+        ascending=[True, True, True],
+    )
+    combined = combined.drop_duplicates(subset=["Category", "Name"], keep="first")
+    return combined
 
 
 def main() -> None:
-    """Generate master_list.csv from the legacy text lists."""
-    rows = _dedupe(_person_rows() + _organization_rows())
+    """Generate or merge into the Excel master list from the legacy text lists."""
+    sheets = _load_existing_sheets()
+    normalized: dict[str, pd.DataFrame] = {}
 
-    with open(_OUTPUT, "w", encoding="utf-8", newline="") as handle:
-        handle.write(
-            "# Master list (single source of truth for detection + pseudonymization).\n"
-        )
-        handle.write(
-            "# Columns: category, name, id. category is one of Staff, Vendor, Funder.\n"
-        )
-        handle.write(
-            "# id is optional; blank-id names are detected but get a flagged auto-id.\n"
-        )
-        writer = csv.writer(handle)
-        writer.writerow(["category", "name", "id"])
-        writer.writerows(rows)
+    for sheet_name in ["Vendors", "Funders", "Staff"]:
+        df = sheets.get(sheet_name)
+        if df is None or df.empty:
+            df = pd.DataFrame(columns=_COLUMNS)
+        normalized[sheet_name] = _normalize_dataframe(df)
 
-    with_id = sum(1 for _, _, id_value in rows if id_value)
-    by_cat: dict[str, int] = {}
-    for category, _, _ in rows:
-        by_cat[category] = by_cat.get(category, 0) + 1
-    print(f"Wrote {len(rows)} rows to {_OUTPUT}")
+    new_staff = _person_rows()
+    new_vendors = _organization_rows()
+
+    if new_staff:
+        normalized["Staff"] = _merge_rows(normalized["Staff"], new_staff)
+    if new_vendors:
+        normalized["Vendors"] = _merge_rows(normalized["Vendors"], new_vendors)
+
+    with pd.ExcelWriter(_OUTPUT, engine="openpyxl") as writer:
+        for sheet_name, df in normalized.items():
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+    total = sum(len(df) for df in normalized.values())
+    with_id = sum(int((df["Internal ID"].notna()).sum()) for df in normalized.values())
+    by_cat = {category: len(df) for category, df in normalized.items()}
+    print(f"Wrote {total} rows to {_OUTPUT}")
     print(f"  with curated id: {with_id}")
-    print(f"  needing id/review: {len(rows) - with_id}")
-    print(f"  by category: {by_cat}")
+    print(f"  needing id/review: {total - with_id}")
+    print(f"  by sheet: {by_cat}")
 
 
 if __name__ == "__main__":
