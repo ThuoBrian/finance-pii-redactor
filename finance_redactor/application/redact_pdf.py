@@ -1,10 +1,15 @@
 """PDF pseudonymization / blackout use case.
 
-Orchestrates the per-page pipeline: extract text (gateway) -> detect (detector)
--> dedupe overlaps (domain rule) -> resolve pseudonyms (domain) -> redact
-(gateway). A single :class:`Pseudonymizer` spans the whole document so a name is
-pseudonymized consistently across pages, and the accumulated crosswalk is
-returned alongside the redacted bytes.
+Orchestrates the per-page pipeline: extract text (gateway) -> normalize PDF
+artifacts -> detect (detector) -> dedupe overlaps (domain rule) -> resolve
+pseudonyms (domain) -> redact (gateway). A single :class:`Pseudonymizer` spans
+the whole document so a name is pseudonymized consistently across pages, and the
+accumulated crosswalk is returned alongside the redacted bytes.
+
+PDF text extraction can introduce ligatures, hyphenation, and irregular
+whitespace that break exact name matching. The text is therefore normalized
+before detection; detection spans are translated back to the original extracted
+text so the gateway can search for them in the PDF.
 
 In ``blackout`` mode, detected text is covered with a black box instead of being
 replaced by a pseudonym, and images are always blacked out. The crosswalk is
@@ -25,6 +30,10 @@ from finance_redactor.application.results import PdfRedactionResult
 from finance_redactor.domain.entities import Finding
 from finance_redactor.domain.pseudonyms import MasterEntry, Pseudonymizer
 from finance_redactor.domain.rules import dedupe_overlapping
+from finance_redactor.infrastructure.detection.pdf_text_normalizer import (
+    NormalizedText,
+    normalize_pdf_text,
+)
 
 
 class RedactionStyle(str, Enum):
@@ -67,16 +76,21 @@ class RedactPdfService:
         try:
             findings: list[Finding] = []
             for page_index in range(document.page_count):
-                text = document.page_text(page_index)
-                has_text = bool(text.strip())
+                raw_text = document.page_text(page_index)
+                has_text = bool(raw_text.strip())
+                normalized = (
+                    normalize_pdf_text(raw_text)
+                    if has_text
+                    else NormalizedText("", raw_text, ())
+                )
                 detections = (
-                    self._detector.analyze(text, entities, threshold)
+                    self._detector.analyze(normalized.text, entities, threshold)
                     if has_text
                     else []
                 )
 
                 kept = dedupe_overlapping(detections)
-                redactions: list[tuple[str, str]] = []
+                redactions: list[tuple[str | list[str], str]] = []
                 for detection in kept:
                     pseudonym = pseudonymizer.assign(
                         detection.entity_type, detection.text
@@ -90,7 +104,15 @@ class RedactPdfService:
                             source=detection.source,
                         )
                     )
-                    redactions.append((detection.text, pseudonym))
+                    raw_span = normalized.to_raw_span(detection.span)
+                    raw_substring = raw_text[raw_span.start : raw_span.end]
+                    # Pass the normalized detection text first, with the original
+                    # extracted substring as a fallback so PyMuPDF can find names
+                    # even when the page stores them with ligatures or hyphens.
+                    candidates: list[str] = [detection.text]
+                    if raw_substring != detection.text:
+                        candidates.append(raw_substring)
+                    redactions.append((candidates, pseudonym))
 
                 if (
                     style == RedactionStyle.BLACKOUT

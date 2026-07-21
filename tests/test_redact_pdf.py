@@ -42,17 +42,6 @@ class FakePdfDocument:
             tuple(float(c) for c in r) for r in self._image_rects.get(page_index, [])
         ]
 
-    def redact_page(
-        self,
-        page_index: int,
-        redactions: list[tuple[str, str]],
-        *,
-        blackout: bool = False,
-    ) -> None:
-        """Record the redactions and blackout flag applied to this page."""
-        self.redactions_by_page[page_index] = redactions
-        self.blackout_by_page[page_index] = blackout
-
     def to_bytes(self) -> bytes:
         """Render the document to bytes (here, the joined page texts)."""
         return b"\n---PAGE---\n".join(p.encode("utf-8") for p in self._pages)
@@ -60,6 +49,44 @@ class FakePdfDocument:
     def close(self) -> None:
         """Mark the document as closed."""
         self.closed = True
+
+    def redact_page(
+        self,
+        page_index: int,
+        replacements: list[tuple[str | list[str], str]],
+        blackout: bool = False,
+    ) -> list[object]:
+        """Apply replacements for this test document.
+
+        Each candidate list is tried in order; the first candidate found in the
+        page text is replaced and recorded. Unknown candidate lists are ignored.
+        The ``__IMAGE__`` sentinel is treated as a request to redact images.
+        """
+        rects: list[object] = []
+        self.blackout_by_page[page_index] = blackout
+        image_sentinel = "__IMAGE__"
+        for candidates, replacement in replacements:
+            if isinstance(candidates, str):
+                candidates = [candidates]
+            if image_sentinel in candidates:
+                for _ in self._image_rects.get(page_index, []):
+                    self.redactions_by_page.setdefault(page_index, []).append(
+                        (image_sentinel, "")
+                    )
+                    rects.append((image_sentinel, ""))
+                continue
+            page_text = self._pages[page_index]
+            for candidate in candidates:
+                if candidate in page_text:
+                    self._pages[page_index] = page_text.replace(
+                        candidate, replacement, 1
+                    )
+                    self.redactions_by_page.setdefault(page_index, []).append(
+                        (candidate, replacement)
+                    )
+                    rects.append((candidate, replacement))
+                    break
+        return rects
 
 
 def _document_factory(source: object) -> FakePdfDocument:
@@ -211,3 +238,34 @@ def test_pseudonymize_mode_does_not_blackout_images() -> None:
     sentinels = [r for r, _ in doc.redactions_by_page[0] if r == "__IMAGE__"]
     assert sentinels == []
     assert doc.blackout_by_page[0] is False
+
+
+def test_name_with_pdf_artifacts_is_detected_after_normalization() -> None:
+    """Ligatures and line-break hyphens are normalized before detection."""
+
+    class ArtifactDetector:
+        def analyze(
+            self, text: str, entities: list[str], threshold: float
+        ) -> list[PiiDetection]:
+            idx = text.find("Acme Supplies")
+            if idx == -1:
+                return []
+            return [
+                PiiDetection(
+                    entity_type="ORGANIZATION",
+                    span=Span(idx, idx + len("Acme Supplies")),
+                    text="Acme Supplies",
+                    score=0.99,
+                    source=DetectionSource.MODEL,
+                )
+            ]
+
+    raw = "Acme Sup-\nplies invoice"
+    doc = FakePdfDocument([raw])
+    result = _service(detector=ArtifactDetector()).execute(doc, ["ORGANIZATION"], 0.35)
+
+    assert result.entity_count == 1
+    assert result.findings[0].detected_text == "Acme Supplies"
+    # The page text was updated using whichever candidate the gateway could find.
+    pseudonym = result.crosswalk[0].pseudonym
+    assert pseudonym in doc._pages[0]

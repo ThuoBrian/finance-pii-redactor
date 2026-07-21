@@ -80,14 +80,14 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Solution:** `PresidioEngine.analyze` now runs a second detection pass on a length-preserving recased copy of the text (`finance_redactor/infrastructure/detection/recasing.py` title-cases all-caps tokens, e.g. `MARY` -> `Mary`), then unions and de-duplicates with the original pass. Spans map back to the original text because recasing preserves length.
 - **Side effect:** standalone all-caps acronyms (e.g. `USD`, `KCB`) are recased in the *copy* and may occasionally be flagged as organizations. These are reviewable false positives, not errors — confirm in the detection details / crosswalk before downloading. The original-cased pass is unchanged, so this only ever *adds* detections.
 
-### PDF text is not replaced, or two codes stack on the same area
-- **Symptom:** Some PDF text keeps the original name, or the output shows two ID codes stacked on the same spot.
+### PDF text is not replaced, or organization names are missed in PDFs
+- **Symptom:** Some names in a PDF are detected but not replaced, or organization names are missing from the findings entirely.
 - **Cause 1:** The PDF page is a scanned image and contains no selectable text layer.
 - **Solution 1:** The tool only processes selectable PDF text. Scanned PDFs require OCR first.
 - **Cause 2:** The same span was detected by both the spaCy model and the master list, or a name appears under two categories.
 - **Solution 2:** The code deduplicates overlapping spans (leftmost/longest wins), but a name listed under two categories (e.g. Vendor *and* Funder) can still conflict. Keep each name in a single category.
-- **Cause 3:** A detected substring cannot be located on the page with `page.search_for()`, e.g., due to hyphenation or complex layout encoding.
-- **Solution 3:** The occurrence is reported in the detection details and the crosswalk but not written into the page. Manually review the output.
+- **Cause 3:** PyMuPDF extracts text with artifacts that break exact matching — typographic ligatures (`ﬁ` instead of `fi`), line-break hyphenation (`Acme Sup-\nplies`), and irregular whitespace. The master-list recognizer and spaCy see a different string than the one in the master list.
+- **Solution 3:** The PDF flow now normalizes extracted text before detection: ligatures are expanded, soft line-break hyphens are removed, and whitespace is collapsed. Detection spans are mapped back to the original extracted text, and `page.search_for()` tries a small set of fallback variants (whitespace-collapsed, punctuation-stripped, `&`/`and` swapped, common suffix stripped) when the exact text is not found. The occurrence is still reported in the detection details and crosswalk even if it cannot be written.
 
 ## Testing and linting
 

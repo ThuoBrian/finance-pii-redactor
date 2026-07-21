@@ -8,11 +8,38 @@ parameters are unchanged from the original implementation.
 
 from __future__ import annotations
 
+import re
 from io import BytesIO
 
 import fitz  # PyMuPDF
 
 _IMAGE_SENTINEL = "__IMAGE__"
+
+# Common legal suffixes and punctuation variants a search might miss.
+_ORG_SUFFIX_RE = re.compile(
+    r"\s*(?:\b(?:Ltd\.?|Limited|Inc\.?|Incorporated|LLC|PLC|Corp\.?|Corporation|Co\.?|Company)\b)?\s*[.,;]*\s*$",
+    re.IGNORECASE,
+)
+
+
+def _search_variants(search_text: str) -> list[str]:
+    """Return fallback search strings to try when the exact text is not found."""
+    variants: list[str] = []
+    collapsed = re.sub(r"\s+", " ", search_text).strip()
+    if collapsed != search_text:
+        variants.append(collapsed)
+    no_trailing_punct = re.sub(r"[.,;]+$", "", search_text).strip()
+    if no_trailing_punct != search_text and no_trailing_punct:
+        variants.append(no_trailing_punct)
+    for old, new in (("&", "and"), ("and", "&")):
+        if old in search_text:
+            replaced = search_text.replace(old, new)
+            if replaced not in variants:
+                variants.append(replaced)
+    no_suffix = _ORG_SUFFIX_RE.sub("", search_text).strip()
+    if no_suffix and no_suffix != search_text:
+        variants.append(no_suffix)
+    return variants
 
 
 class PyMuPdfDocument:
@@ -52,20 +79,24 @@ class PyMuPdfDocument:
     def redact_page(
         self,
         page_index: int,
-        redactions: list[tuple[str, str]],
+        redactions: list[tuple[str | list[str], str]],
         *,
         blackout: bool = False,
     ) -> None:
         """Apply redactions to one page.
 
-        Each text redaction is ``(search_text, label)``. When ``blackout`` is True,
+        Each text redaction is ``(search_text, label)`` or
+        ``([primary_search, ...fallbacks], label)``. When ``blackout`` is True,
         matched text is covered with a black box instead of labeled. Images are
         always blacked out; they appear in ``redactions`` as
         ``("__IMAGE__", "")``.
+
+        If ``search_text`` is not found exactly, a small set of normalized
+        variants is tried before giving up.
         """
         page = self._doc.load_page(page_index)
-        for search_text, label in redactions:
-            if search_text == _IMAGE_SENTINEL:
+        for search_item, label in redactions:
+            if search_item == _IMAGE_SENTINEL:
                 for x0, y0, x1, y1 in self.page_image_rects(page_index):
                     page.add_redact_annot(
                         fitz.Rect(x0, y0, x1, y1),
@@ -74,7 +105,22 @@ class PyMuPdfDocument:
                     )
                 continue
 
-            rects = page.search_for(search_text)
+            candidates: list[str] = []
+            if isinstance(search_item, str):
+                candidates = [search_item] + _search_variants(search_item)
+            else:
+                for item in search_item:
+                    candidates.append(item)
+                    candidates.extend(_search_variants(item))
+                # Deduplicate while preserving order.
+                seen: set[str] = set()
+                candidates = [c for c in candidates if not (c in seen or seen.add(c))]
+
+            rects: list[fitz.Rect] = []
+            for candidate in candidates:
+                rects = page.search_for(candidate)
+                if rects:
+                    break
             if not rects:
                 continue
             for rect in rects:

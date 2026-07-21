@@ -85,15 +85,19 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   `Assignment`). This layer imports no concrete framework.
 - **`finance_redactor/infrastructure/`** — concrete adapters implementing the
   ports. `detection/` (`PresidioEngine` for `PiiDetector` only — detection, no
-  anonymizer; `CustomNameRecognizer`; `recasing.py`), `documents/`
-  (`OpenpyxlExcelGateway`, `PyMuPdfDocument`), `names/` (`MasterListRepository` +
-  `data/Names List - Organized.xlsx`). Presidio's `RecognizerResult` is translated to the
-  domain `PiiDetection` **only** here. `PresidioEngine.analyze` runs spaCy on the
-  raw text and — when ALL-CAPS tokens are present — a **second pass on a
-  length-preserving recased copy** (`recase_uppercase`, `MARY` → `Mary`) so the
-  model catches ALL-CAPS names; results from both passes are unioned and
-  de-duplicated via the domain `dedupe_overlapping` (spans stay valid because
-  recasing preserves length; detections are sliced from the original text).
+  anonymizer; `CustomNameRecognizer`; `recasing.py`; `pdf_text_normalizer.py`),
+  `documents/` (`OpenpyxlExcelGateway`, `PyMuPdfDocument`), `names/`
+  (`MasterListRepository` + `data/Names List - Organized.xlsx`). Presidio's
+  `RecognizerResult` is translated to the domain `PiiDetection` **only** here.
+  `PresidioEngine.analyze` runs spaCy on the raw text and — when ALL-CAPS tokens
+  are present — a **second pass on a length-preserving recased copy**
+  (`recase_uppercase`, `MARY` → `Mary`) so the model catches ALL-CAPS names;
+  results from both passes are unioned and de-duplicated via the domain
+  `dedupe_overlapping` (spans stay valid because recasing preserves length;
+  detections are sliced from the original text). For PDFs, `RedactPdfService`
+  normalizes the extracted page text before detection (ligatures, line-break
+  hyphenation, irregular whitespace) and maps detection spans back to the original
+  text so replacements can be applied.
 - **`finance_redactor/presentation/`** — the only layer importing Streamlit.
   `excel_view.py`/`pdf_view.py` own widgets + session state and delegate to use
   cases; `presenters.py` turns results into UI artifacts (highlighted HTML, the
@@ -101,9 +105,9 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   expander + guarded CSV download.
 - **`finance_redactor/config.py`** — the single source of truth: an immutable
   `Settings` dataclass (language, spaCy model, entities, `categories`
-  (category → (prefix, entity_type)), `auto_prefixes`, `custom_match_score`,
-  default threshold, `master_list_file`). Replaces scattered module-level
-  constants and the duplicated `0.9` magic number.
+  (category → (prefix, entity_type)), `category_sheets`, `auto_prefixes`,
+  `custom_match_score`, default threshold, `master_list_file`). Replaces scattered
+  module-level constants and the duplicated `0.9` magic number.
 - **Master list:** `data/Names List - Organized.xlsx` — a **top-level, user-owned folder**
   outside the package (resolved by `Settings.names_dir` from `config.py`), so it
   is easy to find/edit and stays separate from the code (and out of git). The
@@ -137,11 +141,16 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   `redact` runs `apply_replacements` per cell against one sheet-wide `Pseudonymizer`
   (so a name is consistent across cells) and the gateway writes the workbook with
   changed cells highlighted yellow.
-- **PDF flow:** the use case pulls per-page text from the gateway, detects, applies
-  the domain `dedupe_overlapping`, resolves each kept detection to its pseudonym via
-  a document-wide `Pseudonymizer`, records a `Finding`, and tells the gateway to
-  write the pseudonym into the text layer; a detection whose text can't be located
-  on the page is still reported (and in the crosswalk) but not written.
+- **PDF flow:** the use case pulls per-page raw text from the gateway, normalizes
+  it (`pdf_text_normalizer.py`) to remove ligatures / hyphenation / irregular
+  whitespace, detects on the normalized text, applies the domain
+  `dedupe_overlapping`, resolves each kept detection to its pseudonym via a
+  document-wide `Pseudonymizer`, records a `Finding`, and tells the gateway to
+  write the pseudonym into the text layer. Spans found in normalized text are
+  mapped back to the original extracted text before replacement. The gateway also
+  tries fallback search variants when the exact text cannot be located. A
+  detection whose text can't be found on the page is still reported (and in the
+  crosswalk) but not written.
 - **Entry points:**
   - Windows: `run.bat` is the intended end-user launcher.
   - macOS/Linux: `run.sh` performs the equivalent setup and launches Streamlit.

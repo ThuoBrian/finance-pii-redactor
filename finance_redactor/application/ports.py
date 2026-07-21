@@ -66,13 +66,14 @@ class PdfDocument(Protocol):
     def redact_page(
         self,
         page_index: int,
-        redactions: list[tuple[str, str]],
+        redactions: list[tuple[str | list[str], str]],
         *,
         blackout: bool = False,
     ) -> None:
         """Apply redactions to one page.
 
-        Each text redaction is ``(search_text, label)``. When ``blackout`` is True,
+        Each text redaction is ``(search_text, label)`` or
+        ``([primary_search, ...fallbacks], label)``. When ``blackout`` is True,
         matched text is covered with a black box instead of labeled; images are
         always blacked out when present in ``redactions`` as ``("__IMAGE__", "")``.
         """
