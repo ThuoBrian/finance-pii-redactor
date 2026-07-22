@@ -27,7 +27,7 @@ from enum import Enum
 
 from finance_redactor.application.ports import PdfDocumentFactory, PiiDetector
 from finance_redactor.application.results import PdfRedactionResult
-from finance_redactor.domain.entities import Finding
+from finance_redactor.domain.entities import IMAGE_REDACTION_SENTINEL, Finding
 from finance_redactor.domain.pseudonyms import MasterEntry, Pseudonymizer
 from finance_redactor.domain.rules import dedupe_overlapping
 from finance_redactor.infrastructure.detection.pdf_text_normalizer import (
@@ -45,8 +45,6 @@ class RedactionStyle(str, Enum):
 
 class RedactPdfService:
     """Detects and pseudonymizes (or blacks out) PII throughout a PDF document."""
-
-    _IMAGE_SENTINEL = "__IMAGE__"
 
     def __init__(
         self,
@@ -119,7 +117,7 @@ class RedactPdfService:
                     and redact_images
                     and document.page_image_rects(page_index)
                 ):
-                    redactions.append((self._IMAGE_SENTINEL, ""))
+                    redactions.append((IMAGE_REDACTION_SENTINEL, ""))
 
                 if redactions:
                     document.redact_page(

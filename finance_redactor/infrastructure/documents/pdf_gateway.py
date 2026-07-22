@@ -13,13 +13,16 @@ from io import BytesIO
 
 import fitz  # PyMuPDF
 
-_IMAGE_SENTINEL = "__IMAGE__"
+from finance_redactor.domain.entities import IMAGE_REDACTION_SENTINEL
 
 # Common legal suffixes and punctuation variants a search might miss.
 _ORG_SUFFIX_RE = re.compile(
     r"\s*(?:\b(?:Ltd\.?|Limited|Inc\.?|Incorporated|LLC|PLC|Corp\.?|Corporation|Co\.?|Company)\b)?\s*[.,;]*\s*$",
     re.IGNORECASE,
 )
+# Matches "and" as a whole word only, so names that merely contain "and" as a
+# substring (e.g. "Thailand Corp") aren't corrupted by the & <-> and swap below.
+_AND_WORD_RE = re.compile(r"\band\b", re.IGNORECASE)
 
 
 def _search_variants(search_text: str) -> list[str]:
@@ -31,11 +34,14 @@ def _search_variants(search_text: str) -> list[str]:
     no_trailing_punct = re.sub(r"[.,;]+$", "", search_text).strip()
     if no_trailing_punct != search_text and no_trailing_punct:
         variants.append(no_trailing_punct)
-    for old, new in (("&", "and"), ("and", "&")):
-        if old in search_text:
-            replaced = search_text.replace(old, new)
-            if replaced not in variants:
-                variants.append(replaced)
+    if "&" in search_text:
+        replaced = search_text.replace("&", "and")
+        if replaced not in variants:
+            variants.append(replaced)
+    if _AND_WORD_RE.search(search_text):
+        replaced = _AND_WORD_RE.sub("&", search_text)
+        if replaced not in variants:
+            variants.append(replaced)
     no_suffix = _ORG_SUFFIX_RE.sub("", search_text).strip()
     if no_suffix and no_suffix != search_text:
         variants.append(no_suffix)
@@ -95,8 +101,13 @@ class PyMuPdfDocument:
         variants is tried before giving up.
         """
         page = self._doc.load_page(page_index)
+        # Reused across every search_for call below: apply_redactions() is only
+        # called once at the end of this method, so the page's text layout can't
+        # change mid-loop, and building one snapshot avoids PyMuPDF re-parsing
+        # the page for every candidate of every detection.
+        textpage = page.get_textpage()
         for search_item, label in redactions:
-            if search_item == _IMAGE_SENTINEL:
+            if search_item == IMAGE_REDACTION_SENTINEL:
                 for x0, y0, x1, y1 in self.page_image_rects(page_index):
                     page.add_redact_annot(
                         fitz.Rect(x0, y0, x1, y1),
@@ -117,16 +128,24 @@ class PyMuPdfDocument:
                 candidates = [c for c in candidates if not (c in seen or seen.add(c))]
 
             rects: list[fitz.Rect] = []
+            matched_candidate = ""
             for candidate in candidates:
-                rects = page.search_for(candidate)
+                rects = page.search_for(candidate, textpage=textpage)
                 if rects:
+                    matched_candidate = candidate
                     break
             if not rects:
                 continue
-            for rect in rects:
+            # A candidate containing a line break (e.g. the dehyphenated raw-text
+            # fallback) matches one logical occurrence that PyMuPDF reports as one
+            # rect per line it spans. Label only the first rect so the pseudonym
+            # isn't stamped once per line fragment; every rect still gets covered.
+            spans_multiple_lines = "\n" in matched_candidate
+            for index, rect in enumerate(rects):
+                show_label = not blackout and (index == 0 or not spans_multiple_lines)
                 page.add_redact_annot(
                     rect,
-                    text=None if blackout else label,
+                    text=label if show_label else None,
                     fontname="helv",
                     fontsize=11,
                     text_color=(0, 0, 0),

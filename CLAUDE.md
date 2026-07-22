@@ -64,9 +64,11 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   object graph (wires concrete adapters into use cases via constructor injection),
   routes the upload to the Excel or PDF flow by extension. The `get_script_run_ctx()`
   guard at the bottom keeps `_main()` from running on import (tests/linters). It
-  caches only the heavy spaCy NLP model with `@st.cache_resource`; the master list
-  and its custom recognizers are rebuilt on every Streamlit rerun so edits to
-  `data/Names List - Organized.xlsx` take effect immediately without a server restart.
+  caches the heavy spaCy NLP model with `@st.cache_resource`, and separately caches
+  the master-list-derived bundle (parsed rows, custom recognizers, detection engine)
+  keyed on the workbook's modification time, so unrelated reruns reuse both while
+  edits to `data/Names List - Organized.xlsx` still take effect on the next refresh
+  without a server restart.
 - **`finance_redactor/domain/`** — framework-free core. `entities.py`
   (`PiiDetection`, `Span`, `Finding`, `DetectionSource` = `MODEL`/`MASTER_LIST`) is
   the one representation of a finding all layers speak. `rules.py` holds
@@ -126,10 +128,13 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   the Excel/PDF flows show a warning in Advanced settings because such duplicates
   can create conflicting pseudonyms.
 - **Master-list caching:** `MasterListRepository` caches parsed rows keyed by the
-  workbook's file modification time. The first parse of the full ~26k-row workbook
-  takes a few seconds; subsequent Streamlit reruns reuse the cache until the file
-  changes, so widget interactions stay fast while edits to the Excel file still
-  take effect immediately on refresh.
+  workbook's file modification time, and `app.py` wraps the whole
+  repo/recognizers/engine bundle in an `@st.cache_resource` factory keyed on that
+  same mtime. The first parse of the full ~26k-row workbook takes a few seconds;
+  subsequent Streamlit reruns with an unchanged mtime reuse the cached bundle
+  (instead of re-parsing and recompiling recognizer patterns on every widget
+  interaction), so widget interactions stay fast while edits to the Excel file
+  still take effect immediately on refresh (the new mtime busts the cache).
 - **Pseudonyms & crosswalk:** a name in the master list resolves to its curated ID;
   an unknown name gets a deterministic, stable auto-id (`PSN-AUTO-<hash>` /
   `ORG-AUTO-<hash>`, same input → same id across files) and is flagged for review.

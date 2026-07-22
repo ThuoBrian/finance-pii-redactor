@@ -68,8 +68,8 @@ def normalize_pdf_text(raw: str) -> NormalizedText:
         if replacement is None:
             expanded.append((ch, offset))
         else:
-            for _ in replacement:
-                expanded.append((_, offset))
+            for expanded_ch in replacement:
+                expanded.append((expanded_ch, offset))
 
     # Step 2: remove soft-hyphen line breaks. We scan for "-" followed by a
     # newline and optional whitespace, where the next non-space character is a

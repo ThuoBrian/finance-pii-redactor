@@ -11,6 +11,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+# Sentinel search_text marking an image-blackout redaction rather than a text
+# match. Shared by the redact_pdf use case (which emits it) and the PyMuPDF
+# gateway (which recognizes it) so the two stay in sync.
+IMAGE_REDACTION_SENTINEL = "__IMAGE__"
+
 
 class DetectionSource(str, Enum):
     """Where a detection originated.
