@@ -33,6 +33,26 @@ This project uses `uv` for environment management and Python 3.12.
   uv run codespell
   ```
 
+- **Run prose linting** (docs only: `*.md`; IPA code-quality check). Requires
+  [Vale](https://vale.sh) installed separately (`winget install errata-ai.Vale`
+  / `brew install vale`) — it is not a Python dependency, so `uv sync` does not
+  install it:
+  ```bash
+  vale sync   # first time only, fetches style packages into .vale/styles/
+  vale README.md CLAUDE.md docs/ data/README.md
+  ```
+  (Don't run bare `vale .` — it recurses into `.vale/styles/` itself and lints
+  the downloaded style packages' own README/LICENSE files.)
+  Config lives in `.vale.ini` (styles: `write-good`, `alex`, `proselint`,
+  plus Vale's built-in spelling check). `.vale/styles/config/vocabularies/Base/accept.txt`
+  is this project's custom vocabulary (domain/tooling jargon that isn't in
+  Vale's dictionary) — add a term there rather than rewording a sentence to
+  dodge a spelling false-positive. `alex.Race`, `alex.Profanity*`, and
+  `write-good.E-Prime` are disabled in `.vale.ini`: they had a near-100%
+  false-positive rate on this repo's own vocabulary (this is fraud-monitoring
+  software — "fraud" isn't profanity — and "master list" isn't the master/slave
+  sense the race rule targets).
+
 - **Run tests:**
   ```bash
   uv run pytest
@@ -111,8 +131,8 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   `custom_match_score`, default threshold, `master_list_file`). Replaces scattered
   module-level constants and the duplicated `0.9` magic number.
 - **Master list:** `data/Names List - Organized.xlsx` — a **top-level, user-owned folder**
-  outside the package (resolved by `Settings.names_dir` from `config.py`), so it
-  is easy to find/edit and stays separate from the code (and out of git). The
+  outside the package (resolved by `Settings.names_dir` from `config.py`), kept
+  separate from the code (and out of git). The
   workbook has one sheet per category (`Vendors`, `Funders`, `Staff`) with columns
   `Category`, `Internal ID`, `Name`, `Primary Subsidiary`, `Country`. It is the
   **single source** for both detection and pseudonym IDs. `Category` maps via
@@ -167,7 +187,7 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
 - `line-length = 88` and `target-version = "py312"`. `requires-python = ">=3.12,<3.14"`.
 - `codespell` is configured to skip `uv.lock`, all `.txt`, and all `.csv` files (the master list contains many names that look like typos), and to ignore the word `master`.
 - `pytest` is configured with `pythonpath = ["."]` so tests can import from the repo root. Tests live under `tests/` and cover the pure logic (`pseudonyms`, `master_list_repository`); `tests/**` is exempt from `D103` via `per-file-ignores`.
-- `pre-commit` is listed as a dev dependency but there is **no `.pre-commit-config.yaml`**, so no hooks actually run. There is no CI configuration in this repo.
+- `pre-commit` is listed as a dev dependency but there is **no `.pre-commit-config.yaml`**, so no hooks actually run. This repo has no CI configuration.
 
 ## Distribution notes
 

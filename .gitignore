@@ -29,6 +29,11 @@ finance-pii-redactor.zip
 htmlcov/
 .cache/
 
+# Vale style packages are fetched by `vale sync` (see .vale.ini); only the
+# hand-written vocab under config/ is project-authored and worth keeping.
+.vale/styles/*
+!.vale/styles/config/
+
 # ── Editors / IDEs ───────────────────────────────────────────────────────────
 .vscode/
 .idea/
