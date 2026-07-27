@@ -65,7 +65,7 @@ def _main() -> None:
             engine,
             repo.master_map(),
             repo.counts_by_category(),
-            repo.duplicate_names(),
+            repo.quality_report(),
         )
 
     try:
@@ -73,7 +73,7 @@ def _main() -> None:
     except OSError:
         master_list_mtime = None
 
-    engine, master_map, name_counts, duplicate_names = _get_master_list_bundle(
+    engine, master_map, name_counts, quality_issues = _get_master_list_bundle(
         master_list_mtime
     )
 
@@ -108,7 +108,7 @@ def _main() -> None:
             excel_gateway=OpenpyxlExcelGateway(),
             settings=settings,
             name_counts=name_counts,
-            duplicate_names=duplicate_names,
+            quality_issues=quality_issues,
         )
     elif extension == "pdf":
         run_pdf_flow(
@@ -118,7 +118,7 @@ def _main() -> None:
             ),
             settings=settings,
             name_counts=name_counts,
-            duplicate_names=duplicate_names,
+            quality_issues=quality_issues,
         )
     else:
         st.error("Unsupported file type. Please upload an Excel or PDF file.")

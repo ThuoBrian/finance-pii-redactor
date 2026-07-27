@@ -8,7 +8,7 @@ and rendering to ``presenters``.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import streamlit as st
@@ -16,39 +16,13 @@ import streamlit as st
 from finance_redactor.application.ports import ExcelGateway
 from finance_redactor.application.redact_excel import RedactExcelService
 from finance_redactor.config import Settings
+from finance_redactor.domain.quality import QualityIssue
 from finance_redactor.presentation.crosswalk_view import render_crosswalk_section
+from finance_redactor.presentation.master_list_view import render_master_list_status
 from finance_redactor.presentation.presenters import (
     excel_findings_dataframe,
     highlighted_html,
 )
-
-
-def _name_list_help(counts: Mapping[str, int]) -> str:
-    total = sum(counts.values())
-    by_cat = ", ".join(f"{n:,} {cat}" for cat, n in sorted(counts.items())) or "none"
-    return (
-        f"Loaded {total:,} master-list entr(y/ies): {by_cat}. Edit "
-        "`data/Names List - Organized.xlsx` "
-        "and refresh the page to update it."
-    )
-
-
-def _render_duplicate_warning(duplicate_names: Mapping[str, list[str]]) -> None:
-    if not duplicate_names:
-        return
-    total = len(duplicate_names)
-    examples = list(duplicate_names.items())[:5]
-    lines = "\n".join(
-        f"- `{name}` appears in: {', '.join(categories)}"
-        for name, categories in examples
-    )
-    remaining = total - len(examples)
-    if remaining > 0:
-        lines += f"\n- ... and {remaining} more"
-    st.warning(
-        f"{total} name(s) appear under multiple categories. This can cause "
-        "conflicting pseudonyms. Keep each name in a single category.\n\n" + lines
-    )
 
 
 def run_excel_flow(
@@ -58,7 +32,7 @@ def run_excel_flow(
     excel_gateway: ExcelGateway,
     settings: Settings,
     name_counts: Mapping[str, int],
-    duplicate_names: Mapping[str, list[str]] | None = None,
+    quality_issues: Sequence[QualityIssue] | None = None,
 ) -> None:
     """Render the Excel pseudonymization flow in Streamlit."""
     if (
@@ -105,9 +79,7 @@ def run_excel_flow(
             options=list(settings.supported_entities),
             default=list(settings.supported_entities),
         )
-        st.markdown("**Master list**")
-        st.caption(_name_list_help(name_counts))
-        _render_duplicate_warning(duplicate_names or {})
+        render_master_list_status(name_counts, quality_issues)
 
     if not selected_cols:
         st.warning("Select at least one column to scan.")

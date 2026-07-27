@@ -210,3 +210,72 @@ def test_rows_are_reloaded_when_file_changes(tmp_path):
     )
     _make_excel(path, sheets)
     assert [r.name for r in repo.rows()] == ["Second"]
+
+
+def _variant_repo(path):
+    sheets = {
+        "Vendors": pd.DataFrame(
+            {
+                "Category": ["Vendor", "Vendor"],
+                "Internal ID": [1045, 200],
+                "Name": ["Acme Ltd", "Smith & Co"],
+                "Primary Subsidiary": ["", ""],
+                "Country": ["", ""],
+            }
+        ),
+    }
+    _make_excel(path, sheets)
+    return MasterListRepository(path, _CATEGORIES, category_sheets=_CATEGORY_SHEETS)
+
+
+def test_master_map_resolves_suffix_variants(tmp_path):
+    repo = _variant_repo(tmp_path / "variants.xlsx")
+    mapping = repo.master_map()
+
+    # The canonical short form and its long-form / period variants all resolve to the
+    # same curated ID.
+    for surface in ["Acme Ltd", "Acme Ltd.", "Acme Limited", "Acme Limited."]:
+        key = ("ORGANIZATION", normalize(surface))
+        assert key in mapping, surface
+        assert mapping[key].pseudonym == "VND-1045"
+
+
+def test_master_map_resolves_ampersand_variants(tmp_path):
+    repo = _variant_repo(tmp_path / "variants.xlsx")
+    mapping = repo.master_map()
+
+    for surface in [
+        "Smith & Co",
+        "Smith and Co",
+        "Smith & Company",
+        "Smith and Company",
+    ]:
+        key = ("ORGANIZATION", normalize(surface))
+        assert key in mapping, surface
+        assert mapping[key].pseudonym == "VND-200"
+
+
+def test_alias_does_not_clobber_other_row_canonical(tmp_path):
+    # Two genuinely separate rows whose alias sets overlap: "Acme Ltd" (VND-1) and
+    # "Acme Limited" (VND-2). Each row's own canonical name must still resolve to its
+    # own ID; the alias "acme limited" from the first row must not shadow the second
+    # row's canonical.
+    sheets = {
+        "Vendors": pd.DataFrame(
+            {
+                "Category": ["Vendor", "Vendor"],
+                "Internal ID": [1, 2],
+                "Name": ["Acme Ltd", "Acme Limited"],
+                "Primary Subsidiary": ["", ""],
+                "Country": ["", ""],
+            }
+        ),
+    }
+    path = tmp_path / "collisions.xlsx"
+    _make_excel(path, sheets)
+    mapping = MasterListRepository(
+        path, _CATEGORIES, category_sheets=_CATEGORY_SHEETS
+    ).master_map()
+
+    assert mapping[("ORGANIZATION", normalize("Acme Ltd"))].pseudonym == "VND-1"
+    assert mapping[("ORGANIZATION", normalize("Acme Limited"))].pseudonym == "VND-2"

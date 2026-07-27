@@ -33,9 +33,7 @@ def test_redact_page_removes_name_split_across_a_line_break():
     document = PyMuPdfDocument.open(_wrapped_name_pdf_bytes())
     assert document.page_text(0).startswith("Acme Sup-\nplies")
 
-    document.redact_page(
-        0, [(["Acme Supplies", "Acme Sup-\nplies"], "ORG-AUTO-D4D8B")]
-    )
+    document.redact_page(0, [(["Acme Supplies", "Acme Sup-\nplies"], "ORG-AUTO-D4D8B")])
     redacted_bytes = document.to_bytes()
     document.close()
 

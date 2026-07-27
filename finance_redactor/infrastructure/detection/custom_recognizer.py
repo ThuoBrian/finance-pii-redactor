@@ -16,6 +16,8 @@ from presidio_analyzer import (
     RecognizerResult,
 )
 
+from finance_redactor.domain.aliases import name_pattern
+
 
 class CustomNameRecognizer(EntityRecognizer):
     """Recognizes names supplied via plain-text lists.
@@ -40,9 +42,14 @@ class CustomNameRecognizer(EntityRecognizer):
     def _compile_patterns(self) -> dict[str, re.Pattern[str]]:
         compiled: dict[str, re.Pattern[str]] = {}
         for raw_name in self.names:
-            # Escape regex metacharacters, then allow word boundaries on both sides.
-            escaped = re.escape(raw_name)
-            pattern = re.compile(rf"\b{escaped}\b", re.IGNORECASE | re.UNICODE)
+            # One pattern per name that matches every alias variant (org-suffix
+            # equivalents, &/and). Leading ``\b`` + trailing ``(?!\\w)``: the right
+            # side is a non-word lookahead so an optional trailing period (left
+            # unconsumed) doesn't break the boundary the way ``\b`` would.
+            pattern = re.compile(
+                rf"\b{name_pattern(raw_name)}(?!\w)",
+                re.IGNORECASE | re.UNICODE,
+            )
             compiled[raw_name] = pattern
         return compiled
 
@@ -66,7 +73,6 @@ class CustomNameRecognizer(EntityRecognizer):
 
         results: list[RecognizerResult] = []
         for raw_name, pattern in self._patterns.items():
-            escaped_name = re.escape(raw_name)
             for match in pattern.finditer(text):
                 results.append(
                     RecognizerResult(
@@ -78,7 +84,7 @@ class CustomNameRecognizer(EntityRecognizer):
                             recognizer=self.__class__.__name__,
                             original_score=self._score,
                             pattern_name=f"custom list: {raw_name}",
-                            pattern=escaped_name,
+                            pattern=pattern.pattern,
                             textual_explanation=(
                                 f"Name matched custom {supported_entity.lower()} list"
                             ),

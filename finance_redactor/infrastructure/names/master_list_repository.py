@@ -27,7 +27,14 @@ from pathlib import Path
 
 import pandas as pd
 
+from finance_redactor.domain.aliases import aliases
 from finance_redactor.domain.pseudonyms import MasterEntry, normalize
+from finance_redactor.domain.quality import (
+    SEVERITY_INFO,
+    SEVERITY_WARNING,
+    QualityIssue,
+    cap_examples,
+)
 
 _WHITESPACE = re.compile(r"\s+")
 # Strip a trailing legacy ID suffix such as "Isaac Henry - 22463".
@@ -90,15 +97,32 @@ class MasterListRepository:
         """Return the curated lookup used by the pseudonymizer.
 
         Only rows with a non-blank id are included; the rest pseudonymize as
-        flagged auto-ids.
+        flagged auto-ids. Each row registers its canonical name plus every alias
+        variant (org-suffix equivalents, ``&``/``and`` swaps) so a document surface
+        form that differs from the workbook still resolves to the curated ID.
+
+        Two passes keep curated entries authoritative: every row's canonical name is
+        registered first (first row wins an exact-name collision), then alias keys fill
+        only still-empty slots. An alias can therefore never clobber another row's
+        canonical name — e.g. an ``Acme Ltd`` row's ``acme limited`` alias will not
+        shadow a separate ``Acme Limited`` row's own ID.
         """
+        curated = [row for row in self.rows() if row.pseudonym is not None]
+
         mapping: dict[tuple[str, str], MasterEntry] = {}
-        for row in self.rows():
-            if row.pseudonym is None:
-                continue
-            mapping[(row.entity_type, normalize(row.name))] = MasterEntry(
-                pseudonym=row.pseudonym, category=row.category
-            )
+        for row in curated:
+            key = (row.entity_type, normalize(row.name))
+            entry = MasterEntry(pseudonym=row.pseudonym, category=row.category)
+            existing = mapping.get(key)
+            if existing is None or existing.pseudonym == entry.pseudonym:
+                mapping[key] = entry
+
+        for row in curated:
+            entry = MasterEntry(pseudonym=row.pseudonym, category=row.category)
+            for alias in aliases(row.name):
+                key = (row.entity_type, normalize(alias))
+                if key not in mapping:
+                    mapping[key] = entry
         return mapping
 
     def counts_by_category(self) -> dict[str, int]:
@@ -124,6 +148,138 @@ class MasterListRepository:
             for name, categories in by_name.items()
             if len(categories) > 1
         }
+
+    _EXAMPLE_LIMIT = 5
+
+    def quality_report(self) -> list[QualityIssue]:
+        """Detect and return actionable data-quality findings in the master list.
+
+        Four checks, each emitted only when it has occurrences:
+
+        - **cross-category duplicate names** — the same name under multiple
+          categories maps to inconsistent prefixes (and, for categories sharing an
+          entity type like Vendor/Funder, one silently clobbers the other).
+        - **conflicting IDs** — the same name within one category has multiple
+          Internal IDs; only one is used, the rest are ignored.
+        - **blank IDs** — a name with no Internal ID is detected but pseudonymizes
+          to a flagged auto-id (advisory, not an error: this is supported behavior).
+        - **duplicate IDs** — one Internal ID reused by different names within a
+          category, so distinct names share one pseudonym.
+        """
+        rows = self.rows()
+        issues: list[QualityIssue] = []
+        limit = self._EXAMPLE_LIMIT
+
+        # (a) Cross-category duplicate names.
+        cross = self.duplicate_names()
+        if cross:
+            items = [
+                f"`{name}` appears in: {', '.join(categories)}"
+                for name, categories in cross.items()
+            ]
+            examples, total = cap_examples(items, limit)
+            issues.append(
+                QualityIssue(
+                    kind="cross_category_duplicate",
+                    severity=SEVERITY_WARNING,
+                    title=f"{len(cross)} name(s) appear under multiple categories",
+                    detail=(
+                        "This can cause conflicting pseudonyms. Keep each name in a "
+                        "single category."
+                    ),
+                    examples=examples,
+                    total=total,
+                )
+            )
+
+        # (b) Same name, same category, different Internal IDs.
+        by_cat_name: dict[tuple[str, str], set[str]] = {}
+        for row in rows:
+            if row.pseudonym is None:
+                continue
+            by_cat_name.setdefault((row.category, normalize(row.name)), set()).add(
+                row.pseudonym
+            )
+        conflicts = {
+            key: sorted(ids) for key, ids in by_cat_name.items() if len(ids) > 1
+        }
+        if conflicts:
+            items = [
+                f"`{name}` ({cat}) has IDs: {', '.join(ids)}"
+                for (cat, name), ids in conflicts.items()
+            ]
+            examples, total = cap_examples(items, limit)
+            issues.append(
+                QualityIssue(
+                    kind="conflicting_ids",
+                    severity=SEVERITY_WARNING,
+                    title=f"{len(conflicts)} name(s) have multiple Internal IDs",
+                    detail=(
+                        "Only one ID is used per name; the others are ignored. Merge "
+                        "the rows or pick a single ID."
+                    ),
+                    examples=examples,
+                    total=total,
+                )
+            )
+
+        # (c) Blank Internal IDs (advisory).
+        blanks_by_cat: dict[str, list[str]] = {}
+        for row in rows:
+            if row.pseudonym is None:
+                blanks_by_cat.setdefault(row.category, []).append(row.name)
+        blank_total = sum(len(v) for v in blanks_by_cat.values())
+        if blank_total:
+            items = [
+                f"`{name}` ({cat})"
+                for cat, names in blanks_by_cat.items()
+                for name in names
+            ]
+            examples, total = cap_examples(items, limit)
+            issues.append(
+                QualityIssue(
+                    kind="blank_ids",
+                    severity=SEVERITY_INFO,
+                    title=f"{blank_total} name(s) have no Internal ID",
+                    detail=(
+                        "They are detected but receive a flagged auto-generated ID. "
+                        "Add an Internal ID to give each a stable curated ID."
+                    ),
+                    examples=examples,
+                    total=total,
+                )
+            )
+
+        # (d) One Internal ID reused by different names within a category.
+        by_cat_id: dict[tuple[str, str], set[str]] = {}
+        for row in rows:
+            if row.pseudonym is None:
+                continue
+            by_cat_id.setdefault((row.category, row.pseudonym), set()).add(row.name)
+        dup_ids = {
+            key: sorted(names) for key, names in by_cat_id.items() if len(names) > 1
+        }
+        if dup_ids:
+            items = [
+                f"ID `{pid}` ({cat}) used by: {', '.join(names)}"
+                for (cat, pid), names in dup_ids.items()
+            ]
+            examples, total = cap_examples(items, limit)
+            issues.append(
+                QualityIssue(
+                    kind="duplicate_ids",
+                    severity=SEVERITY_WARNING,
+                    title=f"{len(dup_ids)} Internal ID(s) reused by multiple names",
+                    detail=(
+                        "Different names will share one pseudonym. Give each name a "
+                        "unique Internal ID."
+                    ),
+                    examples=examples,
+                    total=total,
+                )
+            )
+
+        return issues
 
     def _file_mtime(self) -> float | None:
         try:

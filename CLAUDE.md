@@ -85,10 +85,12 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   routes the upload to the Excel or PDF flow by extension. The `get_script_run_ctx()`
   guard at the bottom keeps `_main()` from running on import (tests/linters). It
   caches the heavy spaCy NLP model with `@st.cache_resource`, and separately caches
-  the master-list-derived bundle (parsed rows, custom recognizers, detection engine)
-  keyed on the workbook's modification time, so unrelated reruns reuse both while
-  edits to `data/Names List - Organized.xlsx` still take effect on the next refresh
-  without a server restart.
+  the master-list-derived bundle (parsed rows, custom recognizers, detection engine,
+  and the run's `quality_report()`) keyed on the workbook's modification time, so
+  unrelated reruns reuse both while edits to `data/Names List - Organized.xlsx` still
+  take effect on the next refresh without a server restart. Both the Excel and PDF
+  flows receive that `quality_report()` and render it in the Advanced settings panel
+  via the shared `master_list_view`.
 - **`finance_redactor/domain/`** — framework-free core. `entities.py`
   (`PiiDetection`, `Span`, `Finding`, `DetectionSource` = `MODEL`/`MASTER_LIST`) is
   the one representation of a finding all layers speak. `rules.py` holds
@@ -96,8 +98,13 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   model/master list). `pseudonyms.py` holds the pseudonymization core:
   `normalize`, the `Pseudonymizer` (master-list lookup + deterministic auto-id
   fallback, accumulating the crosswalk), and `apply_replacements` (dedupe + slice
-  spans right-to-left). **This is the single seam where a name becomes an ID.** No
-  imports of Presidio/pandas/Streamlit.
+  spans right-to-left). **This is the single seam where a name becomes an ID.**
+  `aliases.py` derives variant surface forms of a name (org-suffix equivalents
+  `Ltd`↔`Limited`, `&`↔`and`): `aliases()` feeds extra lookup keys to the master
+  map and `name_pattern()` feeds one alias-aware regex to the recognizer, so a
+  document's `Acme Limited` resolves to the curated `VND-` id of a workbook
+  `Acme Ltd`. `quality.py` defines the `QualityIssue` DTO for master-list
+  data-quality findings. No imports of Presidio/pandas/Streamlit.
 - **`finance_redactor/application/`** — use cases over abstract **ports**.
   `ports.py` defines `Protocol`s (`PiiDetector`, `ExcelGateway`, `PdfDocument`,
   `PdfDocumentFactory`) — there is no `TextRedactor`; replacement is done in the
@@ -107,9 +114,12 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   `Assignment`). This layer imports no concrete framework.
 - **`finance_redactor/infrastructure/`** — concrete adapters implementing the
   ports. `detection/` (`PresidioEngine` for `PiiDetector` only — detection, no
-  anonymizer; `CustomNameRecognizer`; `recasing.py`; `pdf_text_normalizer.py`),
-  `documents/` (`OpenpyxlExcelGateway`, `PyMuPdfDocument`), `names/`
-  (`MasterListRepository` + `data/Names List - Organized.xlsx`). Presidio's
+  anonymizer; `CustomNameRecognizer`, which compiles one alias-aware regex per
+  master-list name via `domain.aliases.name_pattern` — `\b{pattern}(?!\w)`, the
+  non-word lookahead allows an optional trailing period to pass; `recasing.py`;
+  `pdf_text_normalizer.py`), `documents/` (`OpenpyxlExcelGateway`,
+  `PyMuPdfDocument`), `names/` (`MasterListRepository` +
+  `data/Names List - Organized.xlsx`). Presidio's
   `RecognizerResult` is translated to the domain `PiiDetection` **only** here.
   `PresidioEngine.analyze` runs spaCy on the raw text and — when ALL-CAPS tokens
   are present — a **second pass on a length-preserving recased copy**
@@ -124,7 +134,9 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   `excel_view.py`/`pdf_view.py` own widgets + session state and delegate to use
   cases; `presenters.py` turns results into UI artifacts (highlighted HTML, the
   findings + crosswalk tables); `crosswalk_view.py` renders the shared crosswalk
-  expander + guarded CSV download.
+  expander + guarded CSV download; `master_list_view.py` renders the shared
+  master-list summary line + data-quality warnings shown in both flows' Advanced
+  settings panel.
 - **`finance_redactor/config.py`** — the single source of truth: an immutable
   `Settings` dataclass (language, spaCy model, entities, `categories`
   (category → (prefix, entity_type)), `category_sheets`, `auto_prefixes`,
@@ -143,10 +155,21 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   detected but pseudonymizes to a flagged auto-id. Trailing legacy ID suffixes in
   `Staff` names (e.g. `Jane Doe - 22463`) are stripped and the `Internal ID` column
   is always used as the curated ID. Edit the workbook and restart; counts by
-  category show in the Advanced settings panel. **Duplicate-name detection:** the
-  repository also reports any name that appears under more than one category, and
-  the Excel/PDF flows show a warning in Advanced settings because such duplicates
-  can create conflicting pseudonyms.
+  category show in the Advanced settings panel. **Alias/variant matching:** each
+  curated name also registers its variant surface forms (`aliases()`:
+  org-suffix equivalents, `&`/`and` swaps, period-tolerant) as extra lookup keys,
+  and the recognizer matches them via `name_pattern()`, so `Acme Limited` /
+  `Acme Ltd.` resolve to the same `VND-<id>` as a workbook `Acme Ltd` without
+  editing the list. The master map is built in two passes — canonical names first
+  (first row wins an exact-name collision), then aliases fill only still-empty
+  keys — so an alias can never clobber another row's canonical name. Middle
+  initials are intentionally not normalized (would merge distinct people).
+  **Data-quality guards:** `MasterListRepository.quality_report()` surfaces four
+  issue kinds in the Advanced settings panel — cross-category duplicate names,
+  conflicting Internal IDs (same name, one category, multiple IDs), blank
+  `Internal ID` rows (advisory — they get flagged auto-ids), and reused Internal
+  IDs (one id shared by different names). Benign exact-duplicate rows (same name
+  *and* same id) are not flagged.
 - **Master-list caching:** `MasterListRepository` caches parsed rows keyed by the
   workbook's file modification time, and `app.py` wraps the whole
   repo/recognizers/engine bundle in an `@st.cache_resource` factory keyed on that
@@ -155,8 +178,9 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   (instead of re-parsing and recompiling recognizer patterns on every widget
   interaction), so widget interactions stay fast while edits to the Excel file
   still take effect immediately on refresh (the new mtime busts the cache).
-- **Pseudonyms & crosswalk:** a name in the master list resolves to its curated ID;
-  an unknown name gets a deterministic, stable auto-id (`PSN-AUTO-<hash>` /
+- **Pseudonyms & crosswalk:** a name in the master list (or any of its alias
+  variants — org-suffix equivalents, `&`/`and`) resolves to its curated ID; an
+  unknown name gets a deterministic, stable auto-id (`PSN-AUTO-<hash>` /
   `ORG-AUTO-<hash>`, same input → same id across files) and is flagged for review.
   Each run's name→pseudonym crosswalk is shown and downloadable as CSV — it is the
   **re-identification key (Confidential)**; the UI warns against sharing it with the

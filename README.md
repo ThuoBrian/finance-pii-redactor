@@ -73,8 +73,38 @@ real names.
   open.
 - Refresh the browser page. The app reloads the master list automatically.
 
-If a name appears in more than one sheet, the app warns you in the **Advanced
-settings** panel. Keep each name in a single category to avoid conflicting IDs.
+### Matching is alias-aware
+
+You only need one row per entity. The app treats these as the same name, so a
+document written with any of these variants still resolves to the **same curated
+ID** (not a flagged auto-code):
+
+- Organization suffix equivalents: `Ltd` = `Limited`, `Inc` = `Incorporated`,
+  `Corp` = `Corporation`, `Co` = `Company` (each with or without a trailing
+  period). `LLC` and `PLC` match with or without a period.
+- `&` and `and` swapped between words: `Smith & Co` = `Smith and Co`.
+
+So list `Acme Ltd` once and `Acme Limited` in a document will still get `Acme
+Ltd`'s ID. Spelling, word order, and middle initials are **not** matched — keep
+those consistent, or add a row for each distinct surface form.
+
+### Data-quality warnings
+
+When the master list loads, the app checks it and shows any problems in the
+**Advanced settings** panel:
+
+- **Cross-category duplicate** (warning): a name appears under more than one
+  category (e.g. both `Staff` and `Vendor`) — this can produce conflicting IDs.
+  Keep each name in a single category.
+- **Conflicting IDs** (warning): the same name in the same category has two
+  different `Internal ID`s. Merge the rows or pick one ID.
+- **Reused Internal ID** (warning): one `Internal ID` is used by two different
+  names within a category. Give each name its own ID.
+- **Blank Internal ID** (info, not an error): a name has no `Internal ID`, so it
+  is detected but gets a flagged auto-code. This is supported — fill in the ID
+  when you want a curated code.
+
+Exact duplicate rows (same name and same ID) are benign and are not flagged.
 
 ## Handling sensitive data
 

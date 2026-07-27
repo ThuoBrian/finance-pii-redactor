@@ -56,13 +56,18 @@ This file records known errors, edge cases, and their solutions when developing 
 
 ### A name gets a flagged `*-AUTO-*` code instead of my curated ID
 - **Symptom:** A name shows up in the crosswalk as e.g. `PSN-AUTO-3F9A1` with **Flagged = yes**, not the `STF-12345` you expected.
-- **Cause:** The name was detected but is **not in the master list with a curated `Internal ID`** — either it is missing, the `Internal ID` column is blank, or the spelling/spacing in the master list does not match the document text. Matching is case-insensitive and whitespace-normalized, but otherwise exact.
+- **Cause:** The name was detected but is **not in the master list with a curated `Internal ID`** — either it is missing, the `Internal ID` column is blank, or the spelling/spacing in the master list does not match the document text. Matching is case-insensitive and whitespace-normalized, and **alias-aware**: organization suffix equivalents (`Ltd`=`Limited`, `Inc`=`Incorporated`, `Corp`=`Corporation`, `Co`=`Company`; `LLC`/`PLC` period-tolerant) and `&`↔`and` swaps are matched automatically, so `Acme Ltd` in the list covers `Acme Limited` in a document. Spelling, word order, and middle initials are **not** matched.
 - **Solution:** Add the name to `data/Names List - Organized.xlsx` with the correct sheet/category and a non-blank `Internal ID`, using the exact text as it appears in the data, then refresh the app in the browser. Edits to the master list take effect on the next Streamlit rerun (the Excel workbook is reloaded each time; only the heavy spaCy model is cached). Auto-codes are deterministic (the same unknown name always yields the same code, even across files), so existing outputs stay consistent until you re-run.
 
 ### Long multi-word names are not matched
 - **Symptom:** A phrase like `Kenya Commercial Bank` is not detected even though it is in the master list.
-- **Cause:** The recognizer uses whole-phrase word-boundary matching (`\b...\b`). If the cell contains `KCB Bank` but the master list `name` is `Kenya Commercial Bank`, it will not match.
+- **Cause:** The recognizer uses whole-phrase word-boundary matching (`\b...\b`). It matches organization-suffix equivalents (`Ltd`/`Limited`, `Inc`/`Incorporated`, `Corp`/`Corporation`, `Co`/`Company`) and `&`/`and` swaps automatically, but it does **not** match acronyms or reworded forms. If the cell contains `KCB Bank` but the master list `name` is `Kenya Commercial Bank`, it will not match.
 - **Solution:** Add the exact phrases that appear in your data (one row each), or add shorter canonical forms.
+
+### The Advanced settings panel shows master-list data-quality warnings
+- **Symptom:** Yellow or blue boxes appear under **Advanced settings** with titles like "Cross-category duplicate", "Conflicting IDs", "Reused Internal ID", or "Blank Internal ID".
+- **Cause:** On load, `MasterListRepository.quality_report()` scans the workbook and surfaces four issue kinds: a name under more than one category (warning), the same name in one category with two different `Internal ID`s (warning), one `Internal ID` shared by two different names in a category (warning), and a name with a blank `Internal ID` (info — supported, gets a flagged auto-code). Exact duplicate rows (same name and same ID) are benign and are **not** flagged.
+- **Solution:** Fix the offending rows in `data/Names List - Organized.xlsx` (merge duplicates, give each name a unique ID, fill in blank IDs), save and close the workbook, and refresh the page. The warnings clear once the workbook is clean. These are advisories — the app still runs with a dirty list, but the IDs it emits may be ambiguous, so fixing them keeps pseudonyms trustworthy.
 
 ### A legacy name in the old `person.txt` had an ID appended (`Name - 90863`)
 - **Symptom:** After migrating, a name that previously "never matched" now does.
