@@ -56,3 +56,9 @@ formatter('s)?
 anonymizer
 [Ss]ubsidiary
 tuple
+[Rr]egex(es)?
+[Ll]owercas(e|es|ed|ing)?
+recognizer('s)?
+pyahocorasick
+Aho-Corasick
+automaton
