@@ -8,6 +8,8 @@ The HTML/markup is byte-for-byte identical to the original.
 
 from __future__ import annotations
 
+import html
+
 import pandas as pd
 
 from finance_redactor.application.results import ExcelScanResult
@@ -33,13 +35,19 @@ _CROSSWALK_COLUMNS = [
 
 
 def highlighted_html(df: pd.DataFrame, cell_keys: set[tuple[int, str]], bg: str) -> str:
-    """Render ``df`` as an HTML table, shading the given cells with ``bg``."""
+    """Render ``df`` as an HTML table, shading the given cells with ``bg``.
+
+    Cell and header text is HTML-escaped: the values come from user-uploaded
+    files (often authored by a third party, e.g. a vendor's spreadsheet), so an
+    unescaped cell containing markup would otherwise render/execute in the
+    browser via the ``unsafe_allow_html=True`` call at the render site.
+    """
     highlighted = {(r, c) for r, c in cell_keys if c in df.columns and r in df.index}
     rows_html = []
     for row_idx, row in df.iterrows():
         cells = []
         for col in df.columns:
-            val = "" if pd.isna(row[col]) else str(row[col])
+            val = "" if pd.isna(row[col]) else html.escape(str(row[col]))
             style = (
                 f' style="background:{bg};padding:4px 8px"'
                 if (row_idx, col) in highlighted
@@ -48,7 +56,8 @@ def highlighted_html(df: pd.DataFrame, cell_keys: set[tuple[int, str]], bg: str)
             cells.append(f"<td{style}>{val}</td>")
         rows_html.append("<tr>" + "".join(cells) + "</tr>")
     headers = "".join(
-        f'<th style="padding:4px 8px;text-align:left;border-bottom:1px solid #ccc">{c}</th>'
+        f'<th style="padding:4px 8px;text-align:left;border-bottom:1px solid #ccc">'
+        f"{html.escape(str(c))}</th>"
         for c in df.columns
     )
     return (
