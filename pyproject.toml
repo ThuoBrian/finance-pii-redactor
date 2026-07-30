@@ -72,5 +72,5 @@ pythonpath = ["."]
 
 [tool.codespell]
 builtin = "clear,rare,informal,usage,code,names"
-ignore-words-list = "jupyter,ipa,spacy,ws,thead,GOTCHA,gotcha,master"
+ignore-words-list = "jupyter,ipa,spacy,ws,thead,GOTCHA,gotcha,master,slave"
 skip = "uv.lock,*.txt,*.csv"

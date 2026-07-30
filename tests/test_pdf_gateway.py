@@ -11,10 +11,10 @@ from finance_redactor.infrastructure.documents.pdf_gateway import (
 
 
 def _wrapped_name_pdf_bytes() -> bytes:
-    """Build a real one-page PDF where a name is split by a soft-hyphen line break.
+    r"""Build a real one-page PDF where a name is split by a soft-hyphen line break.
 
     Mirrors what PyMuPDF's ``get_text()`` extracts for a name that wraps across
-    two lines in an actual document: ``"Acme Sup-\\nplies ..."``.
+    two lines in an actual document: ``"Acme Sup-\nplies ..."``.
     """
     doc = fitz.open()
     page = doc.new_page()
