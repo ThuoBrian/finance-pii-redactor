@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-A Streamlit application that **pseudonymizes** names and organization names in Excel and PDF files locally — each detected name is replaced with a stable ID (e.g. `STF-91345`, `VND-1045`, `FND-7745`) rather than a generic `[PERSON]` label, so the same entity maps to the same ID everywhere and cross-row/cross-file patterns survive for error-checking and fraud monitoring. It uses Microsoft Presidio with a spaCy `en_core_web_lg` model for PII detection, openpyxl for Excel output, and PyMuPDF for PDF text replacement. This is distributed as an offline-capable desktop tool: users double-click `run.bat` (Windows) or `run.sh` (macOS/Linux) to start the local web server and open the browser.
+A Streamlit application that **pseudonymizes** names and organization names in Excel and PDF files locally — each detected name is replaced with a stable ID (e.g. `STF-91345`, `VND-1045`, `FND-7745`) rather than a generic `[PERSON]` label, so the same entity maps to the same ID everywhere and cross-row/cross-file patterns survive for error-checking and fraud monitoring. It uses Microsoft Presidio with a spaCy `en_core_web_lg` model for PII detection, a `pyahocorasick` automaton for fast master-list name matching, openpyxl for Excel output, and PyMuPDF for PDF text replacement. This is distributed as an offline-capable desktop tool: users double-click `run.bat` (Windows) or `run.sh` (macOS/Linux) to start the local web server and open the browser.
 
 IDs come from a maintained **master list** (`data/Names List - Organized.xlsx`, a top-level user-owned folder outside the package). Names not in the list are still pseudonymized with a stable, flagged auto-id and surfaced in a downloadable name→pseudonym **crosswalk** (the re-identification key — treat as Confidential).
 
@@ -94,17 +94,24 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
 - **`finance_redactor/domain/`** — framework-free core. `entities.py`
   (`PiiDetection`, `Span`, `Finding`, `DetectionSource` = `MODEL`/`MASTER_LIST`) is
   the one representation of a finding all layers speak. `rules.py` holds
-  `dedupe_overlapping` (leftmost/longest wins) and `classify_source` (score →
-  model/master list). `pseudonyms.py` holds the pseudonymization core:
+  `dedupe_overlapping` and `classify_source` (score → model/master list).
+  `dedupe_overlapping` breaks overlaps by source first (a `MASTER_LIST`
+  detection always wins over an overlapping `MODEL` detection, regardless of
+  which span is longer — a curated exact match is a stronger signal than a
+  statistical guess, e.g. spaCy fusing a trailing hyphenated phrase onto a
+  curated name, `"Brian Thuo - Kakamega"`, must not out-vote the exact
+  master-list match `"Brian Thuo"`), then leftmost/longest within the same
+  source. `pseudonyms.py` holds the pseudonymization core:
   `normalize`, the `Pseudonymizer` (master-list lookup + deterministic auto-id
   fallback, accumulating the crosswalk), and `apply_replacements` (dedupe + slice
   spans right-to-left). **This is the single seam where a name becomes an ID.**
   `aliases.py` derives variant surface forms of a name (org-suffix equivalents
-  `Ltd`↔`Limited`, `&`↔`and`): `aliases()` feeds extra lookup keys to the master
-  map and `name_pattern()` feeds one alias-aware regex to the recognizer, so a
-  document's `Acme Limited` resolves to the curated `VND-` id of a workbook
-  `Acme Ltd`. `quality.py` defines the `QualityIssue` DTO for master-list
-  data-quality findings. No imports of Presidio/pandas/Streamlit.
+  `Ltd`↔`Limited`, `&`↔`and`): `aliases()` feeds both the master map's extra
+  lookup keys and the literal keys inserted into the recognizer's Aho-Corasick
+  automaton (see `CustomNameRecognizer` below), so a document's `Acme Limited`
+  resolves to the curated `VND-` id of a workbook `Acme Ltd`. `quality.py`
+  defines the `QualityIssue` DTO for master-list data-quality findings. No
+  imports of Presidio/pandas/Streamlit.
 - **`finance_redactor/application/`** — use cases over abstract **ports**.
   `ports.py` defines `Protocol`s (`PiiDetector`, `ExcelGateway`, `PdfDocument`,
   `PdfDocumentFactory`) — there is no `TextRedactor`; replacement is done in the
@@ -114,9 +121,17 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   `Assignment`). This layer imports no concrete framework.
 - **`finance_redactor/infrastructure/`** — concrete adapters implementing the
   ports. `detection/` (`PresidioEngine` for `PiiDetector` only — detection, no
-  anonymizer; `CustomNameRecognizer`, which compiles one alias-aware regex per
-  master-list name via `domain.aliases.name_pattern` — `\b{pattern}(?!\w)`, the
-  non-word lookahead allows an optional trailing period to pass; `recasing.py`;
+  anonymizer; `CustomNameRecognizer`, which builds one `pyahocorasick`
+  Aho-Corasick automaton per entity type from every alias variant
+  (`domain.aliases.aliases`) of every master-list name, lowercased for
+  case-insensitive matching — a single pass over the text finds all loaded
+  names regardless of master-list size, replacing an earlier per-name regex
+  loop that cost O(number of names) per scan (~64ms/call against the real
+  ~26.5k-row list; ~0.28ms/call with the automaton). Since automaton keys are
+  literal strings, not regexes, whitespace flexibility (previously `\s+`) is
+  replicated by normalizing the text first (reusing `pdf_text_normalizer.py`
+  below — generic despite its name), and the old `\b...(?!\w)` boundary check
+  is replicated manually against raw match positions; `recasing.py`;
   `pdf_text_normalizer.py`), `documents/` (`OpenpyxlExcelGateway`,
   `PyMuPdfDocument`), `names/` (`MasterListRepository` +
   `data/Names List - Organized.xlsx`). Presidio's
@@ -158,9 +173,10 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   category show in the Advanced settings panel. **Alias/variant matching:** each
   curated name also registers its variant surface forms (`aliases()`:
   org-suffix equivalents, `&`/`and` swaps, period-tolerant) as extra lookup keys,
-  and the recognizer matches them via `name_pattern()`, so `Acme Limited` /
-  `Acme Ltd.` resolve to the same `VND-<id>` as a workbook `Acme Ltd` without
-  editing the list. The master map is built in two passes — canonical names first
+  and the recognizer inserts the same variants as literal keys into its
+  Aho-Corasick automaton, so `Acme Limited` / `Acme Ltd.` resolve to the same
+  `VND-<id>` as a workbook `Acme Ltd` without editing the list. The master map
+  is built in two passes — canonical names first
   (first row wins an exact-name collision), then aliases fill only still-empty
   keys — so an alias can never clobber another row's canonical name. Middle
   initials are intentionally not normalized (would merge distinct people).
@@ -209,9 +225,10 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
 
 - `pyproject.toml` defines dependencies, dev dependency group (`ruff`, `pytest`, `codespell`, `pre-commit`), and ruff rules. Key lint selections: `F`, `E`, `W`, `I`, `D`, `UP`, `SIM`. The `ignore` list is broader than just docstrings — besides `D100`/`D104`/`D105` (module/package/magic-method docstrings), it also disables the pydocstyle rules that conflict with the formatter (`D203`, `D205`, `D213`, `D206`, `D300`), several pycodestyle indentation rules, `E501` (length is the formatter's job), `SIM110`, and `TRY003`. Check the actual `ignore` array before assuming a rule is active.
 - `line-length = 88` and `target-version = "py312"`. `requires-python = ">=3.12,<3.14"`.
-- `codespell` is configured to skip `uv.lock`, all `.txt`, and all `.csv` files (the master list contains many names that look like typos), and to ignore the word `master`.
+- `codespell` is configured to skip `uv.lock`, all `.txt`, and all `.csv` files (the master list contains many names that look like typos), and to ignore a short list of words (`ignore-words-list` in `pyproject.toml`) — domain jargon like `master`, and `slave` (flagged only because `CLAUDE.md`'s own prose *about* the disabled `alex.Race` rule mentions the word it's disabling).
 - `pytest` is configured with `pythonpath = ["."]` so tests can import from the repo root. Tests live under `tests/` and cover the pure logic (`pseudonyms`, `master_list_repository`); `tests/**` is exempt from `D103` via `per-file-ignores`.
-- `pre-commit` is listed as a dev dependency but there is **no `.pre-commit-config.yaml`**, so no hooks actually run. This repo has no CI configuration.
+- `pre-commit` is listed as a dev dependency but there is **no `.pre-commit-config.yaml`**, so no hooks actually run locally.
+- **CI:** `.github/workflows/ci.yml` runs on every push to `main` and on pull requests — `uv sync --locked`, then `ruff check`, `ruff format --check`, `pytest`, and `codespell`. Since distribution installs straight from `main` (`install.ps1`/`install.sh`), this is what stops a broken `main` from breaking the tool for every user on their next install/update.
 
 ## Distribution notes
 

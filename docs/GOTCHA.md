@@ -61,8 +61,14 @@ This file records known errors, edge cases, and their solutions when developing 
 
 ### Long multi-word names are not matched
 - **Symptom:** A phrase like `Kenya Commercial Bank` is not detected even though it is in the master list.
-- **Cause:** The recognizer uses whole-phrase word-boundary matching (`\b...\b`). It matches organization-suffix equivalents (`Ltd`/`Limited`, `Inc`/`Incorporated`, `Corp`/`Corporation`, `Co`/`Company`) and `&`/`and` swaps automatically, but it does **not** match acronyms or reworded forms. If the cell contains `KCB Bank` but the master list `name` is `Kenya Commercial Bank`, it will not match.
+- **Cause:** The recognizer matches whole phrases only (a boundary check requires a non-word character, or start/end of text, on either side of a match). It matches organization-suffix equivalents (`Ltd`/`Limited`, `Inc`/`Incorporated`, `Corp`/`Corporation`, `Co`/`Company`) and `&`/`and` swaps automatically, but it does **not** match acronyms or reworded forms. If the cell contains `KCB Bank` but the master list `name` is `Kenya Commercial Bank`, it will not match.
 - **Solution:** Add the exact phrases that appear in your data (one row each), or add shorter canonical forms.
+
+### A name followed by a bare hyphen resolves to a flagged auto-id
+- **Symptom (fixed):** A memo like `Field advance to Brian Thuo - Kakamega project supervision` redacted to `Field advance to PSN-AUTO-0BA3D project supervision` instead of the curated `STF-<id>` — and the trailing location (`Kakamega`) disappeared from the output along with the name.
+- **Cause:** spaCy's NER model sometimes tags a hyphen-joined trailing phrase as part of the same PERSON entity (`"Brian Thuo - Kakamega"` as one span), which overlaps and outspans the exact master-list match on the name alone (`"Brian Thuo"`). The old dedupe rule was pure leftmost/longest with no regard for detection source, so the longer model guess won even though the shorter span was an exact curated match — and the longer string doesn't exist in the master list, so it fell through to a flagged auto-id.
+- **Solution:** `dedupe_overlapping` (`finance_redactor/domain/rules.py`) now breaks overlaps by source first: a master-list-sourced detection always wins over an overlapping model-sourced one, regardless of which span is longer. Same-source overlaps still use leftmost/longest as before.
+- **Workaround if you hit a similar case elsewhere:** rephrase without a bare hyphen (e.g. `Brian Thuo (Kakamega)`, `Brian Thuo, Kakamega`, or an em dash) to stop the model fusing the two into one entity — though this should no longer be necessary for names that are in the master list.
 
 ### The Advanced settings panel shows master-list data-quality warnings
 - **Symptom:** Yellow or blue boxes appear under **Advanced settings** with titles like "Cross-category duplicate", "Conflicting IDs", "Reused Internal ID", or "Blank Internal ID".
@@ -90,7 +96,7 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Cause 1:** The PDF page is a scanned image and contains no selectable text layer.
 - **Solution 1:** The tool only processes selectable PDF text. Scanned PDFs require OCR first.
 - **Cause 2:** The same span was detected by both the spaCy model and the master list, or a name appears under two categories.
-- **Solution 2:** The code deduplicates overlapping spans (leftmost/longest wins), but a name listed under two categories (e.g. Vendor *and* Funder) can still conflict. Keep each name in a single category.
+- **Solution 2:** The code deduplicates overlapping spans (master-list source wins over an overlapping model source regardless of length; leftmost/longest breaks ties within the same source — see the entry above on a name followed by a bare hyphen), but a name listed under two categories (e.g. Vendor *and* Funder) can still conflict. Keep each name in a single category.
 - **Cause 3:** PyMuPDF extracts text with artifacts that break exact matching — typographic ligatures (`ﬁ` instead of `fi`), line-break hyphenation (`Acme Sup-\nplies`), and irregular whitespace. The master-list recognizer and spaCy see a different string than the one in the master list.
 - **Solution 3:** The PDF flow now normalizes extracted text before detection: ligatures are expanded, soft line-break hyphens are removed, and whitespace is collapsed. Detection spans are mapped back to the original extracted text, and `page.search_for()` tries a small set of fallback variants (whitespace-collapsed, punctuation-stripped, `&`/`and` swapped, common suffix stripped) when the exact text is not found. The occurrence is still reported in the detection details and crosswalk even if it cannot be written.
 

@@ -1,5 +1,7 @@
 # Finance PII Redactor
 
+[![CI](https://github.com/ThuoBrian/finance-pii-redactor/actions/workflows/ci.yml/badge.svg)](https://github.com/ThuoBrian/finance-pii-redactor/actions/workflows/ci.yml)
+
 A desktop tool that replaces people's names and organization names in Excel and
 PDF files with stable ID codes (e.g. `STF-91345`). The same name always gets the
 same code, so you can still spot patterns in the data for error-checking and
