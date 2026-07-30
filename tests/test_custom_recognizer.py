@@ -6,6 +6,8 @@ no spaCy model) to confirm variant surface forms are detected and non-variants a
 
 from __future__ import annotations
 
+import time
+
 from finance_redactor.infrastructure.detection.custom_recognizer import (
     CustomNameRecognizer,
 )
@@ -67,3 +69,34 @@ def test_score_is_the_injected_value():
     rec = _org(["Acme Ltd"])
     hits = rec.analyze("Acme Ltd", ["ORGANIZATION"], None)
     assert hits[0].score == 0.9
+
+
+def test_matches_across_irregular_whitespace():
+    r"""The automaton matches literal keys, so irregular spacing in the haystack
+    text must be collapsed before matching (mirrors the old regex's ``\\s+``
+    flexibility between name tokens).
+    """
+    rec = _org(["Acme Ltd"])
+    hits = rec.analyze("Paid   Acme    Ltd   today", ["ORGANIZATION"], None)
+    assert len(hits) == 1
+
+
+def test_scales_with_text_length_not_dictionary_size():
+    """Guard against regressing to the old per-name regex loop.
+
+    That approach cost one regex scan per loaded name, so analyzing one text
+    against the real ~26.5k-row master list took ~64ms. The Aho-Corasick
+    automaton scans the text once regardless of dictionary size. Uses a
+    synthetic 20k-name list (the real master list is gitignored, so CI has no
+    access to it) and asserts comfortably below the old per-call cost.
+    """
+    names = [f"Synthetic Vendor {i} Ltd" for i in range(20_000)]
+    rec = _org(names)
+    text = "Paid Synthetic Vendor 12345 Ltd for services rendered on invoice 1029."
+    assert rec.analyze(text, ["ORGANIZATION"], None)
+
+    start = time.perf_counter()
+    for _ in range(20):
+        rec.analyze(text, ["ORGANIZATION"], None)
+    elapsed_per_call = (time.perf_counter() - start) / 20
+    assert elapsed_per_call < 0.02
