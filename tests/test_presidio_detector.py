@@ -67,12 +67,18 @@ def test_higher_score_wins_for_exact_span(engine: PresidioEngine) -> None:
 def test_overlapping_spans_use_leftmost_longest_not_score(
     engine: PresidioEngine,
 ) -> None:
-    """After exact-span dedupe, overlapping spans follow the domain rule."""
+    """Among same-source overlaps, longest wins regardless of raw score.
+
+    Both scores here are deliberately *not* ``DEFAULT_SETTINGS.custom_match_score``
+    (0.9), so both spans classify as model-sourced and this isolates the
+    same-source leftmost/longest tie-break from the master-list priority rule
+    covered separately below.
+    """
     engine._analyzer.analyze.return_value = [
         # Longer, lower-score span.
         _result(start=0, end=10, score=0.40),
         # Shorter, higher-score span fully inside the first.
-        _result(start=0, end=5, score=0.90),
+        _result(start=0, end=5, score=0.44),
     ]
 
     detections = engine.analyze("Mary Smith", ["PERSON"], 0.35)
@@ -81,6 +87,33 @@ def test_overlapping_spans_use_leftmost_longest_not_score(
     assert detections[0].span.start == 0
     assert detections[0].span.end == 10
     assert detections[0].score == 0.40
+
+
+def test_master_list_span_wins_over_longer_overlapping_model_span(
+    engine: PresidioEngine,
+) -> None:
+    """A curated master-list match must not lose to a longer, overlapping model guess.
+
+    Regression test for spaCy fusing a trailing hyphenated phrase onto a
+    curated name (e.g. tagging "Brian Thuo - Kakamega" as one PERSON entity,
+    which overlaps and outspans the master-list match "Brian Thuo"). Without
+    master-list priority in the dedupe rule, the longer model span would win
+    on length alone and the name would resolve to a flagged auto-id instead of
+    its curated one.
+    """
+    engine._analyzer.analyze.return_value = [
+        # Longer span at a plausible model score, overlapping...
+        _result(start=0, end=21, score=0.85),
+        # ...the exact master-list match at the custom match score.
+        _result(start=0, end=10, score=DEFAULT_SETTINGS.custom_match_score),
+    ]
+
+    detections = engine.analyze("Brian Thuo - Kakamega", ["PERSON"], 0.35)
+
+    assert len(detections) == 1
+    assert detections[0].span.start == 0
+    assert detections[0].span.end == 10
+    assert detections[0].source == DetectionSource.MASTER_LIST
 
 
 def test_master_list_score_is_classified_as_master_list(engine: PresidioEngine) -> None:

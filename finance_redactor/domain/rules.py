@@ -27,14 +27,27 @@ def classify_source(score: float, custom_match_score: float) -> DetectionSource:
 
 
 def dedupe_overlapping(detections: Iterable[PiiDetection]) -> list[PiiDetection]:
-    """Remove overlapping detections, leftmost-then-longest winning.
+    """Remove overlapping detections.
 
-    Detections are ordered by start position ascending and, for ties, by end
-    position descending (longest first). Scanning left to right, a detection is
-    kept only if it does not overlap any already-kept span. This is the exact
+    A master-list-sourced detection (an exact match against the curated
+    vocabulary) always wins over an overlapping model-sourced detection,
+    regardless of span length: a curated match is a stronger signal than a
+    statistical guess. Without this, a longer spaCy guess that merely happens
+    to contain a curated name (e.g. the model tagging ``"Brian Thuo -
+    Kakamega"`` as one entity, which contains and outspans the master-list
+    match ``"Brian Thuo"``) would win on length alone, and the name would
+    resolve to a flagged auto-id instead of its curated one. Within the same
+    source, leftmost wins; ties break to the longest span. This is the exact
     algorithm the PDF flow used inline, now isolated and reusable.
     """
-    ordered = sorted(detections, key=lambda d: (d.span.start, -d.span.end))
+    ordered = sorted(
+        detections,
+        key=lambda d: (
+            d.source != DetectionSource.MASTER_LIST,
+            d.span.start,
+            -d.span.end,
+        ),
+    )
     kept: list[PiiDetection] = []
     used: list[Span] = []
     for detection in ordered:

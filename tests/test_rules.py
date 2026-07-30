@@ -15,6 +15,7 @@ def _detection(
     end: int,
     entity_type: str = "PERSON",
     score: float = 0.5,
+    source: DetectionSource = DetectionSource.MODEL,
 ) -> PiiDetection:
     """Build a minimal PiiDetection for rule tests."""
     return PiiDetection(
@@ -22,7 +23,7 @@ def _detection(
         span=Span(start, end),
         score=score,
         text="",
-        source=DetectionSource.MODEL,
+        source=source,
     )
 
 
@@ -72,3 +73,33 @@ def test_dedupe_tie_on_start_prefers_longest_span() -> None:
     kept = dedupe_overlapping(detections)
     assert len(kept) == 1
     assert kept[0].span == Span(0, 10)
+
+
+def test_dedupe_master_list_wins_over_longer_overlapping_model_span() -> None:
+    """A curated master-list match must not lose to a longer model guess.
+
+    Regression test for the "Brian Thuo - Kakamega" case: the model tags the
+    whole hyphenated phrase as one PERSON entity, which overlaps and outspans
+    the exact master-list match on the name alone. The curated match must win
+    so the name still resolves to its stable ID instead of a flagged auto-id.
+    """
+    master_list_hit = _detection(0, 10, score=0.9, source=DetectionSource.MASTER_LIST)
+    longer_model_hit = _detection(0, 25, score=0.85, source=DetectionSource.MODEL)
+    kept = dedupe_overlapping([longer_model_hit, master_list_hit])
+    assert kept == [master_list_hit]
+
+
+def test_dedupe_master_list_wins_even_when_it_starts_later() -> None:
+    """Master-list priority applies regardless of which span starts first."""
+    model_hit = _detection(0, 15, score=0.6, source=DetectionSource.MODEL)
+    master_list_hit = _detection(5, 15, score=0.9, source=DetectionSource.MASTER_LIST)
+    kept = dedupe_overlapping([model_hit, master_list_hit])
+    assert kept == [master_list_hit]
+
+
+def test_dedupe_non_overlapping_master_list_and_model_both_kept() -> None:
+    """Master-list priority only affects overlapping detections."""
+    master_list_hit = _detection(0, 10, score=0.9, source=DetectionSource.MASTER_LIST)
+    model_hit = _detection(20, 30, score=0.6, source=DetectionSource.MODEL)
+    kept = dedupe_overlapping([model_hit, master_list_hit])
+    assert set(kept) == {master_list_hit, model_hit}
