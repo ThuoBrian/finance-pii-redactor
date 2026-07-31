@@ -3,10 +3,32 @@
 [![CI](https://github.com/ThuoBrian/finance-pii-redactor/actions/workflows/ci.yml/badge.svg)](https://github.com/ThuoBrian/finance-pii-redactor/actions/workflows/ci.yml)
 
 A desktop tool that replaces people's names and organization names in Excel and
-PDF files with stable ID codes (e.g. `STF-91345`). The same name always gets the
-same code, so patterns in the data still show up for error-checking and fraud
-monitoring — without exposing real identities. Everything runs on your own
-computer; no data is uploaded anywhere.
+PDF files with stable ID codes (e.g. `STF-91345`). The same identity always
+gets the same code, so patterns in the data still show up for error-checking
+and fraud monitoring — without exposing real identities. Everything runs on
+your own computer; no data is uploaded anywhere.
+
+## Example
+
+|In your file|After redaction|
+|-|-|
+|Paid to **Jane Doe**|Paid to **STF-91345**|
+|Vendor: **Acme Ltd**|Vendor: **VND-1045**|
+|Funder: **Global Aid Partners**|Funder: **FND-7745**|
+
+Every occurrence of the same name gets the same code — in this file and every
+future file — so a repeat pattern (e.g. one vendor showing up across many
+payments) stays visible in the data without ever showing the name.
+
+## What it does
+
+- Redacts people, organizations, and email addresses in Excel and PDF files.
+- Same identity → same code, every time, across every file you process.
+- Codes come from a master list you control (see
+  **[data/README.md](data/README.md)**), so IDs stay stable over time.
+- Names not on the list still get a consistent, flagged auto-code — nothing
+  slips through un-redacted.
+- Runs entirely offline on your own computer after first-time setup.
 
 ## Quick start
 
