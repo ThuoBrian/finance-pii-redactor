@@ -12,12 +12,9 @@ This file records known errors, edge cases, and their solutions when developing 
   - Windows: close and reopen the terminal, or run `run.bat` again so it refreshes PATH.
 
 ### `en_core_web_lg` spaCy model fails to download
-- **Symptom:** Error during first-run model download.
-- **Cause:** No internet connection or firewall blocking `https://github.com/explosion/spacy-models`.
-- **Solution:** Run manually with a working connection:
-  ```bash
-  uv run python -m spacy download en_core_web_lg
-  ```
+- **Symptom:** `uv sync` fails while installing `en_core_web_lg`, or hangs during first-run setup.
+- **Cause:** No internet connection or firewall blocking `https://github.com/explosion/spacy-models`. The model is a normal pinned dependency (a wheel URL in `pyproject.toml`) installed by `uv sync` — there is no separate `spacy download` step to fall back to.
+- **Solution:** Get a working connection to `https://github.com/explosion/spacy-models` (check firewall/proxy rules), then re-run `uv sync --python 3.12`. Running `python -m spacy download en_core_web_lg` instead does **not** fix a `uv sync` failure — it installs the model outside `uv`'s dependency resolution, out of sync with the pinned version in `pyproject.toml`.
 
 ### `run.bat` crashes with `'────' is not recognized` or `do was unexpected at this time`
 - **Symptom:** Double-clicking `run.bat` prints errors like `'────────────' is not recognized as an internal or external command` and/or `do was unexpected at this time`, instead of showing the banner.
@@ -48,8 +45,8 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Cause:** Presidio changed the constructor signature between releases.
 - **Solution:** Use `inspect.signature(AnalysisExplanation.__init__)` to verify the current signature, or pin `presidio-analyzer` to the version declared in `pyproject.toml`. The current custom recognizer uses `recognizer`, `original_score`, `pattern_name`, `pattern`, and `textual_explanation`.
 
-### `app.py` cannot import from `redactor`
-- **Symptom:** `ModuleNotFoundError: No module named 'redactor'`.
+### `app.py` cannot import from `finance_redactor`
+- **Symptom:** `ModuleNotFoundError: No module named 'finance_redactor'`.
 - **Cause:** Running `python app.py` directly instead of via `streamlit run app.py`, or not running from the project root.
 - **Solution:** Always run from the repository root with `uv run streamlit run app.py`. If you need a standalone script, adjust `PYTHONPATH` first.
 
