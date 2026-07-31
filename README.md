@@ -59,11 +59,6 @@ The **crosswalk** (name-to-code mapping) the tool can export is the key that
 re-identifies people, so it is itself **Confidential**: store it securely and
 never send it alongside the pseudonymized file.
 
-## Limitations
-
-- Only processes selectable PDF text — scanned/image PDFs need OCR first.
-- Name detection is English-only; add non-English names to the master list.
-
 ## For developers
 
 This README covers day-to-day use. For the architecture, file structure, and
