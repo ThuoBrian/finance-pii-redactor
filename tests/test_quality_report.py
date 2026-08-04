@@ -131,6 +131,30 @@ def test_exact_duplicate_row_not_flagged(tmp_path):
     assert "duplicate_ids" not in _kinds(issues)
 
 
+def test_ambiguous_common_word_name_is_advisory_info(tmp_path):
+    repo = _repo(
+        tmp_path / "ambiguous.xlsx",
+        {"Funders": _sheet("Funder", [(200, "Across"), (201, "Gates Foundation")])},
+    )
+    issues = {i.kind: i for i in repo.quality_report()}
+    assert "ambiguous_common_word" in issues
+    issue = issues["ambiguous_common_word"]
+    assert issue.severity == SEVERITY_INFO
+    assert issue.total == 1
+    assert any("Across" in ex for ex in issue.examples)
+    assert not any("Gates Foundation" in ex for ex in issue.examples)
+
+
+def test_multi_word_name_is_not_flagged_as_ambiguous(tmp_path):
+    # "the" is a common word, but a multi-token name is never flagged.
+    repo = _repo(
+        tmp_path / "multiword.xlsx",
+        {"Vendors": _sheet("Vendor", [(100, "The Company")])},
+    )
+    issues = repo.quality_report()
+    assert "ambiguous_common_word" not in _kinds(issues)
+
+
 def test_example_cap_and_remaining_count(tmp_path):
     # Six cross-category duplicates -> 5 examples + "... and 1 more".
     sheets = {}

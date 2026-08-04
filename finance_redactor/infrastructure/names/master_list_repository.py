@@ -28,6 +28,7 @@ from pathlib import Path
 import pandas as pd
 
 from finance_redactor.domain.aliases import aliases
+from finance_redactor.domain.common_words import COMMON_ENGLISH_WORDS
 from finance_redactor.domain.pseudonyms import MasterEntry, normalize
 from finance_redactor.domain.quality import (
     SEVERITY_INFO,
@@ -165,6 +166,11 @@ class MasterListRepository:
           to a flagged auto-id (advisory, not an error: this is supported behavior).
         - **duplicate IDs** — one Internal ID reused by different names within a
           category, so distinct names share one pseudonym.
+        - **ambiguous common-word names** (advisory) — a single-token name that is
+          also an ordinary English word (e.g. a funder literally named ``Across``)
+          matches every plain-English occurrence of that word, not just the
+          entity. Not an error in the data — the name may be genuinely correct —
+          but worth a human look.
         """
         rows = self.rows()
         issues: list[QualityIssue] = []
@@ -273,6 +279,38 @@ class MasterListRepository:
                     detail=(
                         "Different names will share one pseudonym. Give each name a "
                         "unique Internal ID."
+                    ),
+                    examples=examples,
+                    total=total,
+                )
+            )
+
+        # (e) Single-token name that is also an ordinary English word (advisory).
+        ambiguous: dict[str, list[str]] = {}
+        for row in rows:
+            if " " in row.name.strip():
+                continue
+            if row.name.strip().lower() in COMMON_ENGLISH_WORDS:
+                ambiguous.setdefault(row.category, []).append(row.name)
+        ambiguous_total = sum(len(v) for v in ambiguous.values())
+        if ambiguous_total:
+            items = [
+                f"`{name}` ({cat})"
+                for cat, names in ambiguous.items()
+                for name in names
+            ]
+            examples, total = cap_examples(items, limit)
+            issues.append(
+                QualityIssue(
+                    kind="ambiguous_common_word",
+                    severity=SEVERITY_INFO,
+                    title=(
+                        f"{ambiguous_total} name(s) are also ordinary English words"
+                    ),
+                    detail=(
+                        "Every plain-English occurrence of the word will be "
+                        "detected, not just the entity. Confirm this is intended "
+                        "or make the name more distinctive."
                     ),
                     examples=examples,
                     total=total,
