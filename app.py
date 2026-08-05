@@ -103,7 +103,10 @@ def _main() -> None:
         run_excel_flow(
             uploaded,
             excel_service=RedactExcelService(
-                engine, master_map, settings.auto_prefixes
+                engine,
+                master_map,
+                settings.auto_prefixes,
+                settings.fuzzy_match_threshold,
             ),
             excel_gateway=OpenpyxlExcelGateway(),
             settings=settings,
@@ -114,7 +117,11 @@ def _main() -> None:
         run_pdf_flow(
             uploaded,
             pdf_service=RedactPdfService(
-                engine, PyMuPdfDocument.open, master_map, settings.auto_prefixes
+                engine,
+                PyMuPdfDocument.open,
+                master_map,
+                settings.auto_prefixes,
+                settings.fuzzy_match_threshold,
             ),
             settings=settings,
             name_counts=name_counts,

@@ -105,13 +105,22 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   `normalize`, the `Pseudonymizer` (master-list lookup + deterministic auto-id
   fallback, accumulating the crosswalk), and `apply_replacements` (dedupe + slice
   spans right-to-left). **This is the single seam where a name becomes an ID.**
-  `aliases.py` derives variant surface forms of a name (org-suffix equivalents
-  `Ltd`↔`Limited`, `&`↔`and`): `aliases()` feeds both the master map's extra
-  lookup keys and the literal keys inserted into the recognizer's Aho-Corasick
-  automaton (see `CustomNameRecognizer` below), so a document's `Acme Limited`
-  resolves to the curated `VND-` id of a workbook `Acme Ltd`. `quality.py`
-  defines the `QualityIssue` DTO for master-list data-quality findings. No
-  imports of Presidio/pandas/Streamlit.
+  On an auto-id (no exact/alias match), the `Pseudonymizer` also asks
+  `fuzzy.py`'s `closest_match` for the nearest curated name of the same entity
+  type and, if one clears `Settings.fuzzy_match_threshold`, records it on the
+  `Assignment` (`suggested_pseudonym`/`suggested_name`/`suggested_score`) as a
+  reviewer hint only — it never changes which pseudonym gets assigned. `fuzzy.py`
+  is deliberately conservative for the same reason `aliases.py` skips middle
+  initials: two distinct real names can be one edit apart (`Kevin Otieno` vs.
+  `Kelvin Otieno`), so auto-merging on similarity risks silently attaching one
+  person's history to another's ID — worse than leaving a flagged auto-id for a
+  human to resolve. `aliases.py` derives variant surface forms of a name
+  (org-suffix equivalents `Ltd`↔`Limited`, `&`↔`and`): `aliases()` feeds both the
+  master map's extra lookup keys and the literal keys inserted into the
+  recognizer's Aho-Corasick automaton (see `CustomNameRecognizer` below), so a
+  document's `Acme Limited` resolves to the curated `VND-` id of a workbook
+  `Acme Ltd`. `quality.py` defines the `QualityIssue` DTO for master-list
+  data-quality findings. No imports of Presidio/pandas/Streamlit.
 - **`finance_redactor/application/`** — use cases over abstract **ports**.
   `ports.py` defines `Protocol`s (`PiiDetector`, `ExcelGateway`, `PdfDocument`,
   `PdfDocumentFactory`) — there is no `TextRedactor`; replacement is done in the
@@ -155,8 +164,9 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
 - **`finance_redactor/config.py`** — the single source of truth: an immutable
   `Settings` dataclass (language, spaCy model, entities, `categories`
   (category → (prefix, entity_type)), `category_sheets`, `auto_prefixes`,
-  `custom_match_score`, default threshold, `master_list_file`). Replaces scattered
-  module-level constants and the duplicated `0.9` magic number.
+  `custom_match_score`, default threshold, `fuzzy_match_threshold`,
+  `master_list_file`). Replaces scattered module-level constants and the
+  duplicated `0.9` magic number.
 - **Master list:** `data/Names List - Organized.xlsx` — a **top-level, user-owned folder**
   outside the package (resolved by `Settings.names_dir` from `config.py`), kept
   separate from the code (and out of git). The
@@ -198,9 +208,12 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   variants — org-suffix equivalents, `&`/`and`) resolves to its curated ID; an
   unknown name gets a deterministic, stable auto-id (`PSN-AUTO-<hash>` /
   `ORG-AUTO-<hash>`, same input → same id across files) and is flagged for review.
-  Each run's name→pseudonym crosswalk is shown and downloadable as CSV — it is the
-  **re-identification key (Confidential)**; the UI warns against sharing it with the
-  pseudonymized file.
+  For a flagged auto-id, the crosswalk's **Possible match** column (see
+  `fuzzy.py` above) shows the nearest curated name when one is close enough to
+  suggest a typo (e.g. document text `Micheal Mugo` against a workbook
+  `Michael Mugo`) — advisory only, never auto-applied. Each run's name→pseudonym
+  crosswalk is shown and downloadable as CSV — it is the **re-identification key
+  (Confidential)**; the UI warns against sharing it with the pseudonymized file.
 - **Excel flow:** the gateway reads the workbook (pandas/openpyxl); selected text
   columns are scanned positionally; detections are kept per cell (`CellFinding`).
   `redact` runs `apply_replacements` per cell against one sheet-wide `Pseudonymizer`

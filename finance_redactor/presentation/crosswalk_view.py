@@ -28,6 +28,7 @@ def render_crosswalk_section(
         return
 
     n_flagged = sum(1 for a in crosswalk if a.auto)
+    n_suggested = sum(1 for a in crosswalk if a.suggested_pseudonym)
     df = crosswalk_dataframe(crosswalk)
 
     with st.expander(f"Name -> pseudonym mapping ({len(crosswalk)} name(s))"):
@@ -36,6 +37,13 @@ def render_crosswalk_section(
                 f"{n_flagged} name(s) were not in the master list and received a "
                 "flagged auto-generated ID (shown as 'yes' under Flagged). Review "
                 "them and, if correct, add them to the master list with a curated ID."
+            )
+        if n_suggested:
+            st.info(
+                f"{n_suggested} flagged name(s) closely resemble a curated master-"
+                "list name - see 'Possible match' (e.g. a likely typo). This is a "
+                "hint only; it was **not** applied automatically. Fix the source "
+                "document or add an alias, then re-run."
             )
         st.dataframe(df, width="stretch", hide_index=True)
         st.warning(_CROSSWALK_WARNING)
