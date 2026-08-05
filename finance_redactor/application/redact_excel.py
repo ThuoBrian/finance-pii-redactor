@@ -31,11 +31,18 @@ class RedactExcelService:
         detector: PiiDetector,
         master_map: Mapping[tuple[str, str], MasterEntry],
         auto_prefixes: Mapping[str, str],
+        fuzzy_threshold: float = 0.84,
     ) -> None:
-        """Wire the detector and the master map / auto-id prefixes."""
+        """Wire the detector and the master map / auto-id prefixes.
+
+        ``fuzzy_threshold`` should normally be ``Settings.fuzzy_match_threshold``,
+        passed explicitly by the composition root; the default here only covers
+        callers (e.g. tests) that don't care about the fuzzy-suggestion feature.
+        """
         self._detector = detector
         self._master_map = master_map
         self._auto_prefixes = auto_prefixes
+        self._fuzzy_threshold = fuzzy_threshold
 
     def scan(
         self,
@@ -89,7 +96,9 @@ class RedactExcelService:
         A single :class:`Pseudonymizer` spans the whole sheet so a name appearing
         in many cells maps to one consistent pseudonym.
         """
-        pseudonymizer = Pseudonymizer(self._master_map, self._auto_prefixes)
+        pseudonymizer = Pseudonymizer(
+            self._master_map, self._auto_prefixes, fuzzy_threshold=self._fuzzy_threshold
+        )
         redacted = df.copy()
         for cell in scan_result.findings:
             if cell.column not in columns:

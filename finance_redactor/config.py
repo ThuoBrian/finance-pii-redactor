@@ -61,6 +61,7 @@ class Settings:
     auto_prefixes: Mapping[str, str] = _DEFAULT_AUTO_PREFIXES
     custom_match_score: float = 0.9
     default_threshold: float = 0.35
+    fuzzy_match_threshold: float = 0.84
     names_dir: Path = field(default=_DATA_DIR)
 
     @property

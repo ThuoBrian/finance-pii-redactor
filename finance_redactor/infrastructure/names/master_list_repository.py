@@ -113,13 +113,17 @@ class MasterListRepository:
         mapping: dict[tuple[str, str], MasterEntry] = {}
         for row in curated:
             key = (row.entity_type, normalize(row.name))
-            entry = MasterEntry(pseudonym=row.pseudonym, category=row.category)
+            entry = MasterEntry(
+                pseudonym=row.pseudonym, category=row.category, display_name=row.name
+            )
             existing = mapping.get(key)
             if existing is None or existing.pseudonym == entry.pseudonym:
                 mapping[key] = entry
 
         for row in curated:
-            entry = MasterEntry(pseudonym=row.pseudonym, category=row.category)
+            entry = MasterEntry(
+                pseudonym=row.pseudonym, category=row.category, display_name=row.name
+            )
             for alias in aliases(row.name):
                 key = (row.entity_type, normalize(alias))
                 if key not in mapping:

@@ -52,12 +52,19 @@ class RedactPdfService:
         open_document: PdfDocumentFactory,
         master_map: Mapping[tuple[str, str], MasterEntry],
         auto_prefixes: Mapping[str, str],
+        fuzzy_threshold: float = 0.84,
     ) -> None:
-        """Wire the detector, a PDF-opening factory, and pseudonym vocabulary."""
+        """Wire the detector, a PDF-opening factory, and pseudonym vocabulary.
+
+        ``fuzzy_threshold`` should normally be ``Settings.fuzzy_match_threshold``,
+        passed explicitly by the composition root; the default here only covers
+        callers (e.g. tests) that don't care about the fuzzy-suggestion feature.
+        """
         self._detector = detector
         self._open_document = open_document
         self._master_map = master_map
         self._auto_prefixes = auto_prefixes
+        self._fuzzy_threshold = fuzzy_threshold
 
     def execute(
         self,
@@ -70,7 +77,9 @@ class RedactPdfService:
     ) -> PdfRedactionResult:
         """Redact ``source`` and return new bytes, findings, page count, crosswalk."""
         document = self._open_document(source)
-        pseudonymizer = Pseudonymizer(self._master_map, self._auto_prefixes)
+        pseudonymizer = Pseudonymizer(
+            self._master_map, self._auto_prefixes, fuzzy_threshold=self._fuzzy_threshold
+        )
         try:
             findings: list[Finding] = []
             for page_index in range(document.page_count):

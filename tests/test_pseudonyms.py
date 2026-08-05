@@ -49,6 +49,49 @@ def test_auto_prefix_follows_entity_type():
     assert p.assign("ORGANIZATION", "Acme Co").pseudonym.startswith("ORG-AUTO-")
 
 
+def test_typo_gets_auto_id_plus_a_suggestion_not_a_silent_merge():
+    master = {
+        ("PERSON", normalize("Michael Mugo")): MasterEntry(
+            "STF-91345", "Staff", display_name="Michael Mugo"
+        )
+    }
+    p = Pseudonymizer(master, _AUTO_PREFIXES)
+
+    assignment = p.assign("PERSON", "Micheal Mugo")  # typo: swapped "ae"
+
+    # Never silently resolves to the curated id - still a flagged auto-id.
+    assert assignment.auto is True
+    assert assignment.pseudonym.startswith("PSN-AUTO-")
+    assert assignment.pseudonym != "STF-91345"
+    # ...but carries a reviewer hint pointing at the likely intended match.
+    assert assignment.suggested_pseudonym == "STF-91345"
+    assert assignment.suggested_name == "Michael Mugo"
+    assert assignment.suggested_score is not None and assignment.suggested_score >= 0.84
+
+
+def test_no_suggestion_when_nothing_close_enough():
+    master = {("PERSON", normalize("Michael Mugo")): MasterEntry("STF-91345", "Staff")}
+    p = Pseudonymizer(master, _AUTO_PREFIXES)
+
+    assignment = p.assign("PERSON", "Completely Different Name")
+
+    assert assignment.auto is True
+    assert assignment.suggested_pseudonym is None
+    assert assignment.suggested_name is None
+    assert assignment.suggested_score is None
+
+
+def test_suggestion_is_scoped_to_the_same_entity_type():
+    # A PERSON name should never be suggested as a fuzzy match for an
+    # ORGANIZATION detection, even if the strings are similar.
+    master = {("PERSON", normalize("Micheal Corp")): MasterEntry("STF-1", "Staff")}
+    p = Pseudonymizer(master, _AUTO_PREFIXES)
+
+    assignment = p.assign("ORGANIZATION", "Micheal Corp")
+
+    assert assignment.suggested_pseudonym is None
+
+
 def test_repeated_name_is_consistent_and_recorded_once():
     master = {("PERSON", normalize("Brian Thuo")): MasterEntry("STF-91345", "Staff")}
     p = Pseudonymizer(master, _AUTO_PREFIXES)

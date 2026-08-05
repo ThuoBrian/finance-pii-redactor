@@ -14,10 +14,12 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 
 from finance_redactor.domain.entities import PiiDetection
+from finance_redactor.domain.fuzzy import closest_match
 from finance_redactor.domain.rules import dedupe_overlapping
 
 _WHITESPACE = re.compile(r"\s+")
@@ -34,10 +36,16 @@ def normalize(name: str) -> str:
 
 @dataclass(frozen=True)
 class MasterEntry:
-    """A curated master-list mapping target for one normalized name."""
+    """A curated master-list mapping target for one normalized name.
+
+    ``display_name`` (original casing, e.g. ``"Michael Mugo"``) is optional and
+    used only for the fuzzy-match reviewer hint (see ``Assignment.suggested_name``);
+    it defaults to ``""`` for callers (e.g. existing tests) that don't need it.
+    """
 
     pseudonym: str
     category: str
+    display_name: str = ""
 
 
 @dataclass(frozen=True)
@@ -46,6 +54,10 @@ class Assignment:
 
     ``auto`` is True when the name was not found in the master list and a stable
     placeholder ID was generated instead (the UI flags these for review).
+
+    ``suggested_*`` fields are populated only when ``auto`` is True and a
+    typo-tolerant fuzzy match found a close curated name: a reviewer hint shown
+    in the crosswalk, never applied automatically (see ``domain/fuzzy.py``).
     """
 
     original_name: str
@@ -53,6 +65,9 @@ class Assignment:
     category: str
     pseudonym: str
     auto: bool
+    suggested_pseudonym: str | None = None
+    suggested_name: str | None = None
+    suggested_score: float | None = None
 
 
 class Pseudonymizer:
@@ -68,12 +83,22 @@ class Pseudonymizer:
         master_map: Mapping[tuple[str, str], MasterEntry],
         auto_prefixes: Mapping[str, str],
         auto_hash_length: int = 5,
+        fuzzy_threshold: float = 0.84,
     ) -> None:
-        """Wire the curated master map and the auto-id prefix table."""
+        """Wire the curated master map and the auto-id prefix table.
+
+        ``fuzzy_threshold`` (a ``difflib`` similarity ratio, 0-1) gates the
+        reviewer-hint suggestion offered on auto-ids; it never changes which
+        pseudonym gets assigned (see ``domain/fuzzy.py``).
+        """
         self._master_map = master_map
         self._auto_prefixes = auto_prefixes
         self._auto_hash_length = auto_hash_length
+        self._fuzzy_threshold = fuzzy_threshold
         self._assignments: dict[tuple[str, str], Assignment] = {}
+        self._candidates_by_type: dict[str, list[str]] = defaultdict(list)
+        for candidate_entity_type, normalized_name in master_map:
+            self._candidates_by_type[candidate_entity_type].append(normalized_name)
 
     def assign(self, entity_type: str, text: str) -> Assignment:
         """Return the pseudonym for ``text``, generating one if not curated."""
@@ -92,12 +117,27 @@ class Pseudonymizer:
                 auto=False,
             )
         else:
+            suggested_pseudonym = suggested_name = None
+            suggested_score: float | None = None
+            suggestion = closest_match(
+                key[1],
+                self._candidates_by_type.get(entity_type, ()),
+                self._fuzzy_threshold,
+            )
+            if suggestion is not None:
+                matched_normalized, suggested_score = suggestion
+                matched_entry = self._master_map[(entity_type, matched_normalized)]
+                suggested_pseudonym = matched_entry.pseudonym
+                suggested_name = matched_entry.display_name or matched_normalized
             assignment = Assignment(
                 original_name=text,
                 entity_type=entity_type,
                 category="",
                 pseudonym=self._auto_pseudonym(entity_type, key[1]),
                 auto=True,
+                suggested_pseudonym=suggested_pseudonym,
+                suggested_name=suggested_name,
+                suggested_score=suggested_score,
             )
         self._assignments[key] = assignment
         return assignment

@@ -31,6 +31,7 @@ _CROSSWALK_COLUMNS = [
     "Category",
     "Pseudonym",
     "Flagged",
+    "Possible match",
 ]
 
 
@@ -89,6 +90,9 @@ def crosswalk_dataframe(crosswalk: list[Assignment]) -> pd.DataFrame:
 
     ``Flagged`` marks auto-generated placeholders (names not in the master list)
     that a reviewer should confirm and ideally add to the master list.
+    ``Possible match`` is a typo-tolerant hint (see ``domain/fuzzy.py``) for
+    flagged rows only - a nearby curated name the reviewer may want to check,
+    never applied automatically.
     """
     rows = [
         {
@@ -97,6 +101,12 @@ def crosswalk_dataframe(crosswalk: list[Assignment]) -> pd.DataFrame:
             "Category": a.category or "(unknown)",
             "Pseudonym": a.pseudonym,
             "Flagged": "yes" if a.auto else "",
+            "Possible match": (
+                f"{a.suggested_name} ({a.suggested_pseudonym}, "
+                f"{a.suggested_score:.0%} match)"
+                if a.suggested_pseudonym
+                else ""
+            ),
         }
         for a in crosswalk
     ]
