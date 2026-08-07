@@ -70,13 +70,18 @@ teammate's install at **one shared copy** of the workbook instead of each
 person's own local file:
 
 1. Put `Names List - Organized.xlsx` on one properly access-controlled shared
-   location your team already uses for Confidential data (e.g. an
-   access-controlled SharePoint or network-drive folder) — **never** a
-   generally-shared or public folder, and never inside this git repo.
+   location your team already uses for Confidential data — e.g. a **Box Drive**
+   folder, a SharePoint site, or a network drive — **never** a generally-shared
+   or public folder, and never inside this git repo. If using Box Drive,
+   right-click the folder and choose **Make Available Offline**, so the app
+   keeps working without depending on an active connection every time it reads
+   the file.
 2. On each teammate's machine, set the `FPR_MASTER_LIST_DIR` environment
-   variable to that shared folder's path, then restart the app (`run.bat` /
-   `run.sh`):
-   - Windows (PowerShell, one-time): `setx FPR_MASTER_LIST_DIR "\\server\share\path"`,
+   variable to *their own* local path to that shared folder (with Box Drive,
+   this is wherever Box mounts it on that person's machine — the same cloud
+   folder, but not necessarily the same literal path string on every computer),
+   then restart the app (`run.bat` / `run.sh`):
+   - Windows (PowerShell, one-time): `setx FPR_MASTER_LIST_DIR "C:\Users\<you>\Box\path\to\folder"`,
      then close and reopen the terminal before launching `run.bat`.
    - macOS/Linux: add `export FPR_MASTER_LIST_DIR="/path/to/shared/folder"` to
      your shell profile (e.g. `~/.zshrc` or `~/.bashrc`), then re-open the
@@ -85,10 +90,35 @@ person's own local file:
    automatically whenever it's edited and saved), so the same name gets the
    same code for everyone.
 
+### Keep the filename exactly as-is
+
+The app looks for the file by its **exact name**, `Names List - Organized.xlsx`
+— the folder can move (that's what `FPR_MASTER_LIST_DIR` is for), but the
+filename itself is not configurable. Get it wrong and the app doesn't error,
+it just silently loads zero names, so this matters more than it looks like it
+should:
+
+- **Never rename it or add a version to the filename** — no
+  `Names List - Organized (2).xlsx`, `... FINAL.xlsx`, or `... 2026-08-07.xlsx`.
+  Anything other than the exact name is invisible to the app.
+- **Edit in place** (open, edit, `Ctrl+S`, close) — don't "Save As" under a
+  different name, or the app keeps reading the old, now-stale file.
+- **Watch for sync-conflict copies.** If two people edit at nearly the same
+  time, Box (and SharePoint/OneDrive) can create a renamed "conflicted copy"
+  alongside the original, silently splitting the edits across two files. This
+  is the other reason (besides `Internal ID` collisions) to have a single
+  owner or small group make changes, one at a time — see below.
+- **Want version history?** Use Box's own **Version History** on the file
+  instead of naming a new version yourself — it gives you a real audit trail
+  without ever touching the name the app depends on.
+- Keep the exact casing and spacing (`Names List - Organized.xlsx`, not
+  `Names List-Organized.xlsx` or `names list - organized.xlsx`) — cloud-synced
+  storage can be pickier about this than a local drive.
+
 Because edits are still manual (someone opens the file in Excel and adds a
 row), have a single owner or small group make changes to avoid two people
 assigning the same `Internal ID` to two different names at the same time — the
-data-quality checks below (conflicting/reused IDs) will flag it on the next
+data-quality checks above (conflicting/reused IDs) will flag it on the next
 load either way. Never paste this file's contents into Claude or any other AI
 chat — only the tool's pseudonymized *output* is meant to leave the controlled
 environment.
