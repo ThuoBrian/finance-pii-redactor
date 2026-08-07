@@ -72,6 +72,10 @@ operating system — the first run sets everything up automatically.
 To update the master list, edit `data/Names List - Organized.xlsx`, save and
 close it, then refresh the browser page.
 
+Want the same codes across a whole team, not just on one laptop? See
+**[Sharing one master list across a team](data/README.md#sharing-one-master-list-across-a-team)**
+in data/README.md.
+
 ## Handling sensitive data
 
 Approved for **Internal** data only. Do not use for Confidential or Highly

@@ -168,8 +168,17 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   `master_list_file`). Replaces scattered module-level constants and the
   duplicated `0.9` magic number.
 - **Master list:** `data/Names List - Organized.xlsx` — a **top-level, user-owned folder**
-  outside the package (resolved by `Settings.names_dir` from `config.py`), kept
-  separate from the code (and out of git). The
+  outside the package by default (resolved by `Settings.names_dir` via
+  `config.py`'s `_resolve_data_dir()`), kept separate from the code (and out of
+  git). `_resolve_data_dir()` honors the `FPR_MASTER_LIST_DIR` environment
+  variable when set, so a team can instead point every install at one shared,
+  access-controlled location and get identical curated IDs across users — see
+  `data/README.md`'s "Sharing one master list across a team" and the matching
+  `docs/GOTCHA.md` entry; unset, behavior is unchanged (per-install local
+  folder). Note this only affects *curated* IDs — the auto-id fallback for
+  names not on the list is already consistent across installs by construction
+  (a plain hash of the normalized name plus a hardcoded prefix table), with or
+  without a shared list. The
   workbook has one sheet per category (`Vendors`, `Funders`, `Staff`) with columns
   `Category`, `Internal ID`, `Name`, `Primary Subsidiary`, `Country`. It is the
   **single source** for both detection and pseudonym IDs. `Category` maps via
