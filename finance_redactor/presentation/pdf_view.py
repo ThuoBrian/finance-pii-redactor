@@ -88,7 +88,9 @@ def run_pdf_flow(
             ),
             key="pdf_redact_images",
         )
-        render_master_list_status(name_counts, quality_issues)
+        render_master_list_status(
+            name_counts, quality_issues, settings.master_list_file
+        )
 
     button_label = (
         "Black out PDF" if style == RedactionStyle.BLACKOUT else "Pseudonymize PDF"

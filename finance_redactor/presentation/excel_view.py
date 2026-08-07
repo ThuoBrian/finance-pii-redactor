@@ -79,7 +79,9 @@ def run_excel_flow(
             options=list(settings.supported_entities),
             default=list(settings.supported_entities),
         )
-        render_master_list_status(name_counts, quality_issues)
+        render_master_list_status(
+            name_counts, quality_issues, settings.master_list_file
+        )
 
     if not selected_cols:
         st.warning("Select at least one column to scan.")
