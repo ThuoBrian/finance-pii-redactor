@@ -3,7 +3,10 @@
 Put your **master list** here as **`Names List - Organized.xlsx`**. This is the one
 file you edit to control which names get which ID codes. After editing it,
 save and close the file, then refresh the page in your browser — no need to
-restart the app; it picks up the change automatically.
+restart the app; it picks up the change automatically. The Advanced settings
+panel shows when the workbook was last modified (e.g. "Last updated Aug 7,
+2026 at 3:42 PM - 5 minutes ago"), so you can confirm an edit actually landed
+without guessing.
 
 The workbook has one sheet per category:
 
@@ -67,28 +70,51 @@ just hasn't added him yet) — not a bug, just two different lists.
 
 To get the same codes for the same names across a whole team, point every
 teammate's install at **one shared copy** of the workbook instead of each
-person's own local file:
+person's own local file.
 
-1. Put `Names List - Organized.xlsx` on one properly access-controlled shared
-   location your team already uses for Confidential data — e.g. a **Box Drive**
-   folder, a SharePoint site, or a network drive — **never** a generally-shared
-   or public folder, and never inside this git repo. If using Box Drive,
-   right-click the folder and choose **Make Available Offline**, so the app
-   keeps working without depending on an active connection every time it reads
-   the file.
-2. On each teammate's machine, set the `FPR_MASTER_LIST_DIR` environment
-   variable to *their own* local path to that shared folder (with Box Drive,
-   this is wherever Box mounts it on that person's machine — the same cloud
-   folder, but not necessarily the same literal path string on every computer),
-   then restart the app (`run.bat` / `run.sh`):
-   - Windows (PowerShell, one-time): `setx FPR_MASTER_LIST_DIR "C:\Users\<you>\Box\path\to\folder"`,
-     then close and reopen the terminal before launching `run.bat`.
-   - macOS/Linux: add `export FPR_MASTER_LIST_DIR="/path/to/shared/folder"` to
-     your shell profile (e.g. `~/.zshrc` or `~/.bashrc`), then re-open the
-     terminal before running `./run.sh`.
-3. Everyone's install now reads and caches the same workbook (still refreshed
-   automatically whenever it's edited and saved), so the same name gets the
-   same code for everyone.
+First, put `Names List - Organized.xlsx` on one properly access-controlled
+shared location your team already uses for Confidential data — e.g. a **Box
+Drive** folder, a SharePoint site, or a network drive — **never** a
+generally-shared or public folder, and never inside this git repo. If using
+Box Drive, right-click the folder and choose **Make Available Offline**, so
+the app keeps working without depending on an active connection every time it
+reads the file.
+
+**Windows:** just double-click `run.bat`. The first time you run it (or any
+time after running `reconfigure_master_list.bat`), it asks where your master
+list is:
+
+```text
+   Where is your master list?
+      1. On this computer only - the default
+      2. Shared with my team - I will pick the folder
+
+   Enter 1 or 2 and press Enter - default 1:
+```
+
+Type `2` and press Enter, and a normal Windows folder-browser window pops up —
+click the shared folder from the step above, no typing a path required. Your
+answer is remembered, so you won't be asked again on future launches. To
+change it later (moved to a new laptop, switching from local to shared, etc.),
+run **`reconfigure_master_list.bat`** — it clears the saved answer and asks
+again.
+
+**macOS/Linux, or advanced/manual setup:** there's no built-in folder-picker
+for `run.sh`, so set the `FPR_MASTER_LIST_DIR` environment variable directly
+to *your own* local path to that shared folder (with Box Drive, this is
+wherever Box mounts it on your machine — the same cloud folder, but not
+necessarily the same literal path string on every computer), then restart the
+app:
+
+- Windows (PowerShell, one-time): `setx FPR_MASTER_LIST_DIR "C:\Users\<you>\Box\path\to\folder"`,
+  then close and reopen the terminal before launching `run.bat`.
+- macOS/Linux: add `export FPR_MASTER_LIST_DIR="/path/to/shared/folder"` to
+  your shell profile (e.g. `~/.zshrc` or `~/.bashrc`), then re-open the
+  terminal before running `./run.sh`.
+
+Either way, everyone's install now reads and caches the same workbook (still
+refreshed automatically whenever it's edited and saved), so the same name gets
+the same code for everyone.
 
 ### Keep the filename exactly as-is
 

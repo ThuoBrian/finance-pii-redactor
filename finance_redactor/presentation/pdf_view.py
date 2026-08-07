@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
+from datetime import datetime
 from typing import Any
 
 import streamlit as st
@@ -28,6 +29,7 @@ def run_pdf_flow(
     settings: Settings,
     name_counts: Mapping[str, int],
     quality_issues: Sequence[QualityIssue] | None = None,
+    master_list_updated: datetime | None = None,
 ) -> None:
     """Render the PDF pseudonymization flow in Streamlit."""
     if (
@@ -89,7 +91,7 @@ def run_pdf_flow(
             key="pdf_redact_images",
         )
         render_master_list_status(
-            name_counts, quality_issues, settings.master_list_file
+            name_counts, quality_issues, settings.master_list_file, master_list_updated
         )
 
     button_label = (

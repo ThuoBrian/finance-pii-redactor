@@ -159,8 +159,11 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   cases; `presenters.py` turns results into UI artifacts (highlighted HTML, the
   findings + crosswalk tables); `crosswalk_view.py` renders the shared crosswalk
   expander + guarded CSV download; `master_list_view.py` renders the shared
-  master-list summary line + data-quality warnings shown in both flows' Advanced
-  settings panel.
+  master-list summary line (entry counts plus a "last updated"/"X ago"
+  clause derived from the workbook's mtime, formatted by hand rather than
+  via `strftime`'s `%-d`/`%-I` GNU extensions, which Windows' C runtime
+  doesn't reliably support) + data-quality warnings shown in both flows'
+  Advanced settings panel.
 - **`finance_redactor/config.py`** — the single source of truth: an immutable
   `Settings` dataclass (language, spaCy model, entities, `categories`
   (category → (prefix, entity_type)), `category_sheets`, `auto_prefixes`,
@@ -241,7 +244,28 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
 - **Entry points:**
   - Windows: `run.bat` is the intended end-user launcher.
   - macOS/Linux: `run.sh` performs the equivalent setup and launches Streamlit.
-  - Both install `uv` if missing, run `uv sync --python 3.12` (which installs the pinned spaCy model along with the other deps — there is no separate model-download step), and start Streamlit on `127.0.0.1`. They are now a two-step flow (setup helper, then `uv sync`).
+  - Both install `uv` if missing, run `uv sync --python 3.12` (which installs the pinned spaCy model along with the other deps — there is no separate model-download step), and start Streamlit on `127.0.0.1`.
+  - `run.bat` has a third setup step (Windows only — `run.sh` has no built-in
+    GUI folder-picker, so macOS/Linux stays manual per `data/README.md`): on
+    first launch it asks whether the master list is local or shared, and if
+    shared, opens a native `System.Windows.Forms.FolderBrowserDialog` via a
+    `powershell -Command` one-liner so the user clicks a folder instead of
+    typing a path. The answer is persisted as two Windows user-scope
+    environment variables (`FPR_MASTER_LIST_CONFIGURED`, `FPR_MASTER_LIST_DIR`)
+    read/written via `[Environment]::[Get|Set]EnvironmentVariable(...,'User')`
+    — deliberately the *registry-backed* call, not `$env:`, so the check is
+    accurate even within the same process that just cleared it (this is what
+    allows `reconfigure_master_list.bat`'s clear-then-`call run.bat` to work
+    without a process restart). Choosing "local" (or cancelling the picker) explicitly
+    clears any previously-persisted `FPR_MASTER_LIST_DIR` too, so switching
+    from shared back to local doesn't leave a stale shared path in effect.
+    `reconfigure_master_list.bat` clears both persisted variables and
+    re-invokes `run.bat` so the question is asked again. All new batch code
+    here follows the file's established quoting convention (escaped `\"..\"`
+    inside a `-Command "..."` argument, not nested single quotes) and avoids
+    literal parentheses in echoed text — both are needed to stay strictly
+    ASCII-safe and parse reliably under `EnableDelayedExpansion`, per the
+    "Launcher scripts" note below.
 
 ## Tooling configuration
 
@@ -260,9 +284,9 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
 - **Sharing the tool:** distribution is via the one-line installers (`install.ps1` for Windows, `install.sh` for macOS/Linux) that download the source from the public GitHub repo and launch `run.bat`/`run.sh`. Each installer prompts for an install location, preserves any local `Names List - Organized.xlsx`, and re-running updates to the latest `main`. For a plain source zip, GitHub's **Download ZIP** button on the repo works too. (The old `package.sh`/`package.bat`/`package.ps1` zip-builder scripts were removed as redundant.)
 - Approved for **Internal** data only under IPA's data classification policy; do not use for Confidential or Highly Confidential data. **Caveat:** the name→pseudonym **crosswalk** the tool produces is itself the re-identification key and is **Confidential** — it must be stored/handled accordingly and never shared alongside the pseudonymized output.
 
-### Launcher scripts (`run.bat` / `run.sh`) — keep them pure ASCII
+### Launcher scripts (`run.bat` / `run.sh` / `reconfigure_master_list.bat`) — keep them pure ASCII
 
-- Both launchers must stay **strictly ASCII**. They previously crashed (`'────' is not recognized` / `do was unexpected at this time`) because `chcp 65001` + multi-byte box-drawing/em-dash characters desynchronized cmd.exe's byte-offset file parser. Do **not** reintroduce `chcp 65001` or non-ASCII decoration. Verify after editing: a byte scan should report zero bytes > 127, `run.sh` must keep LF line endings.
+- All three launchers must stay **strictly ASCII**. They previously crashed (`'────' is not recognized` / `do was unexpected at this time`) because `chcp 65001` + multi-byte box-drawing/em-dash characters desynchronized cmd.exe's byte-offset file parser. Do **not** reintroduce `chcp 65001` or non-ASCII decoration. Verify after editing: a byte scan should report zero bytes > 127, `run.sh` must keep LF line endings.
 - Both use 24-bit truecolor ANSI escapes (`ESC[38;2;R;G;Bm`) for **IPA brand green `#49ac57`** (RGB `73;172;87`); semantic status colors stay distinct (yellow = waiting, red = problem). Truecolor relies on a Windows 11+ console.
 
 ## Git attribution

@@ -10,6 +10,8 @@ workbook's modification time so edits still take effect on the next refresh.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 import streamlit as st
 
 from finance_redactor.application.redact_excel import RedactExcelService
@@ -72,6 +74,14 @@ def _main() -> None:
         master_list_mtime = settings.master_list_file.stat().st_mtime
     except OSError:
         master_list_mtime = None
+    # Computed fresh every rerun (unlike the @st.cache_resource bundle below),
+    # so the "last updated"/"X ago" display in the Advanced settings panel
+    # stays accurate without needing its own cache invalidation.
+    master_list_updated = (
+        datetime.fromtimestamp(master_list_mtime)
+        if master_list_mtime is not None
+        else None
+    )
 
     engine, master_map, name_counts, quality_issues = _get_master_list_bundle(
         master_list_mtime
@@ -112,6 +122,7 @@ def _main() -> None:
             settings=settings,
             name_counts=name_counts,
             quality_issues=quality_issues,
+            master_list_updated=master_list_updated,
         )
     elif extension == "pdf":
         run_pdf_flow(
@@ -126,6 +137,7 @@ def _main() -> None:
             settings=settings,
             name_counts=name_counts,
             quality_issues=quality_issues,
+            master_list_updated=master_list_updated,
         )
     else:
         st.error("Unsupported file type. Please upload an Excel or PDF file.")

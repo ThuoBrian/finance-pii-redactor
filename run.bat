@@ -19,7 +19,7 @@ set "IPA_GREEN=%ESC%[38;2;73;172;87m"
 call :banner
 
 :: -- 1. Install uv if not already present -------------------------------------
-call :stepnum 1 2 "Checking the setup helper"
+call :stepnum 1 3 "Checking the setup helper"
 where uv >nul 2>&1
 if %errorlevel% neq 0 (
     call :info "First-time setup: installing a small helper (one-time)."
@@ -43,7 +43,7 @@ if %errorlevel% neq 0 (
 set "APPDIR=%~dp0"
 if "%APPDIR:~-1%"=="\" set "APPDIR=%APPDIR:~0,-1%"
 
-call :stepnum 2 2 "Preparing the program"
+call :stepnum 2 3 "Preparing the program"
 if not exist "%APPDIR%\.venv" (
     call :info "First-time setup: installing the program and language model (one-time)."
     call :wait "This downloads about 400 MB and can take a few minutes. Please leave this window open..."
@@ -59,7 +59,50 @@ if not exist "%APPDIR%\.venv" (
     call :ok "Program is ready."
 )
 
-:: -- 3. Launch the app --------------------------------------------------------
+:: -- 3. Choose where the master list lives -------------------------------------
+call :stepnum 3 3 "Choosing your master list location"
+set "MASTERCONFIGURED="
+for /f "tokens=*" %%i in ('powershell -Command "[Environment]::GetEnvironmentVariable(\"FPR_MASTER_LIST_CONFIGURED\",\"User\")"') do set "MASTERCONFIGURED=%%i"
+if defined MASTERCONFIGURED (
+    set "SAVEDMASTERDIR="
+    for /f "tokens=*" %%i in ('powershell -Command "[Environment]::GetEnvironmentVariable(\"FPR_MASTER_LIST_DIR\",\"User\")"') do set "SAVEDMASTERDIR=%%i"
+    if defined SAVEDMASTERDIR set "FPR_MASTER_LIST_DIR=!SAVEDMASTERDIR!"
+    call :ok "Master list location already set. Run reconfigure_master_list.bat to change it."
+) else (
+    echo.
+    echo    Where is your master list?
+    echo       1. On this computer only - the default
+    echo       2. Shared with my team - I will pick the folder
+    echo.
+    set "MASTERCHOICE="
+    set /p MASTERCHOICE="   Enter 1 or 2 and press Enter - default 1: "
+    if "!MASTERCHOICE!"=="2" (
+        call :wait "Opening the folder picker window - if you do not see it, check your taskbar."
+        set "MASTERPICK="
+        for /f "tokens=*" %%i in ('powershell -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $d.SelectedPath }"') do set "MASTERPICK=%%i"
+        if defined MASTERPICK (
+            set "FPR_MASTER_LIST_DIR=!MASTERPICK!"
+            powershell -Command "[Environment]::SetEnvironmentVariable(\"FPR_MASTER_LIST_DIR\",\"!MASTERPICK!\",\"User\")" >nul
+            if exist "!MASTERPICK!\Names List - Organized.xlsx" (
+                call :ok "Using the shared master list: !MASTERPICK!"
+            ) else (
+                call :info "Folder set, but Names List - Organized.xlsx was not found there yet."
+                call :hint "The app will use it as soon as the file is added to that folder."
+            )
+        ) else (
+            set "FPR_MASTER_LIST_DIR="
+            powershell -Command "[Environment]::SetEnvironmentVariable(\"FPR_MASTER_LIST_DIR\",$null,\"User\")" >nul
+            call :info "No folder selected - using the master list on this computer instead."
+        )
+    ) else (
+        set "FPR_MASTER_LIST_DIR="
+        powershell -Command "[Environment]::SetEnvironmentVariable(\"FPR_MASTER_LIST_DIR\",$null,\"User\")" >nul
+        call :ok "Using the master list on this computer."
+    )
+    powershell -Command "[Environment]::SetEnvironmentVariable(\"FPR_MASTER_LIST_CONFIGURED\",\"1\",\"User\")" >nul
+)
+
+:: -- 4. Launch the app --------------------------------------------------------
 call :ready
 "%APPDIR%\.venv\Scripts\streamlit.exe" run "%APPDIR%\app.py" --server.address=127.0.0.1
 
