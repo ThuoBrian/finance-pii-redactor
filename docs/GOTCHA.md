@@ -33,6 +33,11 @@ This file records known errors, edge cases, and their solutions when developing 
   uv run streamlit run app.py --server.address=127.0.0.1 --server.port 8502
   ```
 
+### The same name gets a different code for different teammates
+- **Symptom:** A name (e.g. `Brian Thuo`) pseudonymizes to `STF-91345` on your machine but to a different code — or a flagged `STF-AUTO-*` code — on a colleague's machine, even though you're both running the same version of the tool.
+- **Cause:** By default, each installation reads its master list from a `data/` folder next to that installation's own copy of the code (`Settings.names_dir` in `finance_redactor/config.py`), and the installers only ever preserve *that same machine's* existing file across updates — nothing seeds or syncs it from anywhere else. Two people each maintaining their own independent copy of `Names List - Organized.xlsx` will therefore disagree on a name unless the `Internal ID` they assigned it happens to match. This is expected: each machine's list is genuinely separate data, not a bug in the pseudonymization logic.
+- **Solution:** Point every teammate's install at **one shared, access-controlled copy** of the workbook by setting the `FPR_MASTER_LIST_DIR` environment variable to that shared location on each machine, then restart the app. See **[Sharing one master list across a team](../data/README.md#sharing-one-master-list-across-a-team)** in `data/README.md` for the exact steps and the compliance note (the shared location must meet the same Confidential-data handling rules as a local copy). Unset (the default), behavior is unchanged — the local `data/` folder next to the code is used, as before.
+
 ### The app fails to read the master list while it is open in Excel
 - **Symptom:** A `PermissionError`, `FileNotFoundError`, or a "failed to read Excel" message appears when the app starts or after refreshing the page.
 - **Cause:** Microsoft Excel locks the workbook while it is open, so the app's `pd.read_excel` call cannot access it.
