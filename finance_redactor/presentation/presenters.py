@@ -92,7 +92,11 @@ def crosswalk_dataframe(crosswalk: list[Assignment]) -> pd.DataFrame:
     that a reviewer should confirm and ideally add to the master list.
     ``Possible match`` is a typo-tolerant hint (see ``domain/fuzzy.py``) for
     flagged rows only - a nearby curated name the reviewer may want to check,
-    never applied automatically.
+    never applied automatically. The suggestion's own category is included
+    (e.g. ``Funder``) because the candidate pool is scoped by entity type only
+    - Vendor and Funder both detect as ORGANIZATION - so a suggestion can come
+    from a different category than the flagged name actually belongs to; the
+    reviewer needs that visible to judge whether the match makes sense.
     """
     rows = [
         {
@@ -103,7 +107,7 @@ def crosswalk_dataframe(crosswalk: list[Assignment]) -> pd.DataFrame:
             "Flagged": "yes" if a.auto else "",
             "Possible match": (
                 f"{a.suggested_name} ({a.suggested_pseudonym}, "
-                f"{a.suggested_score:.0%} match)"
+                f"{a.suggested_category}, {a.suggested_score:.0%} match)"
                 if a.suggested_pseudonym
                 else ""
             ),

@@ -255,6 +255,34 @@ def test_master_map_resolves_ampersand_variants(tmp_path):
         assert mapping[key].pseudonym == "VND-200"
 
 
+def test_benign_duplicate_rows_keep_the_first_row_s_display_name(tmp_path):
+    # Two rows normalize to the same key and share the same pseudonym (a
+    # benign exact duplicate per quality_report()'s docstring). The first
+    # row's display_name must win, not whichever row pandas iterates last -
+    # otherwise the crosswalk's fuzzy "Possible match" hint would show a
+    # display name that flips depending on row order in the workbook.
+    sheets = {
+        "Vendors": pd.DataFrame(
+            {
+                "Category": ["Vendor", "Vendor"],
+                "Internal ID": [1045, 1045],
+                "Name": ["Acme Ltd", "ACME LTD"],
+                "Primary Subsidiary": ["", ""],
+                "Country": ["", ""],
+            }
+        ),
+    }
+    path = tmp_path / "benign_duplicates.xlsx"
+    _make_excel(path, sheets)
+    mapping = MasterListRepository(
+        path, _CATEGORIES, category_sheets=_CATEGORY_SHEETS
+    ).master_map()
+
+    entry = mapping[("ORGANIZATION", normalize("Acme Ltd"))]
+    assert entry.pseudonym == "VND-1045"
+    assert entry.display_name == "Acme Ltd"  # the first row's casing, not the second
+
+
 def test_alias_does_not_clobber_other_row_canonical(tmp_path):
     # Two genuinely separate rows whose alias sets overlap: "Acme Ltd" (VND-1) and
     # "Acme Limited" (VND-2). Each row's own canonical name must still resolve to its

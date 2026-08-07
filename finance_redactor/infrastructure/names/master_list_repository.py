@@ -103,22 +103,24 @@ class MasterListRepository:
         form that differs from the workbook still resolves to the curated ID.
 
         Two passes keep curated entries authoritative: every row's canonical name is
-        registered first (first row wins an exact-name collision), then alias keys fill
-        only still-empty slots. An alias can therefore never clobber another row's
-        canonical name — e.g. an ``Acme Ltd`` row's ``acme limited`` alias will not
-        shadow a separate ``Acme Limited`` row's own ID.
+        registered first (first row wins an exact-name collision — including a
+        benign exact duplicate, so ``display_name`` also consistently comes from
+        whichever row was parsed first, not whichever was parsed last), then
+        alias keys fill only still-empty slots. An alias can therefore never
+        clobber another row's canonical name — e.g. an ``Acme Ltd`` row's
+        ``acme limited`` alias will not shadow a separate ``Acme Limited`` row's
+        own ID.
         """
         curated = [row for row in self.rows() if row.pseudonym is not None]
 
         mapping: dict[tuple[str, str], MasterEntry] = {}
         for row in curated:
             key = (row.entity_type, normalize(row.name))
-            entry = MasterEntry(
+            if key in mapping:
+                continue
+            mapping[key] = MasterEntry(
                 pseudonym=row.pseudonym, category=row.category, display_name=row.name
             )
-            existing = mapping.get(key)
-            if existing is None or existing.pseudonym == entry.pseudonym:
-                mapping[key] = entry
 
         for row in curated:
             entry = MasterEntry(

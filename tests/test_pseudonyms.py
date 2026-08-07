@@ -7,6 +7,7 @@ from finance_redactor.domain.pseudonyms import (
     MasterEntry,
     Pseudonymizer,
     apply_replacements,
+    build_candidate_index,
     normalize,
 )
 
@@ -67,6 +68,27 @@ def test_typo_gets_auto_id_plus_a_suggestion_not_a_silent_merge():
     assert assignment.suggested_pseudonym == "STF-91345"
     assert assignment.suggested_name == "Michael Mugo"
     assert assignment.suggested_score is not None and assignment.suggested_score >= 0.84
+    assert assignment.suggested_category == "Staff"
+
+
+def test_suggestion_surfaces_its_own_category_across_shared_entity_type():
+    # Vendor and Funder both detect as ORGANIZATION, so the candidate pool for a
+    # flagged org name spans both categories. The suggestion must carry the
+    # *matched* entry's own category so a reviewer can tell it's a Funder
+    # suggestion for what they assumed was a Vendor, rather than silently
+    # implying same-category confidence.
+    master = {
+        ("ORGANIZATION", normalize("Acme Foundation")): MasterEntry(
+            "FND-3001", "Funder", display_name="Acme Foundation"
+        )
+    }
+    p = Pseudonymizer(master, _AUTO_PREFIXES)
+
+    assignment = p.assign("ORGANIZATION", "Acme Foundatio")  # typo, same length-ish
+
+    assert assignment.auto is True
+    assert assignment.suggested_pseudonym == "FND-3001"
+    assert assignment.suggested_category == "Funder"
 
 
 def test_no_suggestion_when_nothing_close_enough():
@@ -79,6 +101,7 @@ def test_no_suggestion_when_nothing_close_enough():
     assert assignment.suggested_pseudonym is None
     assert assignment.suggested_name is None
     assert assignment.suggested_score is None
+    assert assignment.suggested_category is None
 
 
 def test_suggestion_is_scoped_to_the_same_entity_type():
@@ -136,3 +159,33 @@ def test_apply_replacements_preserves_offsets_right_to_left():
     # Both occurrences of the same name collapse to one pseudonym.
     pseudonym = p.assign("PERSON", "NAME").pseudonym
     assert result == f"aaa {pseudonym} bbb {pseudonym} ccc"
+
+
+def test_build_candidate_index_groups_normalized_names_by_entity_type():
+    master = {
+        ("PERSON", normalize("Michael Mugo")): MasterEntry("STF-1", "Staff"),
+        ("ORGANIZATION", normalize("Acme Ltd")): MasterEntry("VND-1", "Vendor"),
+    }
+
+    index = build_candidate_index(master)
+
+    assert index["PERSON"] == [normalize("Michael Mugo")]
+    assert index["ORGANIZATION"] == [normalize("Acme Ltd")]
+
+
+def test_passing_a_precomputed_candidate_index_is_equivalent_to_deriving_it():
+    # A Pseudonymizer given a precomputed index (as the composition root does,
+    # to avoid rebuilding it per file - see docs/GOTCHA.md) must behave
+    # identically to one that derives it itself from master_map.
+    master = {
+        ("PERSON", normalize("Michael Mugo")): MasterEntry(
+            "STF-91345", "Staff", display_name="Michael Mugo"
+        )
+    }
+    precomputed = build_candidate_index(master)
+    p = Pseudonymizer(master, _AUTO_PREFIXES, candidates_by_type=precomputed)
+
+    assignment = p.assign("PERSON", "Micheal Mugo")
+
+    assert assignment.suggested_pseudonym == "STF-91345"
+    assert assignment.suggested_name == "Michael Mugo"

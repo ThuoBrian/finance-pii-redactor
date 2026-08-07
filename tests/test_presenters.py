@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pandas as pd
 
-from finance_redactor.presentation.presenters import highlighted_html
+from finance_redactor.domain.pseudonyms import Assignment
+from finance_redactor.presentation.presenters import (
+    crosswalk_dataframe,
+    highlighted_html,
+)
 
 
 def test_highlighted_html_escapes_cell_values() -> None:
@@ -39,3 +43,30 @@ def test_highlighted_html_still_highlights_selected_cells() -> None:
     rendered = highlighted_html(df, cell_keys={(0, "Name")}, bg="#90EE90")
     assert 'style="background:#90EE90;padding:4px 8px">Alice</td>' in rendered
     assert 'style="padding:4px 8px">Bob</td>' in rendered
+
+
+def test_crosswalk_dataframe_surfaces_the_suggestion_s_own_category() -> None:
+    """The 'Possible match' hint must show which category it came from.
+
+    The fuzzy-match candidate pool is scoped by entity type only (Vendor and
+    Funder both detect as ORGANIZATION), so a suggestion can come from a
+    different category than the flagged name's own - the reviewer needs that
+    visible, not folded away, to judge whether the match makes sense.
+    """
+    crosswalk = [
+        Assignment(
+            original_name="Acme Foundatio",
+            entity_type="ORGANIZATION",
+            category="",
+            pseudonym="ORG-AUTO-1234",
+            auto=True,
+            suggested_pseudonym="FND-3001",
+            suggested_name="Acme Foundation",
+            suggested_score=0.92,
+            suggested_category="Funder",
+        )
+    ]
+    df = crosswalk_dataframe(crosswalk)
+    assert (
+        df.loc[0, "Possible match"] == "Acme Foundation (FND-3001, Funder, 92% match)"
+    )

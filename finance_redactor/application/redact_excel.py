@@ -32,17 +32,25 @@ class RedactExcelService:
         master_map: Mapping[tuple[str, str], MasterEntry],
         auto_prefixes: Mapping[str, str],
         fuzzy_threshold: float = 0.84,
+        candidates_by_type: Mapping[str, list[str]] | None = None,
     ) -> None:
         """Wire the detector and the master map / auto-id prefixes.
 
         ``fuzzy_threshold`` should normally be ``Settings.fuzzy_match_threshold``,
         passed explicitly by the composition root; the default here only covers
         callers (e.g. tests) that don't care about the fuzzy-suggestion feature.
+
+        ``candidates_by_type`` should normally be the composition root's cached
+        ``build_candidate_index(master_map)`` result, computed once per
+        master-list load, so it isn't rebuilt from scratch for every file
+        processed (see ``docs/GOTCHA.md``); omitted, each ``redact`` call
+        derives it fresh from ``master_map``.
         """
         self._detector = detector
         self._master_map = master_map
         self._auto_prefixes = auto_prefixes
         self._fuzzy_threshold = fuzzy_threshold
+        self._candidates_by_type = candidates_by_type
 
     def scan(
         self,
@@ -97,7 +105,10 @@ class RedactExcelService:
         in many cells maps to one consistent pseudonym.
         """
         pseudonymizer = Pseudonymizer(
-            self._master_map, self._auto_prefixes, fuzzy_threshold=self._fuzzy_threshold
+            self._master_map,
+            self._auto_prefixes,
+            fuzzy_threshold=self._fuzzy_threshold,
+            candidates_by_type=self._candidates_by_type,
         )
         redacted = df.copy()
         for cell in scan_result.findings:

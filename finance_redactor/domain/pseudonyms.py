@@ -58,6 +58,12 @@ class Assignment:
     ``suggested_*`` fields are populated only when ``auto`` is True and a
     typo-tolerant fuzzy match found a close curated name: a reviewer hint shown
     in the crosswalk, never applied automatically (see ``domain/fuzzy.py``).
+    ``suggested_category`` is surfaced separately from ``suggested_name`` so a
+    reviewer can see when the suggestion comes from a *different* category than
+    the one they were expecting (e.g. a Vendor's closest match turns out to be a
+    Funder) — the candidate pool is scoped by ``entity_type`` only, since
+    Vendor/Funder both detect as ORGANIZATION and the flagged name's own
+    category is, by definition, not yet known.
     """
 
     original_name: str
@@ -68,6 +74,26 @@ class Assignment:
     suggested_pseudonym: str | None = None
     suggested_name: str | None = None
     suggested_score: float | None = None
+    suggested_category: str | None = None
+
+
+def build_candidate_index(
+    master_map: Mapping[tuple[str, str], MasterEntry],
+) -> dict[str, list[str]]:
+    """Group ``master_map``'s normalized names by entity type for fuzzy matching.
+
+    This is the pool :func:`~finance_redactor.domain.fuzzy.closest_match` scans
+    per flagged auto-id. Building it is a full pass over every curated name and
+    alias variant (tens of thousands of entries against the real master list),
+    so callers that process many files against the same master list (the
+    composition root) should build this once per master-list load and reuse it
+    across ``Pseudonymizer`` instances rather than letting each instance rebuild
+    it from scratch (see ``docs/GOTCHA.md``).
+    """
+    candidates_by_type: dict[str, list[str]] = defaultdict(list)
+    for candidate_entity_type, normalized_name in master_map:
+        candidates_by_type[candidate_entity_type].append(normalized_name)
+    return candidates_by_type
 
 
 class Pseudonymizer:
@@ -84,21 +110,31 @@ class Pseudonymizer:
         auto_prefixes: Mapping[str, str],
         auto_hash_length: int = 5,
         fuzzy_threshold: float = 0.84,
+        candidates_by_type: Mapping[str, list[str]] | None = None,
     ) -> None:
         """Wire the curated master map and the auto-id prefix table.
 
         ``fuzzy_threshold`` (a ``difflib`` similarity ratio, 0-1) gates the
         reviewer-hint suggestion offered on auto-ids; it never changes which
         pseudonym gets assigned (see ``domain/fuzzy.py``).
+
+        ``candidates_by_type`` is the fuzzy-match candidate index normally built
+        once per master-list load by :func:`build_candidate_index` and passed in
+        by the composition root, so repeated runs against an unchanged master
+        list don't repeat that pass (see ``docs/GOTCHA.md``). When omitted (e.g.
+        in tests that construct a ``Pseudonymizer`` directly), it is derived from
+        ``master_map`` here instead.
         """
         self._master_map = master_map
         self._auto_prefixes = auto_prefixes
         self._auto_hash_length = auto_hash_length
         self._fuzzy_threshold = fuzzy_threshold
         self._assignments: dict[tuple[str, str], Assignment] = {}
-        self._candidates_by_type: dict[str, list[str]] = defaultdict(list)
-        for candidate_entity_type, normalized_name in master_map:
-            self._candidates_by_type[candidate_entity_type].append(normalized_name)
+        self._candidates_by_type = (
+            candidates_by_type
+            if candidates_by_type is not None
+            else build_candidate_index(master_map)
+        )
 
     def assign(self, entity_type: str, text: str) -> Assignment:
         """Return the pseudonym for ``text``, generating one if not curated."""
@@ -117,7 +153,7 @@ class Pseudonymizer:
                 auto=False,
             )
         else:
-            suggested_pseudonym = suggested_name = None
+            suggested_pseudonym = suggested_name = suggested_category = None
             suggested_score: float | None = None
             suggestion = closest_match(
                 key[1],
@@ -129,6 +165,12 @@ class Pseudonymizer:
                 matched_entry = self._master_map[(entity_type, matched_normalized)]
                 suggested_pseudonym = matched_entry.pseudonym
                 suggested_name = matched_entry.display_name or matched_normalized
+                # Surfaced separately (not folded into suggested_name) so a
+                # reviewer can immediately see when the candidate pool - shared
+                # across categories with the same entity_type, e.g. Vendor and
+                # Funder both detect as ORGANIZATION - matched a name from a
+                # category other than the one they expected.
+                suggested_category = matched_entry.category
             assignment = Assignment(
                 original_name=text,
                 entity_type=entity_type,
@@ -138,6 +180,7 @@ class Pseudonymizer:
                 suggested_pseudonym=suggested_pseudonym,
                 suggested_name=suggested_name,
                 suggested_score=suggested_score,
+                suggested_category=suggested_category,
             )
         self._assignments[key] = assignment
         return assignment
