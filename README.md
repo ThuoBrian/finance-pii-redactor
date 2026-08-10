@@ -88,6 +88,8 @@ never send it alongside the pseudonymized file.
 ## For developers
 
 This README covers day-to-day use. For the architecture, file structure, and
-how the pieces fit together, see **[CLAUDE.md](CLAUDE.md)**. Known issues and
+how the pieces fit together, see **[CLAUDE.md](CLAUDE.md)** (or
+**[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for a non-technical, one-page
+view of how pseudonym codes stay consistent across a team). Known issues and
 troubleshooting are in **[docs/GOTCHA.md](docs/GOTCHA.md)**; the master list
 file format is in **[data/README.md](data/README.md)**.
