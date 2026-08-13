@@ -60,8 +60,11 @@ operating system — the first run sets everything up automatically.
 
 ## How it works
 
-1. Put your master list (`Names List - Organized.xlsx`) in the `data/` folder.
-   See **[data/README.md](data/README.md)** for the file format.
+1. The master list, `Names List - Organized.xlsx`, lives in the team's
+   shared Box folder — **not** in this repo's local `data/` folder. See
+   **[Sharing one master list across a team](data/README.md#sharing-one-master-list-across-a-team)**
+   in `data/README.md` for the required, one-time setup that points your
+   install at it, and for the file format.
 2. Upload an Excel or PDF file. It's processed entirely on your computer.
 3. Choose what to detect (people, organizations, emails) and review the
    results.
@@ -69,12 +72,9 @@ operating system — the first run sets everything up automatically.
 5. Optional: download the crosswalk (the name-to-code key). Keep it separate
    and secure — see below.
 
-To update the master list, edit `data/Names List - Organized.xlsx`, save and
-close it, then refresh the browser page.
-
-Want the same codes across a whole team, not just on one laptop? See
-**[Sharing one master list across a team](data/README.md#sharing-one-master-list-across-a-team)**
-in data/README.md.
+To update the master list, edit it in place in the shared Box folder, save
+and close it, then refresh the browser page — every teammate's install picks
+up the change automatically.
 
 ## Handling sensitive data
 

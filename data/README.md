@@ -1,9 +1,82 @@
 # Data folder
 
-Put your **master list** here as **`Names List - Organized.xlsx`**. This is the one
-file you edit to control which names get which ID codes. After editing it,
+`Names List - Organized.xlsx` is the **master list** — the one file that
+controls which names get which ID codes. **For this team, it lives in one
+shared Box folder — never in this local `data/` folder.** See
+[Sharing one master list across a team](#sharing-one-master-list-across-a-team)
+below for the required, one-time setup that points your install at it.
+
+Once your install is pointed at the shared copy: edit it in place in Box,
 save and close the file, then refresh the page in your browser — no need to
 restart the app; it picks up the change automatically.
+
+`Names List - Organized.xlsx` contains real names, so it is **Confidential**
+and is never committed to git (this local `data/` folder is gitignored).
+Keep it stored securely in Box — this is exactly why the app doesn't ship it
+and won't put a copy in this repo for you.
+
+## Sharing one master list across a team
+
+This team does not keep a per-install master list. Every teammate's install
+must point at the **same shared Box folder**, so the same name always gets
+the same code for everyone — never save or leave a copy of
+`Names List - Organized.xlsx` in this local `data/` folder. If the
+`FPR_MASTER_LIST_DIR` environment variable below is ever unset, the app
+silently falls back to reading whatever is in this local folder instead of
+the shared list (typically nothing, so names load as zero) — that fallback
+exists for standalone installs outside this team, not for us.
+
+1. Confirm the shared workbook is in your team's designated Box Drive folder
+   (ask your list owner if you don't have the path) — **never** a
+   generally-shared or public folder, and never inside this git repo. In Box
+   Drive, right-click the folder and choose **Make Available Offline**, so
+   the app keeps working without depending on an active connection every
+   time it reads the file.
+2. Set the `FPR_MASTER_LIST_DIR` environment variable to *your own* local
+   path to that shared folder (Box mounts it at a different literal path on
+   each machine — the same cloud folder, but not necessarily the same
+   literal path string on every computer), then restart the app (`run.bat` /
+   `run.sh`):
+   - Windows (PowerShell, one-time): `setx FPR_MASTER_LIST_DIR "C:\Users\<you>\Box\path\to\folder"`,
+     then close and reopen the terminal before launching `run.bat`.
+   - macOS/Linux: add `export FPR_MASTER_LIST_DIR="/path/to/shared/folder"` to
+     your shell profile (e.g. `~/.zshrc` or `~/.bashrc`), then re-open the
+     terminal before running `./run.sh`.
+3. Refresh the app in the browser and check the master-list summary in
+   **Advanced settings** — the row counts should match what everyone else on
+   the team sees. If it shows zero names, double-check the path and the
+   exact filename (see below) before assuming the shared list is empty.
+
+Once set up this way, everyone's install reads and caches the same workbook
+(still refreshed automatically whenever it's edited and saved), so the same
+name gets the same code for everyone.
+
+### Keep the filename exactly as-is
+
+The app looks for the file by its **exact name**, `Names List - Organized.xlsx`
+— the folder can move (that's what `FPR_MASTER_LIST_DIR` is for), but the
+filename itself is not configurable. Get it wrong and the app doesn't error,
+it just silently loads zero names, so this matters more than it looks like it
+should:
+
+- **Never rename it or add a version to the filename** — no
+  `Names List - Organized (2).xlsx`, `... FINAL.xlsx`, or `... 2026-08-07.xlsx`.
+  Anything other than the exact name is invisible to the app.
+- **Edit in place** (open, edit, `Ctrl+S`, close) — don't "Save As" under a
+  different name, or the app keeps reading the old, now-stale file.
+- **Watch for sync-conflict copies.** If two people edit at nearly the same
+  time, Box (and SharePoint/OneDrive) can create a renamed "conflicted copy"
+  alongside the original, silently splitting the edits across two files. This
+  is the other reason (besides `Internal ID` collisions) to have a single
+  owner or small group make changes, one at a time — see below.
+- **Want version history?** Use Box's own **Version History** on the file
+  instead of naming a new version yourself — it gives you a real audit trail
+  without ever touching the name the app depends on.
+- Keep the exact casing and spacing (`Names List - Organized.xlsx`, not
+  `Names List-Organized.xlsx` or `names list - organized.xlsx`) — cloud-synced
+  storage can be pickier about this than a local drive.
+
+## File format
 
 The workbook has one sheet per category:
 
@@ -54,70 +127,6 @@ settings** panel so the IDs it emits stay trustworthy:
   entity — confirm this is intended or make the name more distinctive.
 
 Exact duplicate rows (same name and same ID) are benign and are not flagged.
-
-**`Names List - Organized.xlsx` contains real names, so it is Confidential and is**
-**never committed to git** (it is gitignored). Keep it stored securely.
-
-## Sharing one master list across a team
-
-By default, this `data/` folder lives next to your own copy of the tool, so
-each teammate who installs it starts with their own independent, empty master
-list. That's fine if you're the only one using the tool — codes stay stable
-for you across every file, forever, because the list itself never changes
-codes for a name once assigned. But if two people each keep their own separate
-copy of the list, the same name can end up with two different codes (one
-person's `Brian Thuo` = `STF-91345`, a colleague's = `STF-77712`, or one of you
-just hasn't added him yet) — not a bug, just two different lists.
-
-To get the same codes for the same names across a whole team, point every
-teammate's install at **one shared copy** of the workbook instead of each
-person's own local file:
-
-1. Put `Names List - Organized.xlsx` on one properly access-controlled shared
-   location your team already uses for Confidential data — e.g. a **Box Drive**
-   folder, a SharePoint site, or a network drive — **never** a generally-shared
-   or public folder, and never inside this git repo. If using Box Drive,
-   right-click the folder and choose **Make Available Offline**, so the app
-   keeps working without depending on an active connection every time it reads
-   the file.
-2. On each teammate's machine, set the `FPR_MASTER_LIST_DIR` environment
-   variable to *their own* local path to that shared folder (with Box Drive,
-   this is wherever Box mounts it on that person's machine — the same cloud
-   folder, but not necessarily the same literal path string on every computer),
-   then restart the app (`run.bat` / `run.sh`):
-   - Windows (PowerShell, one-time): `setx FPR_MASTER_LIST_DIR "C:\Users\<you>\Box\path\to\folder"`,
-     then close and reopen the terminal before launching `run.bat`.
-   - macOS/Linux: add `export FPR_MASTER_LIST_DIR="/path/to/shared/folder"` to
-     your shell profile (e.g. `~/.zshrc` or `~/.bashrc`), then re-open the
-     terminal before running `./run.sh`.
-3. Everyone's install now reads and caches the same workbook (still refreshed
-   automatically whenever it's edited and saved), so the same name gets the
-   same code for everyone.
-
-### Keep the filename exactly as-is
-
-The app looks for the file by its **exact name**, `Names List - Organized.xlsx`
-— the folder can move (that's what `FPR_MASTER_LIST_DIR` is for), but the
-filename itself is not configurable. Get it wrong and the app doesn't error,
-it just silently loads zero names, so this matters more than it looks like it
-should:
-
-- **Never rename it or add a version to the filename** — no
-  `Names List - Organized (2).xlsx`, `... FINAL.xlsx`, or `... 2026-08-07.xlsx`.
-  Anything other than the exact name is invisible to the app.
-- **Edit in place** (open, edit, `Ctrl+S`, close) — don't "Save As" under a
-  different name, or the app keeps reading the old, now-stale file.
-- **Watch for sync-conflict copies.** If two people edit at nearly the same
-  time, Box (and SharePoint/OneDrive) can create a renamed "conflicted copy"
-  alongside the original, silently splitting the edits across two files. This
-  is the other reason (besides `Internal ID` collisions) to have a single
-  owner or small group make changes, one at a time — see below.
-- **Want version history?** Use Box's own **Version History** on the file
-  instead of naming a new version yourself — it gives you a real audit trail
-  without ever touching the name the app depends on.
-- Keep the exact casing and spacing (`Names List - Organized.xlsx`, not
-  `Names List-Organized.xlsx` or `names list - organized.xlsx`) — cloud-synced
-  storage can be pickier about this than a local drive.
 
 Because edits are still manual (someone opens the file in Excel and adds a
 row), have a single owner or small group make changes to avoid two people
