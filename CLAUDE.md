@@ -13,22 +13,26 @@ IDs come from a maintained **master list** (`data/Names List - Organized.xlsx`, 
 This project uses `uv` for environment management and Python 3.12.
 
 - **Set up environment and install all dependencies (including dev):**
+
   ```bash
   uv sync --python 3.12
   ```
 
 - **Run the app:**
+
   ```bash
   uv run streamlit run app.py --server.address=127.0.0.1
   ```
 
 - **Run linting and auto-fixes:**
+
   ```bash
   uv run ruff check --fix app.py finance_redactor/
   uv run ruff format app.py finance_redactor/
   ```
 
 - **Run spell-check:**
+
   ```bash
   uv run codespell
   ```
@@ -37,10 +41,12 @@ This project uses `uv` for environment management and Python 3.12.
   [Vale](https://vale.sh) installed separately (`winget install errata-ai.Vale`
   / `brew install vale`) — it is not a Python dependency, so `uv sync` does not
   install it:
+
   ```bash
   vale sync   # first time only, fetches style packages into .vale/styles/
   vale README.md CLAUDE.md docs/ data/README.md
   ```
+
   (Don't run bare `vale .` — it recurses into `.vale/styles/` itself and lints
   the downloaded style packages' own README/LICENSE files.)
   Config lives in `.vale.ini` (styles: `write-good`, `alex`, `proselint`,
@@ -54,14 +60,21 @@ This project uses `uv` for environment management and Python 3.12.
   sense the race rule targets).
 
 - **Run tests:**
+
   ```bash
   uv run pytest
   ```
+
   Tests under `tests/` cover the framework-free logic (pseudonym assignment,
-  span replacement, master-list parsing) and run without the spaCy model.
+  span replacement, master-list parsing, fuzzy matching, data-quality checks),
+  the infrastructure adapters (the Presidio detector, via a mocked
+  `NlpEngineProvider` rather than the real spaCy model, and the PDF gateway),
+  and presentation-layer formatting (presenters, master-list view). None of
+  them require the real spaCy model to be installed.
 
 - **Regenerate the master list from legacy `.txt` lists** (one-off migration helper,
   only useful when migrating old plain-text lists to the Excel format):
+
   ```bash
   uv run python scripts/migrate_to_master_list.py
   ```
@@ -199,12 +212,15 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   (first row wins an exact-name collision), then aliases fill only still-empty
   keys — so an alias can never clobber another row's canonical name. Middle
   initials are intentionally not normalized (would merge distinct people).
-  **Data-quality guards:** `MasterListRepository.quality_report()` surfaces four
+  **Data-quality guards:** `MasterListRepository.quality_report()` surfaces five
   issue kinds in the Advanced settings panel — cross-category duplicate names,
   conflicting Internal IDs (same name, one category, multiple IDs), blank
-  `Internal ID` rows (advisory — they get flagged auto-ids), and reused Internal
-  IDs (one id shared by different names). Benign exact-duplicate rows (same name
-  *and* same id) are not flagged.
+  `Internal ID` rows (advisory — they get flagged auto-ids), reused Internal
+  IDs (one id shared by different names), and ambiguous common-word names
+  (advisory — a single-token name, e.g. a funder literally named `Across`,
+  that is also an ordinary English word, so every plain-English occurrence of
+  the word gets detected too). Benign exact-duplicate rows (same name *and*
+  same id) are not flagged.
 - **Master-list caching:** `MasterListRepository` caches parsed rows keyed by the
   workbook's file modification time, and `app.py` wraps the whole
   repo/recognizers/engine bundle in an `@st.cache_resource` factory keyed on that
@@ -245,11 +261,11 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
 
 ## Tooling configuration
 
-- `pyproject.toml` defines dependencies, dev dependency group (`ruff`, `pytest`, `codespell`, `pre-commit`), and ruff rules. Key lint selections: `F`, `E`, `W`, `I`, `D`, `UP`, `SIM`. The `ignore` list is broader than just docstrings — besides `D100`/`D104`/`D105` (module/package/magic-method docstrings), it also disables the pydocstyle rules that conflict with the formatter (`D203`, `D205`, `D213`, `D206`, `D300`), several pycodestyle indentation rules, `E501` (length is the formatter's job), `SIM110`, and `TRY003`. Check the actual `ignore` array before assuming a rule is active.
+- `pyproject.toml` defines dependencies, dev dependency group (`ruff`, `pytest`, `codespell`), and ruff rules. Key lint selections: `F`, `E`, `W`, `I`, `D`, `UP`, `SIM`. The `ignore` list is broader than just docstrings — besides `D100`/`D104`/`D105` (module/package/magic-method docstrings), it also disables the pydocstyle rules that conflict with the formatter (`D203`, `D205`, `D213`, `D206`, `D300`), several pycodestyle indentation rules, `E501` (length is the formatter's job), `SIM110`, and `TRY003`. Check the actual `ignore` array before assuming a rule is active.
 - `line-length = 88` and `target-version = "py312"`. `requires-python = ">=3.12,<3.14"`.
 - `codespell` is configured to skip `uv.lock`, all `.txt`, and all `.csv` files (the master list contains many names that look like typos), and to ignore a short list of words (`ignore-words-list` in `pyproject.toml`) — domain jargon like `master`, and `slave` (flagged only because `CLAUDE.md`'s own prose *about* the disabled `alex.Race` rule mentions the word it's disabling).
-- `pytest` is configured with `pythonpath = ["."]` so tests can import from the repo root. Tests live under `tests/` and cover the pure logic (`pseudonyms`, `master_list_repository`); `tests/**` is exempt from `D103` via `per-file-ignores`.
-- `pre-commit` is listed as a dev dependency but there is **no `.pre-commit-config.yaml`**, so no hooks actually run locally.
+- `pytest` is configured with `pythonpath = ["."]` so tests can import from the repo root. Tests live under `tests/` (17 files) and cover the pure domain logic (`pseudonyms`, `rules`, `aliases`, `fuzzy`, `quality`), the `master_list_repository` parser, infrastructure adapters (Presidio detector, PDF gateway), and presentation-layer formatting; `tests/**` is exempt from `D103` via `per-file-ignores`.
+- `pre-commit` is **not** currently declared as a project dependency, and there is **no `.pre-commit-config.yaml`**, so no hooks (pre-commit or otherwise) run locally.
 - **CI:** `.github/workflows/ci.yml` runs on every push to `main` and on pull requests — `uv sync --locked`, then `ruff check`, `ruff format --check`, `pytest`, and `codespell`. Since distribution installs straight from `main` (`install.ps1`/`install.sh`), this is what stops a broken `main` from breaking the tool for every user on their next install/update.
 
 ## Distribution notes

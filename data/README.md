@@ -48,6 +48,10 @@ settings** panel so the IDs it emits stay trustworthy:
 - **Blank Internal ID** (info, not an error) — a name with no `Internal ID` is
   still detected but gets a flagged auto-code. Fill in the ID when you want a
   curated code.
+- **Ambiguous common word** (info, not an error) — a name is a single word
+  that's also an ordinary English word (e.g. a funder named `Across`). Every
+  plain-English occurrence of that word will be detected, not just the
+  entity — confirm this is intended or make the name more distinctive.
 
 Exact duplicate rows (same name and same ID) are benign and are not flagged.
 
