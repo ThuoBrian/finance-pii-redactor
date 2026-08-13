@@ -68,9 +68,10 @@ This project uses `uv` for environment management and Python 3.12.
   Tests under `tests/` cover the framework-free logic (pseudonym assignment,
   span replacement, master-list parsing, fuzzy matching, data-quality checks),
   the infrastructure adapters (the Presidio detector, via a mocked
-  `NlpEngineProvider` rather than the real spaCy model, and the PDF gateway),
-  and presentation-layer formatting (presenters, master-list view). None of
-  them require the real spaCy model to be installed.
+  `NlpEngineProvider` rather than the real spaCy model, the PDF gateway, and
+  the Excel gateway), and presentation-layer formatting (presenters,
+  master-list view). None of them require the real spaCy model to be
+  installed.
 
 - **Regenerate the master list from legacy `.txt` lists** (one-off migration helper,
   only useful when migrating old plain-text lists to the Excel format):
@@ -237,13 +238,25 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   `fuzzy.py` above) shows the nearest curated name when one is close enough to
   suggest a typo (e.g. document text `Micheal Mugo` against a workbook
   `Michael Mugo`) — advisory only, never auto-applied. Each run's name→pseudonym
-  crosswalk is shown and downloadable as CSV — it is the **re-identification key
-  (Confidential)**; the UI warns against sharing it with the pseudonymized file.
+  crosswalk is shown in a review table and is the **re-identification key
+  (Confidential)** — how it reaches the user differs by file type: for Excel
+  it's embedded as a "Crosswalk" sheet in the pseudonymized workbook itself
+  (`OpenpyxlExcelGateway.write`, see "Excel flow" below), making that whole
+  `.xlsx` download Confidential, not just Internal; for PDF (no sheet
+  concept) it's still only a separate, warning-gated CSV download
+  (`crosswalk_view.render_crosswalk_section` with `download_separately=True`,
+  its default), and the UI still warns there against ever sharing it
+  alongside the pseudonymized PDF.
 - **Excel flow:** the gateway reads the workbook (pandas/openpyxl); selected text
   columns are scanned positionally; detections are kept per cell (`CellFinding`).
   `redact` runs `apply_replacements` per cell against one sheet-wide `Pseudonymizer`
   (so a name is consistent across cells) and the gateway writes the workbook with
-  changed cells highlighted yellow.
+  changed cells highlighted yellow. `OpenpyxlExcelGateway.write` also takes the
+  run's crosswalk (as a DataFrame, via `presenters.crosswalk_dataframe` — the
+  same shaping used for the PDF flow's crosswalk CSV) and writes it as a second
+  "Crosswalk" sheet alongside "Redacted", so every downloaded Excel file
+  carries its own re-identification key by default (see "Pseudonyms &
+  crosswalk" below for the confidentiality consequence of that).
 - **PDF flow:** the use case pulls per-page raw text from the gateway, normalizes
   it (`pdf_text_normalizer.py`) to remove ligatures / hyphenation / irregular
   whitespace, detects on the normalized text, applies the domain
@@ -264,7 +277,7 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
 - `pyproject.toml` defines dependencies, dev dependency group (`ruff`, `pytest`, `codespell`), and ruff rules. Key lint selections: `F`, `E`, `W`, `I`, `D`, `UP`, `SIM`. The `ignore` list is broader than just docstrings — besides `D100`/`D104`/`D105` (module/package/magic-method docstrings), it also disables the pydocstyle rules that conflict with the formatter (`D203`, `D205`, `D213`, `D206`, `D300`), several pycodestyle indentation rules, `E501` (length is the formatter's job), `SIM110`, and `TRY003`. Check the actual `ignore` array before assuming a rule is active.
 - `line-length = 88` and `target-version = "py312"`. `requires-python = ">=3.12,<3.14"`.
 - `codespell` is configured to skip `uv.lock`, all `.txt`, and all `.csv` files (the master list contains many names that look like typos), and to ignore a short list of words (`ignore-words-list` in `pyproject.toml`) — domain jargon like `master`, and `slave` (flagged only because `CLAUDE.md`'s own prose *about* the disabled `alex.Race` rule mentions the word it's disabling).
-- `pytest` is configured with `pythonpath = ["."]` so tests can import from the repo root. Tests live under `tests/` (17 files) and cover the pure domain logic (`pseudonyms`, `rules`, `aliases`, `fuzzy`, `quality`), the `master_list_repository` parser, infrastructure adapters (Presidio detector, PDF gateway), and presentation-layer formatting; `tests/**` is exempt from `D103` via `per-file-ignores`.
+- `pytest` is configured with `pythonpath = ["."]` so tests can import from the repo root. Tests live under `tests/` (18 files) and cover the pure domain logic (`pseudonyms`, `rules`, `aliases`, `fuzzy`, `quality`), the `master_list_repository` parser, infrastructure adapters (Presidio detector, PDF gateway, Excel gateway), and presentation-layer formatting; `tests/**` is exempt from `D103` via `per-file-ignores`.
 - `pre-commit` is **not** currently declared as a project dependency, and there is **no `.pre-commit-config.yaml`**, so no hooks (pre-commit or otherwise) run locally.
 - **CI:** `.github/workflows/ci.yml` runs on every push to `main` and on pull requests — `uv sync --locked`, then `ruff check`, `ruff format --check`, `pytest`, and `codespell`. Since distribution installs straight from `main` (`install.ps1`/`install.sh`), this is what stops a broken `main` from breaking the tool for every user on their next install/update.
 
@@ -274,7 +287,7 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
 - First run downloads `uv` and installs the Python environment including the `en_core_web_lg` spaCy model (~380 MB), all via `uv sync`. Subsequent starts are fast.
 - PyMuPDF (`pymupdf`) is added for PDF support; it is installed automatically by `uv sync`.
 - **Sharing the tool:** distribution is via the one-line installers (`install.ps1` for Windows, `install.sh` for macOS/Linux) that download the source from the public GitHub repo and launch `run.bat`/`run.sh`. Each installer prompts for an install location, preserves any local `Names List - Organized.xlsx`, and re-running updates to the latest `main`. For a plain source zip, GitHub's **Download ZIP** button on the repo works too. (The old `package.sh`/`package.bat`/`package.ps1` zip-builder scripts were removed as redundant.)
-- Approved for **Internal** data only under IPA's data classification policy; do not use for Confidential or Highly Confidential data. **Caveat:** the name→pseudonym **crosswalk** the tool produces is itself the re-identification key and is **Confidential** — it must be stored/handled accordingly and never shared alongside the pseudonymized output.
+- Approved for **Internal** data only under IPA's data classification policy; do not use for Confidential or Highly Confidential data. **Caveat:** the name→pseudonym **crosswalk** the tool produces is itself the re-identification key and is **Confidential**. For PDF output the crosswalk is only ever a separate CSV, which must be stored/handled accordingly and never shared alongside the pseudonymized PDF (which stays Internal on its own). For Excel output the crosswalk is embedded as a "Crosswalk" sheet in the pseudonymized workbook by default — so the whole downloaded `.xlsx` file is **Confidential**, not just Internal, and must be stored/handled accordingly.
 
 ### Launcher scripts (`run.bat` / `run.sh`) — keep them pure ASCII
 

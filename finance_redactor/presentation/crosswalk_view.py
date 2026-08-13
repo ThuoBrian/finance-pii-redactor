@@ -1,8 +1,14 @@
 """Shared rendering of the name->pseudonym crosswalk.
 
-Both the Excel and PDF flows show the same crosswalk: a review table plus a
-download button gated behind a prominent warning, because the crosswalk is the
-re-identification key (Confidential under IPA's data classification policy).
+Both the Excel and PDF flows show the same review table, because the
+crosswalk is the re-identification key (Confidential under IPA's data
+classification policy). They differ on what happens after that: PDF has no
+sheet concept, so its crosswalk only ever leaves the app as a separate,
+warning-gated CSV download (``download_separately=True``, the default).
+Excel's pseudonymized workbook already embeds the crosswalk as a "Crosswalk"
+sheet (see ``OpenpyxlExcelGateway.write``), so its call passes
+``download_separately=False`` to skip the redundant CSV button and point the
+warning at the sheet that's already in the file.
 """
 
 from __future__ import annotations
@@ -19,11 +25,31 @@ _CROSSWALK_WARNING = (
     "IPA's data classification policy."
 )
 
+_CROSSWALK_EMBEDDED_NOTICE = (
+    "This review table matches the **Crosswalk** sheet already included in "
+    "your downloaded Excel file - there is no separate CSV to keep track of "
+    "for this file. The workbook as a whole is **Confidential** under IPA's "
+    "data classification policy because it now carries the re-identification "
+    "key; see the warning above the download button."
+)
+
 
 def render_crosswalk_section(
-    crosswalk: list[Assignment], base_name: str, *, key_prefix: str
+    crosswalk: list[Assignment],
+    base_name: str,
+    *,
+    key_prefix: str,
+    download_separately: bool = True,
 ) -> None:
-    """Render the crosswalk table and a guarded CSV download."""
+    """Render the crosswalk review table, plus a guarded CSV download.
+
+    ``download_separately`` is True for flows (PDF) where the crosswalk only
+    ever leaves the app as its own CSV file, so it must stay separate from
+    the pseudonymized output. Excel passes ``download_separately=False``: the
+    crosswalk is already embedded as a sheet in the downloaded workbook (see
+    ``OpenpyxlExcelGateway.write``), so no second download button is offered
+    here and the warning instead points at the sheet that's already there.
+    """
     if not crosswalk:
         return
 
@@ -46,12 +72,15 @@ def render_crosswalk_section(
                 "document or add an alias, then re-run."
             )
         st.dataframe(df, width="stretch", hide_index=True)
-        st.warning(_CROSSWALK_WARNING)
-        st.download_button(
-            label="Download name mapping (CSV)",
-            data=df.to_csv(index=False).encode("utf-8"),
-            file_name=f"{base_name}_crosswalk.csv",
-            mime="text/csv",
-            key=f"{key_prefix}_crosswalk_download",
-            width="stretch",
-        )
+        if download_separately:
+            st.warning(_CROSSWALK_WARNING)
+            st.download_button(
+                label="Download name mapping (CSV)",
+                data=df.to_csv(index=False).encode("utf-8"),
+                file_name=f"{base_name}_crosswalk.csv",
+                mime="text/csv",
+                key=f"{key_prefix}_crosswalk_download",
+                width="stretch",
+            )
+        else:
+            st.info(_CROSSWALK_EMBEDDED_NOTICE)

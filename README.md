@@ -69,8 +69,11 @@ operating system — the first run sets everything up automatically.
 3. Choose what to detect (people, organizations, emails) and review the
    results.
 4. Download the pseudonymized file.
-5. Optional: download the crosswalk (the name-to-code key). Keep it separate
-   and secure — see below.
+   - **Excel:** the download already includes the name-to-code mapping as a
+     second sheet ("Crosswalk"), so the whole file is Confidential — see
+     below.
+   - **PDF:** optionally download the crosswalk separately (the name-to-code
+     key). Keep it separate from the PDF and secure — see below.
 
 To update the master list, edit it in place in the shared Box folder, save
 and close it, then refresh the browser page — every teammate's install picks
@@ -81,9 +84,17 @@ up the change automatically.
 Approved for **Internal** data only. Do not use for Confidential or Highly
 Confidential data.
 
-The **crosswalk** (name-to-code mapping) the tool can export is the key that
-re-identifies people, so it is itself **Confidential**: store it securely and
-never send it alongside the pseudonymized file.
+The **crosswalk** (name-to-code mapping) is the key that re-identifies
+people, so it is itself **Confidential** — how you keep it separate depends
+on the file type:
+
+- **Excel:** the crosswalk is embedded as a "Crosswalk" sheet in every
+  pseudonymized workbook by default, so the downloaded `.xlsx` file is
+  **Confidential as a whole**, not just Internal. Store and share it the way
+  you would the crosswalk itself.
+- **PDF:** the crosswalk is only ever a separate CSV download. Store it
+  securely and never send it alongside the pseudonymized PDF, which stays
+  Internal on its own.
 
 ## For developers
 

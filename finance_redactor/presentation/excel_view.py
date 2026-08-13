@@ -20,6 +20,7 @@ from finance_redactor.domain.quality import QualityIssue
 from finance_redactor.presentation.crosswalk_view import render_crosswalk_section
 from finance_redactor.presentation.master_list_view import render_master_list_status
 from finance_redactor.presentation.presenters import (
+    crosswalk_dataframe,
     excel_findings_dataframe,
     highlighted_html,
 )
@@ -132,7 +133,9 @@ def run_excel_flow(
         )
 
     base_name = re.sub(r"[^\w\-]", "_", uploaded.name.rsplit(".", 1)[0])
-    render_crosswalk_section(crosswalk, base_name, key_prefix="excel")
+    render_crosswalk_section(
+        crosswalk, base_name, key_prefix="excel", download_separately=False
+    )
 
     with st.expander(f"Detection details ({n_entities} finding(s))"):
         if n_entities == 0:
@@ -148,7 +151,15 @@ def run_excel_flow(
     if n_entities == 0:
         st.info("No PII was detected. The file is already clean.")
     else:
-        excel_bytes = excel_gateway.write(redacted_df, cell_keys)
+        st.warning(
+            "This workbook includes a **Crosswalk** sheet mapping names to "
+            "pseudonyms. The downloaded file is therefore **Confidential** as "
+            "a whole under IPA's data classification policy - not just "
+            "Internal - so store and share it accordingly."
+        )
+        excel_bytes = excel_gateway.write(
+            redacted_df, cell_keys, crosswalk_dataframe(crosswalk)
+        )
         st.download_button(
             label="Download pseudonymized Excel file",
             data=excel_bytes,
@@ -158,6 +169,7 @@ def run_excel_flow(
             width="stretch",
         )
         st.caption(
-            "Yellow-highlighted cells in the downloaded file indicate where a name "
-            "was replaced with its pseudonym."
+            "Yellow-highlighted cells indicate where a name was replaced with "
+            'its pseudonym; the workbook\'s second sheet, "Crosswalk", lists '
+            "the full name-to-pseudonym mapping."
         )

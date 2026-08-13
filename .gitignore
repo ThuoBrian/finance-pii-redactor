@@ -57,10 +57,12 @@ _legacy/
 
 # ── Sensitive data — NEVER commit ────────────────────────────────────────────
 # This is a PII tool. Real spreadsheets, PDFs, the name→pseudonym crosswalk (the
-# re-identification KEY), and the master list (real staff names + IDs) are all
-# Confidential under IPA's data-classification policy and must never enter version
-# control. The app reads the master list from a local file that each machine
-# supplies out-of-band; MasterListRepository tolerates its absence.
+# re-identification KEY — for pseudonymized Excel output, this is embedded as a
+# "Crosswalk" sheet inside the .xlsx itself, not just a separate CSV), and the
+# master list (real staff names + IDs) are all Confidential under IPA's
+# data-classification policy and must never enter version control. The app reads
+# the master list from a local file that each machine supplies out-of-band;
+# MasterListRepository tolerates its absence.
 *.xlsx
 *.xls
 *.xlsm

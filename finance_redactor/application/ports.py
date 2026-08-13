@@ -39,8 +39,17 @@ class ExcelGateway(Protocol):
         """Return the columns worth scanning (free-text) for default selection."""
         ...
 
-    def write(self, df: pd.DataFrame, highlighted_cells: set[tuple[int, str]]) -> bytes:
-        """Serialize ``df`` to xlsx, highlighting the given (row, column) cells."""
+    def write(
+        self,
+        df: pd.DataFrame,
+        highlighted_cells: set[tuple[int, str]],
+        crosswalk_df: pd.DataFrame,
+    ) -> bytes:
+        """Serialize ``df`` to xlsx, highlighting the given (row, column) cells.
+
+        ``crosswalk_df`` is written as a second, unhighlighted "Crosswalk"
+        sheet alongside the redacted data.
+        """
         ...
 
 
