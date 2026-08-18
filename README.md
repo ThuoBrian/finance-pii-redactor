@@ -2,8 +2,8 @@
 
 [![CI](https://github.com/ThuoBrian/finance-pii-redactor/actions/workflows/ci.yml/badge.svg)](https://github.com/ThuoBrian/finance-pii-redactor/actions/workflows/ci.yml)
 
-A desktop tool that replaces people's names and organization names in Excel and
-PDF files with stable ID codes (e.g. `STF-91345`). The same identity always
+A desktop tool that replaces people's names and organization names in Excel,
+PDF, and Word files with stable ID codes (e.g. `STF-91345`). The same identity always
 gets the same code, so patterns in the data still show up for error-checking
 and fraud monitoring — without exposing real identities. Everything runs on
 your own computer; no data is uploaded anywhere.
@@ -15,6 +15,7 @@ your own computer; no data is uploaded anywhere.
 |Paid to **Jane Doe**|Paid to **STF-91345**|
 |Vendor: **Acme Ltd**|Vendor: **VND-1045**|
 |Funder: **Global Aid Partners**|Funder: **FND-7745**|
+|Memo: approved by **Jane Doe**|Memo: approved by **STF-91345**|
 
 Every occurrence of the same name gets the same code — in this file and every
 future file — so a repeat pattern (e.g. one vendor showing up across many
@@ -22,7 +23,7 @@ payments) stays visible in the data without ever showing the name.
 
 ## What it does
 
-- Redacts people, organizations, and email addresses in Excel and PDF files.
+- Redacts people, organizations, and email addresses in Excel, PDF, and Word files.
 - Same identity → same code, every time, across every file you process.
 - Codes come from a master list you control (see
   **[data/README.md](data/README.md)**), so IDs stay stable over time.
@@ -65,15 +66,16 @@ operating system — the first run sets everything up automatically.
    **[Sharing one master list across a team](data/README.md#sharing-one-master-list-across-a-team)**
    in `data/README.md` for the required, one-time setup that points your
    install at it, and for the file format.
-2. Upload an Excel or PDF file. It's processed entirely on your computer.
+2. Upload an Excel, PDF, or Word file. It's processed entirely on your computer.
 3. Choose what to detect (people, organizations, emails) and review the
    results.
 4. Download the pseudonymized file.
    - **Excel:** the download already includes the name-to-code mapping as a
      second sheet ("Crosswalk"), so the whole file is Confidential — see
      below.
-   - **PDF:** optionally download the crosswalk separately (the name-to-code
-     key). Keep it separate from the PDF and secure — see below.
+   - **PDF and Word:** optionally download the crosswalk separately (the
+     name-to-code key). Keep it separate from the pseudonymized file and
+     secure — see below.
 
 To update the master list, edit it in place in the shared Box folder, save
 and close it, then refresh the browser page — every teammate's install picks
@@ -92,8 +94,8 @@ on the file type:
   pseudonymized workbook by default, so the downloaded `.xlsx` file is
   **Confidential as a whole**, not just Internal. Store and share it the way
   you would the crosswalk itself.
-- **PDF:** the crosswalk is only ever a separate CSV download. Store it
-  securely and never send it alongside the pseudonymized PDF, which stays
+- **PDF and Word:** the crosswalk is only ever a separate CSV download. Store
+  it securely and never send it alongside the pseudonymized file, which stays
   Internal on its own.
 
 ## For developers

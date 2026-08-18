@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pandas as pd
 
-from finance_redactor.presentation.presenters import highlighted_html
+from finance_redactor.domain.entities import DetectionSource, Finding
+from finance_redactor.presentation.presenters import (
+    docx_findings_dataframe,
+    highlighted_html,
+)
 
 
 def test_highlighted_html_escapes_cell_values() -> None:
@@ -39,3 +43,25 @@ def test_highlighted_html_still_highlights_selected_cells() -> None:
     rendered = highlighted_html(df, cell_keys={(0, "Name")}, bg="#90EE90")
     assert 'style="background:#90EE90;padding:4px 8px">Alice</td>' in rendered
     assert 'style="padding:4px 8px">Bob</td>' in rendered
+
+
+def test_docx_findings_dataframe_labels_the_location_column_paragraph() -> None:
+    """Docx findings reuse Finding.page, labeled 'Paragraph' rather than 'Page'."""
+    findings = [
+        Finding(
+            page=2,
+            detected_text="John Doe",
+            entity_type="PERSON",
+            score=0.87,
+            source=DetectionSource.MODEL,
+        )
+    ]
+    df = docx_findings_dataframe(findings)
+    assert list(df.columns) == [
+        "Paragraph",
+        "Detected text",
+        "Entity type",
+        "Confidence",
+        "Source",
+    ]
+    assert df.iloc[0]["Paragraph"] == 3

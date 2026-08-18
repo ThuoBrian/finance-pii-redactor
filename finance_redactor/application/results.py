@@ -56,3 +56,22 @@ class PdfRedactionResult:
     def entity_count(self) -> int:
         """Total number of pseudonymized detections."""
         return len(self.findings)
+
+
+@dataclass(frozen=True)
+class DocxRedactionResult:
+    """Outcome of pseudonymizing a Word doc: bytes, findings, blocks, crosswalk.
+
+    ``findings`` reuses :class:`Finding`, whose ``page`` field holds the
+    paragraph/block ordinal here rather than a PDF page number.
+    """
+
+    data: bytes
+    findings: list[Finding]
+    block_count: int
+    crosswalk: list[Assignment]
+
+    @property
+    def entity_count(self) -> int:
+        """Total number of pseudonymized detections."""
+        return len(self.findings)

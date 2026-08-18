@@ -13,7 +13,7 @@ from typing import Protocol, runtime_checkable
 
 import pandas as pd
 
-from finance_redactor.domain.entities import PiiDetection
+from finance_redactor.domain.entities import PiiDetection, Span
 
 
 @runtime_checkable
@@ -102,4 +102,48 @@ class PdfDocumentFactory(Protocol):
 
     def __call__(self, source: object) -> PdfDocument:
         """Open and return a PDF document."""
+        ...
+
+
+@runtime_checkable
+class WordDocument(Protocol):
+    """A mutable, open Word (.docx) document being pseudonymized block by block.
+
+    A "block" is one paragraph - covering the document body, table cells
+    (including nested tables), and headers/footers - enumerated once in a
+    stable order by the gateway.
+    """
+
+    @property
+    def block_count(self) -> int:
+        """Total number of paragraph blocks."""
+        ...
+
+    def block_text(self, block_index: int) -> str:
+        """Return the flattened text (all runs concatenated) of one block."""
+        ...
+
+    def replace_block_text(
+        self, block_index: int, replacements: list[tuple[Span, str]]
+    ) -> None:
+        """Replace each ``Span`` (offsets into ``block_text(block_index)``) with
+        its paired pseudonym, editing the underlying runs in place so
+        unaffected text keeps its original formatting.
+        """
+        ...
+
+    def to_bytes(self) -> bytes:
+        """Render the pseudonymized document to bytes."""
+        ...
+
+    def close(self) -> None:
+        """Release underlying resources."""
+        ...
+
+
+class WordDocumentFactory(Protocol):
+    """Opens a :class:`WordDocument` from a file-like source."""
+
+    def __call__(self, source: object) -> WordDocument:
+        """Open and return a Word document."""
         ...

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from finance_redactor.application.redact_docx import RedactDocxService
 from finance_redactor.application.redact_excel import RedactExcelService
 from finance_redactor.application.redact_pdf import RedactPdfService
 from finance_redactor.config import DEFAULT_SETTINGS
@@ -19,6 +20,7 @@ from finance_redactor.infrastructure.detection.custom_recognizer import (
     build_custom_recognizers,
 )
 from finance_redactor.infrastructure.detection.presidio_detector import PresidioEngine
+from finance_redactor.infrastructure.documents.docx_gateway import PythonDocxDocument
 from finance_redactor.infrastructure.documents.excel_gateway import (
     OpenpyxlExcelGateway,
 )
@@ -26,6 +28,7 @@ from finance_redactor.infrastructure.documents.pdf_gateway import PyMuPdfDocumen
 from finance_redactor.infrastructure.names.master_list_repository import (
     MasterListRepository,
 )
+from finance_redactor.presentation.docx_view import run_docx_flow
 from finance_redactor.presentation.excel_view import run_excel_flow
 from finance_redactor.presentation.pdf_view import run_pdf_flow
 
@@ -82,14 +85,14 @@ def _main() -> None:
     )
     st.title("Finance PII Redactor")
     st.caption(
-        "Upload an Excel or PDF file, choose what to pseudonymize, and download a "
-        "copy with names replaced by stable IDs (e.g. STF-91345). "
+        "Upload an Excel, PDF, or Word file, choose what to pseudonymize, and "
+        "download a copy with names replaced by stable IDs (e.g. STF-91345). "
         "All processing happens locally — no data leaves your laptop."
     )
 
     uploaded = st.file_uploader(
-        "Upload a file (.xlsx, .xls, or .pdf)",
-        type=["xlsx", "xls", "pdf"],
+        "Upload a file (.xlsx, .xls, .pdf, or .docx)",
+        type=["xlsx", "xls", "pdf", "docx"],
         help="The file is processed entirely on your machine.",
     )
 
@@ -127,8 +130,22 @@ def _main() -> None:
             name_counts=name_counts,
             quality_issues=quality_issues,
         )
+    elif extension == "docx":
+        run_docx_flow(
+            uploaded,
+            docx_service=RedactDocxService(
+                engine,
+                PythonDocxDocument.open,
+                master_map,
+                settings.auto_prefixes,
+                settings.fuzzy_match_threshold,
+            ),
+            settings=settings,
+            name_counts=name_counts,
+            quality_issues=quality_issues,
+        )
     else:
-        st.error("Unsupported file type. Please upload an Excel or PDF file.")
+        st.error("Unsupported file type. Please upload an Excel, PDF, or Word file.")
         st.stop()
 
 

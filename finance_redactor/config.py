@@ -52,6 +52,16 @@ _DEFAULT_CATEGORIES: Mapping[str, tuple[str, str]] = MappingProxyType(
 
 # Prefix used when a detected name is not in the master list and an auto/placeholder
 # pseudonym must be generated (keyed by entity type).
+#
+# Only add entity types here that identify a person or organization. Do NOT add
+# non-name entity types (e.g. Presidio's "DATE_TIME") to this map or to
+# `supported_entities` below: dates/times aren't the PII this tool exists to
+# protect, and pseudonymizing them (e.g. turning "Jan-26" into a fake ID) is
+# noise, not redaction. Adding one carelessly is also a silent risk - any
+# entity type missing from this map falls back to `entity_type[:3].upper()` in
+# `Pseudonymizer._auto_pseudonym` (domain/pseudonyms.py) instead of raising an
+# error, so "DATE_TIME" would quietly mint "DAT-AUTO-<hash>" ids rather than
+# failing loudly.
 _DEFAULT_AUTO_PREFIXES: Mapping[str, str] = MappingProxyType(
     {"PERSON": "PSN", "ORGANIZATION": "ORG", "EMAIL_ADDRESS": "EML"}
 )
@@ -76,6 +86,9 @@ class Settings:
 
     language: str = "en"
     spacy_model: str = "en_core_web_lg"
+    # Name/organization/email entity types only - see the note on
+    # `_DEFAULT_AUTO_PREFIXES` above for why non-name types (e.g. DATE_TIME)
+    # must never be added here.
     supported_entities: tuple[str, ...] = ("PERSON", "ORGANIZATION", "EMAIL_ADDRESS")
     categories: Mapping[str, tuple[str, str]] = _DEFAULT_CATEGORIES
     category_sheets: Mapping[str, str] = _DEFAULT_CATEGORY_SHEETS

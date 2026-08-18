@@ -120,6 +120,18 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Cause 3:** PyMuPDF extracts text with artifacts that break exact matching — typographic ligatures (`ﬁ` instead of `fi`), line-break hyphenation (`Acme Sup-\nplies`), and irregular whitespace. The master-list recognizer and spaCy see a different string than the one in the master list.
 - **Solution 3:** The PDF flow now normalizes extracted text before detection: ligatures are expanded, soft line-break hyphens are removed, and whitespace is collapsed. Detection spans are mapped back to the original extracted text, and `page.search_for()` tries a small set of fallback variants (whitespace-collapsed, punctuation-stripped, `&`/`and` swapped, common suffix stripped) when the exact text is not found. The occurrence is still reported in the detection details and crosswalk even if it cannot be written.
 
+### A name inside a Word text box, SmartArt, or embedded object is not detected
+
+- **Symptom:** A name typed into a Word text box, SmartArt diagram, or embedded object is left untouched, even though the same name elsewhere in the body/table/header is pseudonymized correctly.
+- **Cause:** `PythonDocxDocument` (`finance_redactor/infrastructure/documents/docx_gateway.py`) enumerates paragraphs from the document body, table cells (including nested tables), and headers/footers - the same "only the selectable text layer is processed" limitation as scanned PDFs, just for a different Word-specific reason: text boxes/SmartArt/embedded objects store their text outside `paragraph.runs`, so python-docx's normal paragraph walk never sees it.
+- **Solution:** Retype that text as normal paragraph text, or manually redact it. Widening the gateway to also reach into text-box/SmartArt XML would be a larger follow-up if this becomes common.
+
+### Why doesn't the tool touch dates/times?
+
+- **Symptom:** A memo date like `Jan-26` is left as plain text instead of being pseudonymized, even though Presidio can detect a `DATE_TIME` entity type.
+- **Cause:** This is deliberate, not a gap. `Settings.supported_entities` and `Settings.auto_prefixes` (`finance_redactor/config.py`) intentionally list only name/organization/email entity types (`PERSON`, `ORGANIZATION`, `EMAIL_ADDRESS`). Dates and times aren't the PII this tool exists to protect, and turning them into fake IDs would be noise, not redaction. Adding one carelessly is also a silent risk: any entity type missing from `auto_prefixes` falls back to `entity_type[:3].upper()` in `Pseudonymizer._auto_pseudonym` (`domain/pseudonyms.py`) instead of raising an error — so a `DATE_TIME` entity would quietly mint junk ids like `DAT-AUTO-4D8F3` rather than failing loudly.
+- **Solution:** Don't add `DATE_TIME` (or other non-name entity types) to `supported_entities`/`auto_prefixes`. `tests/test_config.py::test_date_time_is_never_a_supported_entity` guards against a regression here.
+
 ## Testing and linting
 
 ### `ruff` flags `E402` for the Streamlit context guard import

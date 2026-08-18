@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-A Streamlit application that **pseudonymizes** names and organization names in Excel and PDF files locally — each detected name is replaced with a stable ID (e.g. `STF-91345`, `VND-1045`, `FND-7745`) rather than a generic `[PERSON]` label, so the same entity maps to the same ID everywhere and cross-row/cross-file patterns survive for error-checking and fraud monitoring. It uses Microsoft Presidio with a spaCy `en_core_web_lg` model for PII detection, a `pyahocorasick` automaton for fast master-list name matching, openpyxl for Excel output, and PyMuPDF for PDF text replacement. This is distributed as an offline-capable desktop tool: users double-click `run.bat` (Windows) or `run.sh` (macOS/Linux) to start the local web server and open the browser.
+A Streamlit application that **pseudonymizes** names and organization names in Excel, PDF, and Word files locally — each detected name is replaced with a stable ID (e.g. `STF-91345`, `VND-1045`, `FND-7745`) rather than a generic `[PERSON]` label, so the same entity maps to the same ID everywhere and cross-row/cross-file patterns survive for error-checking and fraud monitoring. It uses Microsoft Presidio with a spaCy `en_core_web_lg` model for PII detection, a `pyahocorasick` automaton for fast master-list name matching, openpyxl for Excel output, PyMuPDF for PDF text replacement, and python-docx for Word text replacement. This is distributed as an offline-capable desktop tool: users double-click `run.bat` (Windows) or `run.sh` (macOS/Linux) to start the local web server and open the browser.
 
 IDs come from a maintained **master list** (`data/Names List - Organized.xlsx`, a top-level user-owned folder outside the package). Names not in the list are still pseudonymized with a stable, flagged auto-id and surfaced in a downloadable name→pseudonym **crosswalk** (the re-identification key — treat as Confidential).
 
@@ -96,15 +96,15 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
 
 - **`app.py`** — the Streamlit entry point **and composition root**. It builds the
   object graph (wires concrete adapters into use cases via constructor injection),
-  routes the upload to the Excel or PDF flow by extension. The `get_script_run_ctx()`
+  routes the upload to the Excel, PDF, or Word flow by extension. The `get_script_run_ctx()`
   guard at the bottom keeps `_main()` from running on import (tests/linters). It
   caches the heavy spaCy NLP model with `@st.cache_resource`, and separately caches
   the master-list-derived bundle (parsed rows, custom recognizers, detection engine,
   and the run's `quality_report()`) keyed on the workbook's modification time, so
   unrelated reruns reuse both while edits to `data/Names List - Organized.xlsx` still
-  take effect on the next refresh without a server restart. Both the Excel and PDF
-  flows receive that `quality_report()` and render it in the Advanced settings panel
-  via the shared `master_list_view`.
+  take effect on the next refresh without a server restart. All three flows receive
+  that `quality_report()` and render it in the Advanced settings panel via the
+  shared `master_list_view`.
 - **`finance_redactor/domain/`** — framework-free core. `entities.py`
   (`PiiDetection`, `Span`, `Finding`, `DetectionSource` = `MODEL`/`MASTER_LIST`) is
   the one representation of a finding all layers speak. `rules.py` holds
@@ -137,11 +137,15 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   data-quality findings. No imports of Presidio/pandas/Streamlit.
 - **`finance_redactor/application/`** — use cases over abstract **ports**.
   `ports.py` defines `Protocol`s (`PiiDetector`, `ExcelGateway`, `PdfDocument`,
-  `PdfDocumentFactory`) — there is no `TextRedactor`; replacement is done in the
-  domain. `redact_excel.py` (`RedactExcelService`) and `redact_pdf.py`
-  (`RedactPdfService`) build a `Pseudonymizer` per run, orchestrate domain + ports,
-  and return the DTOs in `results.py` plus the run's `crosswalk` (list of
-  `Assignment`). This layer imports no concrete framework.
+  `PdfDocumentFactory`, `WordDocument`, `WordDocumentFactory`) — there is no
+  `TextRedactor`; replacement is done in the domain (for Excel) or by the
+  format-specific gateway operating on domain `Span`s (for PDF/Word, which
+  don't store text as one flat string). `redact_excel.py`
+  (`RedactExcelService`), `redact_pdf.py` (`RedactPdfService`), and
+  `redact_docx.py` (`RedactDocxService`) each build a `Pseudonymizer` per run,
+  orchestrate domain + ports, and return the DTOs in `results.py` plus the
+  run's `crosswalk` (list of `Assignment`). This layer imports no concrete
+  framework.
 - **`finance_redactor/infrastructure/`** — concrete adapters implementing the
   ports. `detection/` (`PresidioEngine` for `PiiDetector` only — detection, no
   anonymizer; `CustomNameRecognizer`, which builds one `pyahocorasick`
@@ -156,7 +160,7 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   below — generic despite its name), and the old `\b...(?!\w)` boundary check
   is replicated manually against raw match positions; `recasing.py`;
   `pdf_text_normalizer.py`), `documents/` (`OpenpyxlExcelGateway`,
-  `PyMuPdfDocument`), `names/` (`MasterListRepository` +
+  `PyMuPdfDocument`, `PythonDocxDocument`), `names/` (`MasterListRepository` +
   `data/Names List - Organized.xlsx`). Presidio's
   `RecognizerResult` is translated to the domain `PiiDetection` **only** here.
   `PresidioEngine.analyze` runs spaCy on the raw text and — when ALL-CAPS tokens
@@ -169,12 +173,12 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   hyphenation, irregular whitespace) and maps detection spans back to the original
   text so replacements can be applied.
 - **`finance_redactor/presentation/`** — the only layer importing Streamlit.
-  `excel_view.py`/`pdf_view.py` own widgets + session state and delegate to use
-  cases; `presenters.py` turns results into UI artifacts (highlighted HTML, the
-  findings + crosswalk tables); `crosswalk_view.py` renders the shared crosswalk
-  expander + guarded CSV download; `master_list_view.py` renders the shared
-  master-list summary line + data-quality warnings shown in both flows' Advanced
-  settings panel.
+  `excel_view.py`/`pdf_view.py`/`docx_view.py` own widgets + session state and
+  delegate to use cases; `presenters.py` turns results into UI artifacts
+  (highlighted HTML, the findings + crosswalk tables); `crosswalk_view.py`
+  renders the shared crosswalk expander + guarded CSV download;
+  `master_list_view.py` renders the shared master-list summary line +
+  data-quality warnings shown in all three flows' Advanced settings panel.
 - **`finance_redactor/config.py`** — the single source of truth: an immutable
   `Settings` dataclass (language, spaCy model, entities, `categories`
   (category → (prefix, entity_type)), `category_sheets`, `auto_prefixes`,
@@ -242,11 +246,11 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   (Confidential)** — how it reaches the user differs by file type: for Excel
   it's embedded as a "Crosswalk" sheet in the pseudonymized workbook itself
   (`OpenpyxlExcelGateway.write`, see "Excel flow" below), making that whole
-  `.xlsx` download Confidential, not just Internal; for PDF (no sheet
-  concept) it's still only a separate, warning-gated CSV download
+  `.xlsx` download Confidential, not just Internal; for PDF and Word (neither
+  has a sheet concept) it's still only a separate, warning-gated CSV download
   (`crosswalk_view.render_crosswalk_section` with `download_separately=True`,
   its default), and the UI still warns there against ever sharing it
-  alongside the pseudonymized PDF.
+  alongside the pseudonymized PDF/`.docx`.
 - **Excel flow:** the gateway reads the workbook (pandas/openpyxl); selected text
   columns are scanned positionally; detections are kept per cell (`CellFinding`).
   `redact` runs `apply_replacements` per cell against one sheet-wide `Pseudonymizer`
@@ -267,6 +271,22 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   tries fallback search variants when the exact text cannot be located. A
   detection whose text can't be found on the page is still reported (and in the
   crosswalk) but not written.
+- **Word flow:** pseudonymize-only (no blackout mode - Word text stays fully
+  editable, matching the Excel flow rather than PDF). `PythonDocxDocument`
+  (`docx_gateway.py`) enumerates every paragraph "block" once - document body,
+  table cells (descending into nested tables), and section headers/footers,
+  deduplicating headers/footers linked across sections by their underlying part -
+  so `RedactDocxService` can iterate `block_text`/`replace_block_text` the
+  same way `RedactPdfService` iterates pages. No PDF-style text normalization
+  is needed (no ligature/hyphenation artifacts in `.docx` text). Replacement
+  happens by splicing the resolved pseudonym directly into the paragraph's
+  runs at each detection's `Span` (right-to-left, like the domain's
+  `apply_replacements`, but run-aware): for a span crossing more than one
+  run, the pseudonym is inserted once, in the run where the span starts
+  (taking that run's formatting), other overlapping runs are blanked, and
+  text outside every span keeps its own run and formatting untouched. Known
+  limitation: text inside Word text boxes, SmartArt, and embedded objects
+  isn't part of `paragraph.runs` and isn't scanned (see `docs/GOTCHA.md`).
 - **Entry points:**
   - Windows: `run.bat` is the intended end-user launcher.
   - macOS/Linux: `run.sh` performs the equivalent setup and launches Streamlit.
@@ -277,7 +297,7 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
 - `pyproject.toml` defines dependencies, dev dependency group (`ruff`, `pytest`, `codespell`), and ruff rules. Key lint selections: `F`, `E`, `W`, `I`, `D`, `UP`, `SIM`. The `ignore` list is broader than just docstrings — besides `D100`/`D104`/`D105` (module/package/magic-method docstrings), it also disables the pydocstyle rules that conflict with the formatter (`D203`, `D205`, `D213`, `D206`, `D300`), several pycodestyle indentation rules, `E501` (length is the formatter's job), `SIM110`, and `TRY003`. Check the actual `ignore` array before assuming a rule is active.
 - `line-length = 88` and `target-version = "py312"`. `requires-python = ">=3.12,<3.14"`.
 - `codespell` is configured to skip `uv.lock`, all `.txt`, and all `.csv` files (the master list contains many names that look like typos), and to ignore a short list of words (`ignore-words-list` in `pyproject.toml`) — domain jargon like `master`, and `slave` (flagged only because `CLAUDE.md`'s own prose *about* the disabled `alex.Race` rule mentions the word it's disabling).
-- `pytest` is configured with `pythonpath = ["."]` so tests can import from the repo root. Tests live under `tests/` (18 files) and cover the pure domain logic (`pseudonyms`, `rules`, `aliases`, `fuzzy`, `quality`), the `master_list_repository` parser, infrastructure adapters (Presidio detector, PDF gateway, Excel gateway), and presentation-layer formatting; `tests/**` is exempt from `D103` via `per-file-ignores`.
+- `pytest` is configured with `pythonpath = ["."]` so tests can import from the repo root. Tests live under `tests/` (20 files) and cover the pure domain logic (`pseudonyms`, `rules`, `aliases`, `fuzzy`, `quality`), the `master_list_repository` parser, infrastructure adapters (Presidio detector, PDF gateway, Excel gateway, Word gateway), and presentation-layer formatting; `tests/**` is exempt from `D103` via `per-file-ignores`.
 - `pre-commit` is **not** currently declared as a project dependency, and there is **no `.pre-commit-config.yaml`**, so no hooks (pre-commit or otherwise) run locally.
 - **CI:** `.github/workflows/ci.yml` runs on every push to `main` and on pull requests — `uv sync --locked`, then `ruff check`, `ruff format --check`, `pytest`, and `codespell`. Since distribution installs straight from `main` (`install.ps1`/`install.sh`), this is what stops a broken `main` from breaking the tool for every user on their next install/update.
 
@@ -285,9 +305,9 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
 
 - The tool is targeted at Windows 11+ end users. `run.bat` is the canonical launch method.
 - First run downloads `uv` and installs the Python environment including the `en_core_web_lg` spaCy model (~380 MB), all via `uv sync`. Subsequent starts are fast.
-- PyMuPDF (`pymupdf`) is added for PDF support; it is installed automatically by `uv sync`.
+- PyMuPDF (`pymupdf`) is added for PDF support and python-docx (`python-docx`, imported as `docx`) for Word support; both are installed automatically by `uv sync`.
 - **Sharing the tool:** distribution is via the one-line installers (`install.ps1` for Windows, `install.sh` for macOS/Linux) that download the source from the public GitHub repo and launch `run.bat`/`run.sh`. Each installer prompts for an install location, preserves any local `Names List - Organized.xlsx`, and re-running updates to the latest `main`. For a plain source zip, GitHub's **Download ZIP** button on the repo works too. (The old `package.sh`/`package.bat`/`package.ps1` zip-builder scripts were removed as redundant.)
-- Approved for **Internal** data only under IPA's data classification policy; do not use for Confidential or Highly Confidential data. **Caveat:** the name→pseudonym **crosswalk** the tool produces is itself the re-identification key and is **Confidential**. For PDF output the crosswalk is only ever a separate CSV, which must be stored/handled accordingly and never shared alongside the pseudonymized PDF (which stays Internal on its own). For Excel output the crosswalk is embedded as a "Crosswalk" sheet in the pseudonymized workbook by default — so the whole downloaded `.xlsx` file is **Confidential**, not just Internal, and must be stored/handled accordingly.
+- Approved for **Internal** data only under IPA's data classification policy; do not use for Confidential or Highly Confidential data. **Caveat:** the name→pseudonym **crosswalk** the tool produces is itself the re-identification key and is **Confidential**. For PDF and Word output the crosswalk is only ever a separate CSV, which must be stored/handled accordingly and never shared alongside the pseudonymized PDF/`.docx` (which stays Internal on its own). For Excel output the crosswalk is embedded as a "Crosswalk" sheet in the pseudonymized workbook by default — so the whole downloaded `.xlsx` file is **Confidential**, not just Internal, and must be stored/handled accordingly.
 
 ### Launcher scripts (`run.bat` / `run.sh`) — keep them pure ASCII
 

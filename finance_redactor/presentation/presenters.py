@@ -127,3 +127,24 @@ def pdf_findings_dataframe(findings: list[Finding]) -> pd.DataFrame:
             for f in findings
         ]
     )
+
+
+def docx_findings_dataframe(findings: list[Finding]) -> pd.DataFrame:
+    """Render Word (.docx) findings as a readable DataFrame for the UI.
+
+    Same shape as :func:`pdf_findings_dataframe` - findings reuse
+    :class:`Finding`, whose ``page`` field holds the paragraph/block ordinal
+    here rather than a PDF page number, so the column is labeled "Paragraph".
+    """
+    return pd.DataFrame(
+        [
+            {
+                "Paragraph": f.page + 1,
+                "Detected text": f.detected_text,
+                "Entity type": f.entity_type,
+                "Confidence": round(f.score, 2),
+                "Source": f.source.value,
+            }
+            for f in findings
+        ]
+    )
