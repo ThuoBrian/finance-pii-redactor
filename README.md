@@ -33,31 +33,23 @@ payments) stays visible in the data without ever showing the name.
 
 ## Quick start
 
-### Windows
+1. On the [GitHub repo page](https://github.com/ThuoBrian/finance-pii-redactor),
+   click **Code → Download ZIP**, then unzip it wherever you want the tool to
+   live (e.g. your Desktop). (If you have Git, `git clone` works too, and
+   makes updating later a `git pull`.)
+2. **Windows:** double-click **`run.bat`**. **macOS / Linux:** open a terminal
+   in that folder and run **`./run.sh`**.
 
-Open PowerShell and paste:
+The first launch installs everything (~400 MB, a few minutes, needs internet
+once); after that it works offline.
 
-```powershell
-irm https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/install.ps1 | iex
-```
+To update later, download a fresh ZIP over the old folder (or `git pull`).
+If you keep your master list locally rather than on a shared drive (see
+**[data/README.md](data/README.md)**), copy `data/Names List - Organized.xlsx`
+out before replacing the folder and back in afterward — nothing does this for
+you automatically.
 
-### macOS / Linux
-
-Open a terminal and paste:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/install.sh | bash
-```
-
-The installer asks where to put the tool, downloads it, and starts it. The
-first launch installs everything (~400 MB, a few minutes, needs internet once);
-after that it works offline. Run the same command again anytime to update.
-
-Already have a copy? Just double-click **`run.bat`** (Windows) or run
-**`./run.sh`** (macOS / Linux).
-
-To share the tool with a colleague, send them the command above for their
-operating system — the first run sets everything up automatically.
+To share the tool with a colleague, send them the repo link and these two steps.
 
 ## How it works
 
