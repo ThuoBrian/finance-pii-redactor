@@ -7,6 +7,7 @@ import fitz
 from finance_redactor.infrastructure.documents.pdf_gateway import (
     PyMuPdfDocument,
     _search_variants,
+    _tighten_to_line,
 )
 
 
@@ -66,3 +67,54 @@ def test_search_variants_swaps_and_and_ampersand():
 def test_search_variants_strips_org_suffix():
     variants = _search_variants("Acme Supplies Ltd")
     assert any(v == "Acme Supplies" for v in variants)
+
+
+def _tightly_spaced_two_line_pdf_bytes(line_gap: float, name: str) -> bytes:
+    """Build a real one-page PDF with two lines ``line_gap`` points apart.
+
+    ``page.search_for()``'s rect height comes from font ascent/descent
+    metrics, not the document's actual line spacing - a small enough
+    ``line_gap`` reproduces a redaction rect taller than the real gap between
+    lines (see ``_tighten_to_line``).
+    """
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "Approved by manager for payment processing.")
+    page.insert_text((72, 100 + line_gap), f"Paid to {name} for consulting services.")
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def test_redact_page_does_not_delete_text_from_the_line_above():
+    """A tightly single-spaced line above the redacted name must survive.
+
+    Reproduces a bug where page.search_for()'s font-metrics-derived rect was
+    taller than the real single-spaced line gap, so covering it as-is caused
+    apply_redactions() to also remove glyphs from the unrelated line above.
+    """
+    document = PyMuPdfDocument.open(
+        _tightly_spaced_two_line_pdf_bytes(11, "John Smith")
+    )
+
+    document.redact_page(0, [("John Smith", "STF-91345")], blackout=True)
+    redacted_bytes = document.to_bytes()
+    document.close()
+
+    redacted = PyMuPdfDocument.open(redacted_bytes)
+    text = redacted.page_text(0)
+    redacted.close()
+
+    assert "Approved by manager for payment processing." in text
+    assert "John" not in text
+    assert "Smith" not in text
+
+
+def test_tighten_to_line_shrinks_symmetrically():
+    rect = fitz.Rect(10, 100, 50, 115)
+    tightened = _tighten_to_line(rect, ratio=0.2)
+
+    assert tightened.x0 == rect.x0
+    assert tightened.x1 == rect.x1
+    assert tightened.y0 == rect.y0 + 3
+    assert tightened.y1 == rect.y1 - 3

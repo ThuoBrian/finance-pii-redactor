@@ -130,6 +130,12 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Cause 3:** PyMuPDF extracts text with artifacts that break exact matching — typographic ligatures (`ﬁ` instead of `fi`), line-break hyphenation (`Acme Sup-\nplies`), and irregular whitespace. The master-list recognizer and spaCy see a different string than the one in the master list.
 - **Solution 3:** The PDF flow now normalizes extracted text before detection: ligatures are expanded, soft line-break hyphens are removed, and whitespace is collapsed. Detection spans are mapped back to the original extracted text, and `page.search_for()` tries a small set of fallback variants (whitespace-collapsed, punctuation-stripped, `&`/`and` swapped, common suffix stripped) when the exact text is not found. The occurrence is still reported in the detection details and crosswalk even if it cannot be written.
 
+### Redacting a name in a PDF also blacks out/deletes part of the line above it
+
+- **Symptom (fixed):** In a tightly single-spaced PDF, blacking out (or pseudonymizing) a name also covers, and can even delete, part of an unrelated line directly above it.
+- **Cause:** `page.search_for()` returns a rect whose height comes from the font's ascent/descent metrics, not the document's actual line spacing. In a single-spaced or tightly-set document, that metrics-derived box can be taller than the real gap between lines, so the redaction rect overlaps the line above. `page.apply_redactions()` removes any glyph whose box touches the redaction rect — not just glyphs strictly inside the matched text — so the overlap doesn't just look wrong, it can actually delete characters from that other line.
+- **Solution:** `PyMuPdfDocument.redact_page` (`finance_redactor/infrastructure/documents/pdf_gateway.py`) now insets every text-match rect vertically by `_LINE_VERTICAL_INSET_RATIO` (`_tighten_to_line`) before covering it, removing the font-metrics padding while still fully covering the matched text — verified empirically (including names with descenders like `g`/`y`/`p`) that the match itself stays fully redacted at insets far larger than the one used. Image-blackout rectangles (from `page_image_rects`) are untouched by this, since they're real image bounding boxes, not font-metrics quads.
+
 ### A name inside a Word text box, SmartArt, or embedded object is not detected
 
 - **Symptom:** A name typed into a Word text box, SmartArt diagram, or embedded object is left untouched, even though the same name elsewhere in the body/table/header is pseudonymized correctly.

@@ -270,7 +270,12 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   mapped back to the original extracted text before replacement. The gateway also
   tries fallback search variants when the exact text cannot be located. A
   detection whose text can't be found on the page is still reported (and in the
-  crosswalk) but not written.
+  crosswalk) but not written. Every text-match rect from `page.search_for()`
+  is vertically inset (`_tighten_to_line`, `pdf_gateway.py`) before being
+  covered, since its height comes from font ascent/descent metrics
+  rather than the document's actual line spacing and can otherwise bleed
+  into (and, via `apply_redactions()`, delete text from) the line above in a
+  tightly single-spaced PDF — see `docs/GOTCHA.md`.
 - **Word flow:** pseudonymize-only (no blackout mode - Word text stays fully
   editable, matching the Excel flow rather than PDF). `PythonDocxDocument`
   (`docx_gateway.py`) enumerates every paragraph "block" once - document body,
