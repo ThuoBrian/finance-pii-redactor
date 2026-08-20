@@ -27,6 +27,7 @@ from enum import Enum
 
 from finance_redactor.application.ports import PdfDocumentFactory, PiiDetector
 from finance_redactor.application.results import PdfRedactionResult
+from finance_redactor.domain.custom_words import find_custom_words
 from finance_redactor.domain.entities import IMAGE_REDACTION_SENTINEL, Finding
 from finance_redactor.domain.pseudonyms import MasterEntry, Pseudonymizer
 from finance_redactor.domain.rules import dedupe_overlapping
@@ -53,18 +54,23 @@ class RedactPdfService:
         master_map: Mapping[tuple[str, str], MasterEntry],
         auto_prefixes: Mapping[str, str],
         fuzzy_threshold: float = 0.84,
+        custom_words_score: float = 1.0,
     ) -> None:
         """Wire the detector, a PDF-opening factory, and pseudonym vocabulary.
 
         ``fuzzy_threshold`` should normally be ``Settings.fuzzy_match_threshold``,
         passed explicitly by the composition root; the default here only covers
         callers (e.g. tests) that don't care about the fuzzy-suggestion feature.
+        ``custom_words_score`` should normally be ``Settings.custom_words_score``;
+        it's the confidence recorded for an ad-hoc "words to redact" match (see
+        ``execute``'s ``custom_words`` param).
         """
         self._detector = detector
         self._open_document = open_document
         self._master_map = master_map
         self._auto_prefixes = auto_prefixes
         self._fuzzy_threshold = fuzzy_threshold
+        self._custom_words_score = custom_words_score
 
     def execute(
         self,
@@ -74,8 +80,17 @@ class RedactPdfService:
         *,
         style: RedactionStyle = RedactionStyle.PSEUDONYMIZE,
         redact_images: bool = False,
+        custom_words: list[str] | None = None,
     ) -> PdfRedactionResult:
-        """Redact ``source`` and return new bytes, findings, page count, crosswalk."""
+        """Redact ``source`` and return new bytes, findings, page count, crosswalk.
+
+        ``custom_words``, if given, is a list of ad-hoc words/phrases to
+        redact on every page in addition to whatever ``entities`` detects -
+        matched literally and case-insensitively (see
+        ``domain/custom_words.find_custom_words``), even if not in the master
+        list. Not curated, not saved anywhere: re-supplied by the caller on
+        every run.
+        """
         document = self._open_document(source)
         pseudonymizer = Pseudonymizer(
             self._master_map, self._auto_prefixes, fuzzy_threshold=self._fuzzy_threshold
@@ -95,6 +110,10 @@ class RedactPdfService:
                     if has_text
                     else []
                 )
+                if has_text and custom_words:
+                    detections = detections + find_custom_words(
+                        normalized.text, custom_words, self._custom_words_score
+                    )
 
                 kept = dedupe_overlapping(detections)
                 redactions: list[tuple[str | list[str], str]] = []

@@ -10,6 +10,7 @@ import pytest
 
 from finance_redactor.application.redact_docx import RedactDocxService
 from finance_redactor.domain.entities import DetectionSource, PiiDetection, Span
+from finance_redactor.domain.pseudonyms import MasterEntry
 
 
 class FakeWordDocument:
@@ -140,6 +141,76 @@ def test_crosswalk_lists_distinct_assignments() -> None:
     names = {a.original_name for a in result.crosswalk}
     assert names == {"John", "Mary"}
     assert all(a.auto for a in result.crosswalk)
+
+
+def test_custom_words_are_pseudonymized_and_survive_across_blocks() -> None:
+    """An ad-hoc custom word gets a stable CUSTOM auto-id, consistent across blocks."""
+    doc = FakeWordDocument(
+        ["Project Nightingale kickoff", "Recap of Project Nightingale"]
+    )
+    service = RedactDocxService(
+        detector=_NameDetector(),
+        open_document=_document_factory,
+        master_map={},
+        auto_prefixes={"PERSON": "PSN", "CUSTOM": "CST"},
+    )
+
+    result = service.execute(
+        doc, ["PERSON"], 0.35, custom_words=["Project Nightingale"]
+    )
+
+    assert result.entity_count == 2
+    labels = {
+        a.pseudonym
+        for a in result.crosswalk
+        if a.original_name == "Project Nightingale"
+    }
+    assert len(labels) == 1
+    (label,) = labels
+    assert label.startswith("CST-AUTO-")
+    assert doc.replacements_by_block[0][0][1] == label
+    assert doc.replacements_by_block[1][0][1] == label
+
+
+def test_custom_words_do_not_override_an_overlapping_master_list_hit() -> None:
+    """A custom word matching a curated master-list name keeps the curated id."""
+
+    class _MasterListStyleDetector:
+        """Fake detector that tags 'Jane Doe' as a master-list-sourced PERSON hit."""
+
+        def analyze(
+            self, text: str, entities: list[str], threshold: float
+        ) -> list[PiiDetection]:
+            if "PERSON" not in entities:
+                return []
+            idx = text.find("Jane Doe")
+            if idx == -1:
+                return []
+            return [
+                PiiDetection(
+                    entity_type="PERSON",
+                    span=Span(idx, idx + len("Jane Doe")),
+                    score=0.9,
+                    text="Jane Doe",
+                    source=DetectionSource.MASTER_LIST,
+                )
+            ]
+
+    doc = FakeWordDocument(["Paid to Jane Doe for services"])
+    service = RedactDocxService(
+        detector=_MasterListStyleDetector(),
+        open_document=_document_factory,
+        master_map={
+            ("PERSON", "jane doe"): MasterEntry(pseudonym="STF-91345", category="Staff")
+        },
+        auto_prefixes={"PERSON": "PSN", "CUSTOM": "CST"},
+    )
+
+    result = service.execute(doc, ["PERSON"], 0.35, custom_words=["Jane Doe"])
+
+    assert result.entity_count == 1
+    assert result.crosswalk[0].pseudonym == "STF-91345"
+    assert doc.replacements_by_block[0][0][1] == "STF-91345"
 
 
 def test_document_is_closed_even_on_detector_error() -> None:

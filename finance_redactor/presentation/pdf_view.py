@@ -80,6 +80,16 @@ def run_pdf_flow(
             default=list(settings.supported_entities),
             key="pdf_entities",
         )
+        custom_words_input = st.text_area(
+            "Additional words/phrases to redact (optional)",
+            help=(
+                "One per line. Redacted in addition to detected "
+                "names/organizations/emails, even if not in the master list - "
+                "useful for a one-off sensitive term (e.g. a project codename). "
+                "Not saved anywhere; re-enter next time if needed."
+            ),
+            key="pdf_custom_words",
+        )
         redact_images = st.checkbox(
             "Also black out images / logos",
             value=False,
@@ -101,6 +111,7 @@ def run_pdf_flow(
     )
     if st.button(button_label, type="primary", width="stretch"):
         uploaded.seek(0)
+        custom_words = [w.strip() for w in custom_words_input.splitlines() if w.strip()]
         with st.spinner("Scanning PDF for PII..."):
             result = pdf_service.execute(
                 uploaded,
@@ -108,6 +119,7 @@ def run_pdf_flow(
                 threshold,
                 style=style,
                 redact_images=(redact_images and style == RedactionStyle.BLACKOUT),
+                custom_words=custom_words,
             )
         st.session_state.pdf_buffer = result.data
         st.session_state.pdf_findings = result.findings

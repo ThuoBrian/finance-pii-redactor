@@ -10,6 +10,7 @@ import pytest
 
 from finance_redactor.application.redact_pdf import RedactionStyle, RedactPdfService
 from finance_redactor.domain.entities import DetectionSource, PiiDetection, Span
+from finance_redactor.domain.pseudonyms import MasterEntry
 
 
 class FakePdfDocument:
@@ -238,6 +239,99 @@ def test_pseudonymize_mode_does_not_blackout_images() -> None:
     sentinels = [r for r, _ in doc.redactions_by_page[0] if r == "__IMAGE__"]
     assert sentinels == []
     assert doc.blackout_by_page[0] is False
+
+
+def test_custom_words_are_pseudonymized_and_survive_across_pages() -> None:
+    """An ad-hoc custom word gets a stable CUSTOM auto-id, consistent across pages."""
+    doc = FakePdfDocument(
+        ["Project Nightingale kickoff", "Recap of Project Nightingale"]
+    )
+    service = RedactPdfService(
+        detector=_NameDetector(),
+        open_document=_document_factory,
+        master_map={},
+        auto_prefixes={"PERSON": "PSN", "CUSTOM": "CST"},
+    )
+
+    result = service.execute(
+        doc, ["PERSON"], 0.35, custom_words=["Project Nightingale"]
+    )
+
+    assert result.entity_count == 2
+    labels = {
+        a.pseudonym
+        for a in result.crosswalk
+        if a.original_name == "Project Nightingale"
+    }
+    assert len(labels) == 1
+    (label,) = labels
+    assert label.startswith("CST-AUTO-")
+    assert doc.redactions_by_page[0][0][1] == label
+    assert doc.redactions_by_page[1][0][1] == label
+
+
+def test_custom_words_are_covered_in_blackout_mode_too() -> None:
+    """Blackout mode also covers ad-hoc custom words, not just detector hits."""
+    doc = FakePdfDocument(["Reference: Case 4471-B is confidential."])
+    service = RedactPdfService(
+        detector=_NameDetector(),
+        open_document=_document_factory,
+        master_map={},
+        auto_prefixes={"PERSON": "PSN", "CUSTOM": "CST"},
+    )
+
+    result = service.execute(
+        doc,
+        ["PERSON"],
+        0.35,
+        style=RedactionStyle.BLACKOUT,
+        custom_words=["Case 4471-B"],
+    )
+
+    assert result.entity_count == 1
+    assert doc.blackout_by_page[0] is True
+    assert doc.redactions_by_page[0][0][0] == "Case 4471-B"
+
+
+def test_custom_words_do_not_override_an_overlapping_master_list_hit() -> None:
+    """A custom word matching a curated master-list name keeps the curated id."""
+
+    class _MasterListStyleDetector:
+        """Fake detector that tags 'Jane Doe' as a master-list-sourced PERSON hit."""
+
+        def analyze(
+            self, text: str, entities: list[str], threshold: float
+        ) -> list[PiiDetection]:
+            if "PERSON" not in entities:
+                return []
+            idx = text.find("Jane Doe")
+            if idx == -1:
+                return []
+            return [
+                PiiDetection(
+                    entity_type="PERSON",
+                    span=Span(idx, idx + len("Jane Doe")),
+                    score=0.9,
+                    text="Jane Doe",
+                    source=DetectionSource.MASTER_LIST,
+                )
+            ]
+
+    doc = FakePdfDocument(["Paid to Jane Doe for services"])
+    service = RedactPdfService(
+        detector=_MasterListStyleDetector(),
+        open_document=_document_factory,
+        master_map={
+            ("PERSON", "jane doe"): MasterEntry(pseudonym="STF-91345", category="Staff")
+        },
+        auto_prefixes={"PERSON": "PSN", "CUSTOM": "CST"},
+    )
+
+    result = service.execute(doc, ["PERSON"], 0.35, custom_words=["Jane Doe"])
+
+    assert result.entity_count == 1
+    assert result.crosswalk[0].pseudonym == "STF-91345"
+    assert doc.redactions_by_page[0][0][1] == "STF-91345"
 
 
 def test_name_with_pdf_artifacts_is_detected_after_normalization() -> None:

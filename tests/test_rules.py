@@ -103,3 +103,24 @@ def test_dedupe_non_overlapping_master_list_and_model_both_kept() -> None:
     model_hit = _detection(20, 30, score=0.6, source=DetectionSource.MODEL)
     kept = dedupe_overlapping([model_hit, master_list_hit])
     assert set(kept) == {master_list_hit, model_hit}
+
+
+def test_dedupe_custom_word_wins_over_overlapping_model_guess() -> None:
+    """An ad-hoc custom word beats an overlapping model guess.
+
+    It's still an explicit, exact match the user typed for this run, just
+    not a curated one - stronger than a statistical guess, weaker than a
+    curated master-list match (see the next test).
+    """
+    custom_hit = _detection(0, 10, score=1.0, source=DetectionSource.CUSTOM)
+    model_hit = _detection(0, 25, score=0.85, source=DetectionSource.MODEL)
+    kept = dedupe_overlapping([model_hit, custom_hit])
+    assert kept == [custom_hit]
+
+
+def test_dedupe_master_list_wins_over_overlapping_custom_word() -> None:
+    """A curated master-list match still wins over an overlapping custom word."""
+    master_list_hit = _detection(0, 10, score=0.9, source=DetectionSource.MASTER_LIST)
+    custom_hit = _detection(0, 25, score=1.0, source=DetectionSource.CUSTOM)
+    kept = dedupe_overlapping([custom_hit, master_list_hit])
+    assert kept == [master_list_hit]

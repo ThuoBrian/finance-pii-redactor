@@ -106,16 +106,29 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   that `quality_report()` and render it in the Advanced settings panel via the
   shared `master_list_view`.
 - **`finance_redactor/domain/`** — framework-free core. `entities.py`
-  (`PiiDetection`, `Span`, `Finding`, `DetectionSource` = `MODEL`/`MASTER_LIST`) is
-  the one representation of a finding all layers speak. `rules.py` holds
-  `dedupe_overlapping` and `classify_source` (score → model/master list).
-  `dedupe_overlapping` breaks overlaps by source first (a `MASTER_LIST`
-  detection always wins over an overlapping `MODEL` detection, regardless of
-  which span is longer — a curated exact match is a stronger signal than a
-  statistical guess, e.g. spaCy fusing a trailing hyphenated phrase onto a
-  curated name, `"Brian Thuo - Kakamega"`, must not out-vote the exact
-  master-list match `"Brian Thuo"`), then leftmost/longest within the same
-  source. `pseudonyms.py` holds the pseudonymization core:
+  (`PiiDetection`, `Span`, `Finding`, `DetectionSource` =
+  `MODEL`/`MASTER_LIST`/`CUSTOM`) is the one representation of a finding all
+  layers speak. `rules.py` holds `dedupe_overlapping` and `classify_source`
+  (score → model/master list). `dedupe_overlapping` breaks overlaps by
+  source first, using a 3-tier priority (`_SOURCE_PRIORITY`): `MASTER_LIST` >
+  `CUSTOM` > `MODEL`. A `MASTER_LIST` detection always wins over an
+  overlapping `MODEL` or `CUSTOM` detection regardless of which span is
+  longer — a curated exact match is a stronger signal than either a
+  statistical guess or an ad-hoc word the user typed for this run (e.g.
+  spaCy fusing a trailing hyphenated phrase onto a curated name, `"Brian
+  Thuo - Kakamega"`, must not out-vote the exact master-list match `"Brian
+  Thuo"`); a `CUSTOM` detection in turn beats an overlapping `MODEL` one,
+  since it's still an explicit exact match, just not curated. Within the
+  same source, leftmost/longest wins. `custom_words.py`'s
+  `find_custom_words(text, words, score)` is the PDF/Word "words to redact"
+  box's matcher: a small, framework-free, regex-based literal/case-insensitive
+  matcher (word-boundary checked, whitespace-flexible for multi-word
+  phrases) - deliberately standalone rather than routed through
+  `CustomNameRecognizer`/`PresidioEngine`, since those are built once and
+  cached process-wide (`app.py`'s `_get_master_list_bundle`) for the curated
+  master list, and mutating that shared cache per ad-hoc, per-request word
+  list would risk one user's words leaking into a different user's session.
+  `pseudonyms.py` holds the pseudonymization core:
   `normalize`, the `Pseudonymizer` (master-list lookup + deterministic auto-id
   fallback, accumulating the crosswalk), and `apply_replacements` (dedupe + slice
   spans right-to-left). **This is the single seam where a name becomes an ID.**
@@ -308,7 +321,17 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   covered, since its height comes from font ascent/descent metrics
   rather than the document's actual line spacing and can otherwise bleed
   into (and, via `apply_redactions()`, delete text from) the line above in a
-  tightly single-spaced PDF — see `docs/GOTCHA.md`.
+  tightly single-spaced PDF — see `docs/GOTCHA.md`. Both the PDF and Word
+  flows accept an optional `custom_words` list from the "Additional
+  words/phrases to redact" box in their Advanced settings panel
+  (`pdf_view.py`/`docx_view.py`); each page/block's `find_custom_words(...)`
+  results are unioned with the detector's own results before
+  `dedupe_overlapping` runs, so a custom word is pseudonymized (flagged
+  `CST-AUTO-<hash>`, via `_DEFAULT_AUTO_PREFIXES["CUSTOM"]`) and appears in
+  the crosswalk exactly like any other detection. Not persisted anywhere -
+  the box resets to its widget default on a fresh session, but (unlike the
+  session-state keys cleared on a *new upload*) survives across multiple
+  uploads within the same browser session.
 - **Word flow:** pseudonymize-only (no blackout mode - Word text stays fully
   editable, matching the Excel flow rather than PDF). `PythonDocxDocument`
   (`docx_gateway.py`) enumerates every paragraph "block" once - document body,
@@ -335,7 +358,7 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
 - `pyproject.toml` defines dependencies, dev dependency group (`ruff`, `pytest`, `codespell`), and ruff rules. Key lint selections: `F`, `E`, `W`, `I`, `D`, `UP`, `SIM`. The `ignore` list is broader than just docstrings — besides `D100`/`D104`/`D105` (module/package/magic-method docstrings), it also disables the pydocstyle rules that conflict with the formatter (`D203`, `D205`, `D213`, `D206`, `D300`), several pycodestyle indentation rules, `E501` (length is the formatter's job), `SIM110`, and `TRY003`. Check the actual `ignore` array before assuming a rule is active.
 - `line-length = 88` and `target-version = "py312"`. `requires-python = ">=3.12,<3.14"`.
 - `codespell` is configured to skip `uv.lock`, all `.txt`, and all `.csv` files (the master list contains many names that look like typos), and to ignore a short list of words (`ignore-words-list` in `pyproject.toml`) — domain jargon like `master`, and `slave` (flagged only because `CLAUDE.md`'s own prose *about* the disabled `alex.Race` rule mentions the word it's disabling).
-- `pytest` is configured with `pythonpath = ["."]` so tests can import from the repo root. Tests live under `tests/` (22 files) and cover the pure domain logic (`pseudonyms`, `rules`, `aliases`, `fuzzy`, `quality`), the `master_list_repository` parser, infrastructure adapters (Presidio detector, PDF gateway, Excel gateway, Word gateway), and presentation-layer formatting; `tests/**` is exempt from `D103` via `per-file-ignores`. `tests/conftest.py` has an `autouse` fixture that points `Path.home()` at a throwaway directory for every test, so the suite never reads or writes a real developer machine's persisted master-list settings file (see "In-app master-list setup" above).
+- `pytest` is configured with `pythonpath = ["."]` so tests can import from the repo root. Tests live under `tests/` (23 files) and cover the pure domain logic (`pseudonyms`, `rules`, `aliases`, `fuzzy`, `quality`, `custom_words`), the `master_list_repository` parser, infrastructure adapters (Presidio detector, PDF gateway, Excel gateway, Word gateway), and presentation-layer formatting; `tests/**` is exempt from `D103` via `per-file-ignores`. `tests/conftest.py` has an `autouse` fixture that points `Path.home()` at a throwaway directory for every test, so the suite never reads or writes a real developer machine's persisted master-list settings file (see "In-app master-list setup" above).
 - `pre-commit` is **not** currently declared as a project dependency, and there is **no `.pre-commit-config.yaml`**, so no hooks (pre-commit or otherwise) run locally.
 - **CI:** `.github/workflows/ci.yml` runs on every push to `main` and on pull requests — `uv sync --locked`, then `ruff check`, `ruff format --check`, `pytest`, and `codespell`. Since distribution installs straight from `main` (`install.ps1`/`install.sh`), this is what stops a broken `main` from breaking the tool for every user on their next install/update.
 

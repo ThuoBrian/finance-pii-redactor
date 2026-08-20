@@ -67,6 +67,16 @@ def run_docx_flow(
             default=list(settings.supported_entities),
             key="docx_entities",
         )
+        custom_words_input = st.text_area(
+            "Additional words/phrases to redact (optional)",
+            help=(
+                "One per line. Redacted in addition to detected "
+                "names/organizations/emails, even if not in the master list - "
+                "useful for a one-off sensitive term (e.g. a project codename). "
+                "Not saved anywhere; re-enter next time if needed."
+            ),
+            key="docx_custom_words",
+        )
         render_master_list_status(
             name_counts,
             quality_issues,
@@ -76,8 +86,11 @@ def run_docx_flow(
 
     if st.button("Pseudonymize Word document", type="primary", width="stretch"):
         uploaded.seek(0)
+        custom_words = [w.strip() for w in custom_words_input.splitlines() if w.strip()]
         with st.spinner("Scanning document for PII..."):
-            result = docx_service.execute(uploaded, entity_options, threshold)
+            result = docx_service.execute(
+                uploaded, entity_options, threshold, custom_words=custom_words
+            )
         st.session_state.docx_buffer = result.data
         st.session_state.docx_findings = result.findings
         st.session_state.docx_blocks = result.block_count

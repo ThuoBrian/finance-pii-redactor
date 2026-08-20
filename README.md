@@ -88,7 +88,12 @@ operating system — the first run sets everything up automatically.
    alternative to the dialog.
 2. Upload an Excel, PDF, or Word file. It's processed entirely on your computer.
 3. Choose what to detect (people, organizations, emails) and review the
-   results.
+   results. For PDF and Word files, you can also type/paste extra
+   words or phrases into **Advanced settings**' "Additional words/phrases to
+   redact" box — anything one-off that isn't in the master list (a project
+   codename, a case number). These get a stable code too, just like
+   everything else, but aren't saved anywhere — re-enter them if you need
+   them again in a later session.
 4. Download the pseudonymized file.
    - **Excel:** the download already includes the name-to-code mapping as a
      second sheet ("Crosswalk"), so the whole file is Confidential — see
