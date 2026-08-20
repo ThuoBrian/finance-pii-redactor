@@ -1,35 +1,26 @@
 """Streamlit flow for PDF pseudonymization.
 
 Thin presentation: handles session state and widgets, delegates the whole
-detect-and-pseudonymize pipeline to :class:`RedactPdfService`, and renders the
-summary via ``presenters``.
+pseudonymize pipeline to :class:`RedactPdfService`, and renders the summary
+via ``presenters``. Unlike Excel/Word, PDF has no automatic detection at all
+(no spaCy model, no master list) - the only thing redacted is whatever the
+user types into the "words to redact" box below, so this flow has no entity
+multiselect, no confidence threshold, and no master-list status panel.
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import streamlit as st
 
 from finance_redactor.application.redact_pdf import RedactionStyle, RedactPdfService
-from finance_redactor.config import Settings
-from finance_redactor.domain.quality import QualityIssue
 from finance_redactor.presentation.crosswalk_view import render_crosswalk_section
-from finance_redactor.presentation.master_list_view import render_master_list_status
 from finance_redactor.presentation.presenters import pdf_findings_dataframe
 
 
-def run_pdf_flow(
-    uploaded: Any,
-    *,
-    pdf_service: RedactPdfService,
-    settings: Settings,
-    name_counts: Mapping[str, int],
-    quality_issues: Sequence[QualityIssue] | None = None,
-    on_refresh_master_list: Callable[[], None] | None = None,
-) -> None:
+def run_pdf_flow(uploaded: Any, *, pdf_service: RedactPdfService) -> None:
     """Render the PDF pseudonymization flow in Streamlit."""
     if (
         st.session_state.get("uploaded_name") != uploaded.name
@@ -60,33 +51,20 @@ def run_pdf_flow(
                 else "Black out (cover with black boxes)"
             ),
             help=(
-                "Pseudonymize replaces names with stable IDs like STF-91345. "
-                "Black out covers detected text and images with a black shade."
+                "Pseudonymize replaces matched text with stable IDs like "
+                "CST-AUTO-3F9A1. Black out covers matched text and images "
+                "with a black shade."
             ),
             key="pdf_style",
         )
-        threshold = st.slider(
-            "Confidence threshold",
-            min_value=0.1,
-            max_value=1.0,
-            value=settings.default_threshold,
-            step=0.05,
-            help="Lower values flag more text (fewer missed names, more false positives).",
-            key="pdf_threshold",
-        )
-        entity_options = st.multiselect(
-            "Text to redact",
-            options=list(settings.supported_entities),
-            default=list(settings.supported_entities),
-            key="pdf_entities",
-        )
         custom_words_input = st.text_area(
-            "Additional words/phrases to redact (optional)",
+            "Words/phrases to redact",
             help=(
-                "One per line. Redacted in addition to detected "
-                "names/organizations/emails, even if not in the master list - "
-                "useful for a one-off sensitive term (e.g. a project codename). "
-                "Not saved anywhere; re-enter next time if needed."
+                "One per line. This is the only thing redacted in PDF files - "
+                "there's no automatic name/organization detection for PDFs, so "
+                "type or paste every word or phrase you want covered (e.g. a "
+                "name, a project codename, a case number). Not saved anywhere; "
+                "re-enter next time if needed."
             ),
             key="pdf_custom_words",
         )
@@ -99,27 +77,26 @@ def run_pdf_flow(
             ),
             key="pdf_redact_images",
         )
-        render_master_list_status(
-            name_counts,
-            quality_issues,
-            settings.master_list_file,
-            on_refresh=on_refresh_master_list,
+
+    custom_words = [w.strip() for w in custom_words_input.splitlines() if w.strip()]
+    if not custom_words:
+        st.info(
+            "Type at least one word or phrase above to redact - PDF files have "
+            "no automatic detection, so there's nothing to do yet."
         )
+        st.stop()
 
     button_label = (
         "Black out PDF" if style == RedactionStyle.BLACKOUT else "Pseudonymize PDF"
     )
     if st.button(button_label, type="primary", width="stretch"):
         uploaded.seek(0)
-        custom_words = [w.strip() for w in custom_words_input.splitlines() if w.strip()]
-        with st.spinner("Scanning PDF for PII..."):
+        with st.spinner("Scanning PDF..."):
             result = pdf_service.execute(
                 uploaded,
-                entity_options,
-                threshold,
+                custom_words,
                 style=style,
                 redact_images=(redact_images and style == RedactionStyle.BLACKOUT),
-                custom_words=custom_words,
             )
         st.session_state.pdf_buffer = result.data
         st.session_state.pdf_findings = result.findings
@@ -137,18 +114,19 @@ def run_pdf_flow(
 
     if n_entities == 0:
         st.info(
-            f"No PII was detected across {total_pages} page(s). The file is already clean."
+            "None of the words/phrases you entered were found across "
+            f"{total_pages} page(s)."
         )
         st.stop()
 
     style_value = st.session_state.get("pdf_style", RedactionStyle.PSEUDONYMIZE.value)
     if style_value == RedactionStyle.BLACKOUT.value:
         st.success(
-            f"Found {n_entities} PII instance(s) across {total_pages} page(s); "
-            "detected areas will be blacked out in the downloaded PDF."
+            f"Found {n_entities} match(es) across {total_pages} page(s); "
+            "matched areas will be blacked out in the downloaded PDF."
         )
     else:
-        st.success(f"Found {n_entities} PII instance(s) across {total_pages} page(s).")
+        st.success(f"Found {n_entities} match(es) across {total_pages} page(s).")
 
     base_name = re.sub(r"[^\w\-]", "_", uploaded.name.rsplit(".", 1)[0])
     render_crosswalk_section(
@@ -165,15 +143,15 @@ def run_pdf_flow(
         label = "Download blacked-out PDF"
         file_name = f"{base_name}_blacked_out.pdf"
         caption = (
-            "Detected text and selected images are covered with a black shade "
+            "Matched text and selected images are covered with a black shade "
             "in the downloaded PDF."
         )
     else:
         label = "Download pseudonymized PDF"
         file_name = f"{base_name}_pseudonymized.pdf"
         caption = (
-            "Detected names and organizations are replaced with their pseudonyms "
-            "(e.g. STF-91345) directly in the PDF text layer."
+            "Matched words/phrases are replaced with their pseudonyms "
+            "(e.g. CST-AUTO-3F9A1) directly in the PDF text layer."
         )
     st.download_button(
         label=label,

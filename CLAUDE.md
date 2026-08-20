@@ -307,31 +307,35 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   "Crosswalk" sheet alongside "Redacted", so every downloaded Excel file
   carries its own re-identification key by default (see "Pseudonyms &
   crosswalk" below for the confidentiality consequence of that).
-- **PDF flow:** the use case pulls per-page raw text from the gateway, normalizes
-  it (`pdf_text_normalizer.py`) to remove ligatures / hyphenation / irregular
-  whitespace, detects on the normalized text, applies the domain
-  `dedupe_overlapping`, resolves each kept detection to its pseudonym via a
-  document-wide `Pseudonymizer`, records a `Finding`, and tells the gateway to
-  write the pseudonym into the text layer. Spans found in normalized text are
-  mapped back to the original extracted text before replacement. The gateway also
-  tries fallback search variants when the exact text cannot be located. A
-  detection whose text can't be found on the page is still reported (and in the
-  crosswalk) but not written. Every text-match rect from `page.search_for()`
-  is vertically inset (`_tighten_to_line`, `pdf_gateway.py`) before being
-  covered, since its height comes from font ascent/descent metrics
-  rather than the document's actual line spacing and can otherwise bleed
-  into (and, via `apply_redactions()`, delete text from) the line above in a
-  tightly single-spaced PDF — see `docs/GOTCHA.md`. Both the PDF and Word
-  flows accept an optional `custom_words` list from the "Additional
-  words/phrases to redact" box in their Advanced settings panel
-  (`pdf_view.py`/`docx_view.py`); each page/block's `find_custom_words(...)`
-  results are unioned with the detector's own results before
-  `dedupe_overlapping` runs, so a custom word is pseudonymized (flagged
-  `CST-AUTO-<hash>`, via `_DEFAULT_AUTO_PREFIXES["CUSTOM"]`) and appears in
-  the crosswalk exactly like any other detection. Not persisted anywhere -
-  the box resets to its widget default on a fresh session, but (unlike the
-  session-state keys cleared on a *new upload*) survives across multiple
-  uploads within the same browser session.
+- **PDF flow:** unlike Excel/Word, PDF has **no automatic detection at all** -
+  no spaCy model, no master-list matching. `RedactPdfService` (`redact_pdf.py`)
+  takes only a `custom_words` list (from the "Words/phrases to redact" box in
+  `pdf_view.py`'s Advanced settings - the sole input; the UI stops with a
+  message before the button even renders if it's empty, mirroring
+  `excel_view.py`'s "select at least one column" guard) and finds those
+  literal phrases via `domain/custom_words.find_custom_words` alone - every
+  match is `entity_type="CUSTOM"`/`DetectionSource.CUSTOM` and always
+  resolves to a flagged `CST-AUTO-<hash>` id (`master_map` is still wired
+  through to `Pseudonymizer` and could resolve a curated id, but `app.py`
+  passes an explicit `{}` for it on the PDF branch, since there's nothing to
+  look up). The use case still pulls per-page raw text from the gateway,
+  normalizes it (`pdf_text_normalizer.py`) to remove ligatures / hyphenation
+  / irregular whitespace before matching (so a custom phrase split across a
+  hyphenated line break is still found), applies the domain
+  `dedupe_overlapping` (now just leftmost/longest tie-breaking among
+  same-source matches, e.g. two overlapping typed phrases), resolves each
+  kept match to its pseudonym via a document-wide `Pseudonymizer`, records a
+  `Finding`, and tells the gateway to write the pseudonym into the text
+  layer. Spans found in normalized text are mapped back to the original
+  extracted text before replacement. The gateway also tries fallback search
+  variants when the exact text cannot be located. A match whose text can't
+  be found on the page is still reported (and in the crosswalk) but not
+  written. Every text-match rect from `page.search_for()` is vertically
+  inset (`_tighten_to_line`, `pdf_gateway.py`) before being covered, since
+  its height comes from font ascent/descent metrics rather than the
+  document's actual line spacing and can otherwise bleed into (and, via
+  `apply_redactions()`, delete text from) the line above in a tightly
+  single-spaced PDF — see `docs/GOTCHA.md`.
 - **Word flow:** pseudonymize-only (no blackout mode - Word text stays fully
   editable, matching the Excel flow rather than PDF). `PythonDocxDocument`
   (`docx_gateway.py`) enumerates every paragraph "block" once - document body,
@@ -348,6 +352,18 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   text outside every span keeps its own run and formatting untouched. Known
   limitation: text inside Word text boxes, SmartArt, and embedded objects
   isn't part of `paragraph.runs` and isn't scanned (see `docs/GOTCHA.md`).
+  Unlike PDF (see above), Word's automatic spaCy/master-list detection is
+  unchanged - `RedactDocxService.execute()` accepts an *optional*
+  `custom_words` list from the "Additional words/phrases to redact (optional)"
+  box in `docx_view.py`'s Advanced settings, purely as a supplement: each
+  block's `find_custom_words(...)` results are unioned with the detector's
+  own results before `dedupe_overlapping` runs, so a custom word is
+  pseudonymized (flagged `CST-AUTO-<hash>`) and appears in the crosswalk
+  exactly like any other detection, but leaving the box empty still
+  redacts names/organizations/emails as normal. Not persisted anywhere - the
+  box resets to its widget default on a fresh session, but (unlike the
+  session-state keys cleared on a *new upload*) survives across multiple
+  uploads within the same browser session.
 - **Entry points:**
   - Windows: `run.bat` is the intended end-user launcher.
   - macOS/Linux: `run.sh` performs the equivalent setup and launches Streamlit.

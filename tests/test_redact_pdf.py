@@ -1,7 +1,9 @@
 """Tests for the PDF pseudonymization / blackout use case.
 
-Framework-free: a fake :class:`PdfDocument` and detector stand in for PyMuPDF
-and Presidio, so these tests run without the heavy language model.
+Framework-free: a fake :class:`PdfDocument` stands in for PyMuPDF, so these
+tests run without any heavy dependency. PDF has no detector at all - every
+test drives the service purely through the ``custom_words`` list, the only
+input this flow has.
 """
 
 from __future__ import annotations
@@ -9,8 +11,6 @@ from __future__ import annotations
 import pytest
 
 from finance_redactor.application.redact_pdf import RedactionStyle, RedactPdfService
-from finance_redactor.domain.entities import DetectionSource, PiiDetection, Span
-from finance_redactor.domain.pseudonyms import MasterEntry
 
 
 class FakePdfDocument:
@@ -96,39 +96,11 @@ def _document_factory(source: object) -> FakePdfDocument:
     return source
 
 
-class _NameDetector:
-    """Fake detector: flags the literal names ``John`` and ``Mary``."""
-
-    _NAMES = ("John", "Mary")
-
-    def analyze(
-        self, text: str, entities: list[str], threshold: float
-    ) -> list[PiiDetection]:
-        """Return a detection for each configured name found in ``text``."""
-        if "PERSON" not in entities:
-            return []
-        detections: list[PiiDetection] = []
-        for name in self._NAMES:
-            idx = text.find(name)
-            if idx != -1:
-                detections.append(
-                    PiiDetection(
-                        entity_type="PERSON",
-                        span=Span(idx, idx + len(name)),
-                        score=0.99,
-                        text=name,
-                        source=DetectionSource.MODEL,
-                    )
-                )
-        return detections
-
-
-def _service(detector: _NameDetector | None = None) -> RedactPdfService:
+def _service() -> RedactPdfService:
     return RedactPdfService(
-        detector=detector or _NameDetector(),
         open_document=_document_factory,
         master_map={},
-        auto_prefixes={"PERSON": "PSN"},
+        auto_prefixes={"CUSTOM": "CST"},
     )
 
 
@@ -137,7 +109,7 @@ def test_execute_returns_redacted_document_and_findings() -> None:
     doc = FakePdfDocument(
         ["John paid invoice 1", "No name here", "John paid invoice 2"]
     )
-    result = _service().execute(doc, ["PERSON"], 0.35)
+    result = _service().execute(doc, ["John"])
 
     assert result.page_count == 3
     assert result.entity_count == 2
@@ -149,20 +121,20 @@ def test_execute_returns_redacted_document_and_findings() -> None:
 
 
 def test_pseudonym_is_consistent_across_pages() -> None:
-    """The same name on different pages maps to the same pseudonym."""
+    """The same word on different pages maps to the same pseudonym."""
     doc = FakePdfDocument(["John paid", "John approved"])
-    _service().execute(doc, ["PERSON"], 0.35)
+    _service().execute(doc, ["John"])
 
     page_0_label = doc.redactions_by_page[0][0][1]
     page_1_label = doc.redactions_by_page[1][0][1]
     assert page_0_label == page_1_label
-    assert page_0_label.startswith("PSN-AUTO-")
+    assert page_0_label.startswith("CST-AUTO-")
 
 
 def test_empty_pages_are_skipped() -> None:
     """Pages with no text do not produce findings or redactions."""
     doc = FakePdfDocument(["", "John paid", "   "])
-    result = _service().execute(doc, ["PERSON"], 0.35)
+    result = _service().execute(doc, ["John"])
 
     assert result.entity_count == 1
     assert 0 not in doc.redactions_by_page
@@ -171,9 +143,9 @@ def test_empty_pages_are_skipped() -> None:
 
 
 def test_crosswalk_lists_distinct_assignments() -> None:
-    """The crosswalk contains each distinct name->pseudonym assignment once."""
+    """The crosswalk contains each distinct word->pseudonym assignment once."""
     doc = FakePdfDocument(["John paid", "John approved", "Mary paid"])
-    result = _service().execute(doc, ["PERSON"], 0.35)
+    result = _service().execute(doc, ["John", "Mary"])
 
     assert len(result.crosswalk) == 2
     names = {a.original_name for a in result.crosswalk}
@@ -181,20 +153,39 @@ def test_crosswalk_lists_distinct_assignments() -> None:
     assert all(a.auto for a in result.crosswalk)
 
 
-def test_document_is_closed_even_on_detector_error() -> None:
+def test_overlapping_custom_words_are_deduped_leftmost_longest() -> None:
+    """Two overlapping custom words resolve via leftmost/longest, as before."""
+    doc = FakePdfDocument(["Jane Doe Enterprises invoice"])
+    result = _service().execute(doc, ["Jane Doe Enterprises", "Doe Enterprises"])
+
+    assert result.entity_count == 1
+    assert result.findings[0].detected_text == "Jane Doe Enterprises"
+
+
+def test_custom_word_with_pdf_artifacts_is_detected_after_normalization() -> None:
+    """Ligatures and line-break hyphens are normalized before matching."""
+    raw = "Acme Sup-\nplies invoice"
+    doc = FakePdfDocument([raw])
+    result = _service().execute(doc, ["Acme Supplies"])
+
+    assert result.entity_count == 1
+    assert result.findings[0].detected_text == "Acme Supplies"
+    # The page text was updated using whichever candidate the gateway could find.
+    pseudonym = result.crosswalk[0].pseudonym
+    assert pseudonym in doc._pages[0]
+
+
+def test_document_is_closed_even_if_page_text_raises() -> None:
     """The underlying document is closed if the pipeline raises."""
 
-    class FailingDetector:
-        def analyze(
-            self, text: str, entities: list[str], threshold: float
-        ) -> list[PiiDetection]:
-            raise RuntimeError("detector failure")
+    class FailingDocument(FakePdfDocument):
+        def page_text(self, page_index: int) -> str:
+            raise RuntimeError("page read failure")
 
-    doc = FakePdfDocument(["John paid"])
-    service = _service(detector=FailingDetector())
+    doc = FailingDocument(["John paid"])
 
-    with pytest.raises(RuntimeError, match="detector failure"):
-        service.execute(doc, ["PERSON"], 0.35)
+    with pytest.raises(RuntimeError, match="page read failure"):
+        _service().execute(doc, ["John"])
 
     assert doc.closed is True
 
@@ -203,163 +194,45 @@ def test_blackout_mode_passes_blackout_flag() -> None:
     """Blackout mode instructs the gateway to cover text with black boxes."""
     doc = FakePdfDocument(["John paid"])
     _service().execute(
-        doc, ["PERSON"], 0.35, style=RedactionStyle.BLACKOUT, redact_images=False
+        doc, ["John"], style=RedactionStyle.BLACKOUT, redact_images=False
     )
 
     assert doc.blackout_by_page[0] is True
-    # Text redaction still records the detected text and assigned pseudonym.
+    # Text redaction still records the matched text and assigned pseudonym.
     assert doc.redactions_by_page[0][0][0] == "John"
-    assert doc.redactions_by_page[0][0][1].startswith("PSN-AUTO-")
+    assert doc.redactions_by_page[0][0][1].startswith("CST-AUTO-")
 
 
 def test_blackout_mode_can_redact_images() -> None:
-    """Blackout mode adds an image sentinel redaction when images are present."""
+    """Blackout mode adds an image sentinel redaction when images are present.
+
+    Independent of text matching - an empty word list still blacks out images.
+    """
     doc = FakePdfDocument(
         ["John paid"],
         image_rects={0: [(10.0, 10.0, 50.0, 50.0)]},
     )
-    _service().execute(
-        doc, ["PERSON"], 0.35, style=RedactionStyle.BLACKOUT, redact_images=True
-    )
+    _service().execute(doc, [], style=RedactionStyle.BLACKOUT, redact_images=True)
 
     sentinels = [r for r, _ in doc.redactions_by_page[0] if r == "__IMAGE__"]
     assert sentinels == ["__IMAGE__"]
 
 
 def test_pseudonymize_mode_does_not_blackout_images() -> None:
-    """Pseudonymize mode never adds image redactions, even when requested."""
+    """Pseudonymize mode never adds image redactions, even when requested.
+
+    Uses a real word match (rather than an empty list) so ``redact_page`` is
+    actually invoked - otherwise there'd be nothing at all to redact on this
+    page and the assertions below would have nothing to check.
+    """
     doc = FakePdfDocument(
         ["John paid"],
         image_rects={0: [(10.0, 10.0, 50.0, 50.0)]},
     )
     _service().execute(
-        doc, ["PERSON"], 0.35, style=RedactionStyle.PSEUDONYMIZE, redact_images=True
+        doc, ["John"], style=RedactionStyle.PSEUDONYMIZE, redact_images=True
     )
 
     sentinels = [r for r, _ in doc.redactions_by_page[0] if r == "__IMAGE__"]
     assert sentinels == []
     assert doc.blackout_by_page[0] is False
-
-
-def test_custom_words_are_pseudonymized_and_survive_across_pages() -> None:
-    """An ad-hoc custom word gets a stable CUSTOM auto-id, consistent across pages."""
-    doc = FakePdfDocument(
-        ["Project Nightingale kickoff", "Recap of Project Nightingale"]
-    )
-    service = RedactPdfService(
-        detector=_NameDetector(),
-        open_document=_document_factory,
-        master_map={},
-        auto_prefixes={"PERSON": "PSN", "CUSTOM": "CST"},
-    )
-
-    result = service.execute(
-        doc, ["PERSON"], 0.35, custom_words=["Project Nightingale"]
-    )
-
-    assert result.entity_count == 2
-    labels = {
-        a.pseudonym
-        for a in result.crosswalk
-        if a.original_name == "Project Nightingale"
-    }
-    assert len(labels) == 1
-    (label,) = labels
-    assert label.startswith("CST-AUTO-")
-    assert doc.redactions_by_page[0][0][1] == label
-    assert doc.redactions_by_page[1][0][1] == label
-
-
-def test_custom_words_are_covered_in_blackout_mode_too() -> None:
-    """Blackout mode also covers ad-hoc custom words, not just detector hits."""
-    doc = FakePdfDocument(["Reference: Case 4471-B is confidential."])
-    service = RedactPdfService(
-        detector=_NameDetector(),
-        open_document=_document_factory,
-        master_map={},
-        auto_prefixes={"PERSON": "PSN", "CUSTOM": "CST"},
-    )
-
-    result = service.execute(
-        doc,
-        ["PERSON"],
-        0.35,
-        style=RedactionStyle.BLACKOUT,
-        custom_words=["Case 4471-B"],
-    )
-
-    assert result.entity_count == 1
-    assert doc.blackout_by_page[0] is True
-    assert doc.redactions_by_page[0][0][0] == "Case 4471-B"
-
-
-def test_custom_words_do_not_override_an_overlapping_master_list_hit() -> None:
-    """A custom word matching a curated master-list name keeps the curated id."""
-
-    class _MasterListStyleDetector:
-        """Fake detector that tags 'Jane Doe' as a master-list-sourced PERSON hit."""
-
-        def analyze(
-            self, text: str, entities: list[str], threshold: float
-        ) -> list[PiiDetection]:
-            if "PERSON" not in entities:
-                return []
-            idx = text.find("Jane Doe")
-            if idx == -1:
-                return []
-            return [
-                PiiDetection(
-                    entity_type="PERSON",
-                    span=Span(idx, idx + len("Jane Doe")),
-                    score=0.9,
-                    text="Jane Doe",
-                    source=DetectionSource.MASTER_LIST,
-                )
-            ]
-
-    doc = FakePdfDocument(["Paid to Jane Doe for services"])
-    service = RedactPdfService(
-        detector=_MasterListStyleDetector(),
-        open_document=_document_factory,
-        master_map={
-            ("PERSON", "jane doe"): MasterEntry(pseudonym="STF-91345", category="Staff")
-        },
-        auto_prefixes={"PERSON": "PSN", "CUSTOM": "CST"},
-    )
-
-    result = service.execute(doc, ["PERSON"], 0.35, custom_words=["Jane Doe"])
-
-    assert result.entity_count == 1
-    assert result.crosswalk[0].pseudonym == "STF-91345"
-    assert doc.redactions_by_page[0][0][1] == "STF-91345"
-
-
-def test_name_with_pdf_artifacts_is_detected_after_normalization() -> None:
-    """Ligatures and line-break hyphens are normalized before detection."""
-
-    class ArtifactDetector:
-        def analyze(
-            self, text: str, entities: list[str], threshold: float
-        ) -> list[PiiDetection]:
-            idx = text.find("Acme Supplies")
-            if idx == -1:
-                return []
-            return [
-                PiiDetection(
-                    entity_type="ORGANIZATION",
-                    span=Span(idx, idx + len("Acme Supplies")),
-                    text="Acme Supplies",
-                    score=0.99,
-                    source=DetectionSource.MODEL,
-                )
-            ]
-
-    raw = "Acme Sup-\nplies invoice"
-    doc = FakePdfDocument([raw])
-    result = _service(detector=ArtifactDetector()).execute(doc, ["ORGANIZATION"], 0.35)
-
-    assert result.entity_count == 1
-    assert result.findings[0].detected_text == "Acme Supplies"
-    # The page text was updated using whichever candidate the gateway could find.
-    pseudonym = result.crosswalk[0].pseudonym
-    assert pseudonym in doc._pages[0]
