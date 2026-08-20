@@ -33,23 +33,48 @@ payments) stays visible in the data without ever showing the name.
 
 ## Quick start
 
-1. On the [GitHub repo page](https://github.com/ThuoBrian/finance-pii-redactor),
-   click **Code → Download ZIP**, then unzip it wherever you want the tool to
-   live (e.g. your Desktop). (If you have Git, `git clone` works too, and
-   makes updating later a `git pull`.)
-2. **Windows:** double-click **`run.bat`**. **macOS / Linux:** open a terminal
-   in that folder and run **`./run.sh`**.
+### Windows
 
-The first launch installs everything (~400 MB, a few minutes, needs internet
-once); after that it works offline.
+Open PowerShell and paste:
 
-To update later, download a fresh ZIP over the old folder (or `git pull`).
-If you keep your master list locally rather than on a shared drive (see
-**[data/README.md](data/README.md)**), copy `data/Names List - Organized.xlsx`
-out before replacing the folder and back in afterward — nothing does this for
-you automatically.
+```powershell
+irm https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/install.ps1 | iex
+```
 
-To share the tool with a colleague, send them the repo link and these two steps.
+### macOS / Linux
+
+Open a terminal and paste:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/install.sh | bash
+```
+
+The installer asks where to put the tool, downloads it, and starts it. The
+first launch installs everything (~400 MB, a few minutes, needs internet once);
+after that it works offline. Run the same command again anytime to update — it
+preserves a master list kept in the local `data/` folder automatically.
+
+If your team keeps the master list in a **shared Box folder** instead (see
+"How it works" below), the installer doesn't know about that setup at all —
+it only ever touches its own install folder, never the Box folder, so a
+reinstall/update can't disturb a shared list either way. It also won't set
+the shared folder up for you on a brand-new machine: a first-time teammate
+still needs to do the one-time
+**[Sharing one master list across a team](data/README.md#sharing-one-master-list-across-a-team)**
+setup themselves before the master list will load.
+
+Already have a copy? Just double-click **`run.bat`** (Windows) or run
+**`./run.sh`** (macOS / Linux).
+
+Prefer not to pipe a script into your shell? Click **Code → Download ZIP** on
+the [GitHub repo page](https://github.com/ThuoBrian/finance-pii-redactor) (or
+`git clone` it) and run `run.bat`/`run.sh` the same way — just note the
+installer's automatic master-list backup/restore step (see below) won't
+happen for you, so back up `data/Names List - Organized.xlsx` yourself before
+replacing the folder if you keep it locally rather than on a shared drive.
+
+To share the tool with a colleague, send them the command above for their
+operating system — the first run sets everything up automatically.
 
 ## How it works
 
