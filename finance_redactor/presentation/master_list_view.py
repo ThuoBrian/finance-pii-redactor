@@ -12,7 +12,7 @@ are trustworthy.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 import streamlit as st
@@ -47,9 +47,34 @@ def render_master_list_status(
     name_counts: Mapping[str, int],
     issues: Sequence[QualityIssue] | None,
     master_list_path: Path,
+    *,
+    on_refresh: Callable[[], None] | None = None,
 ) -> None:
-    """Render the master-list summary line plus any data-quality warnings."""
+    """Render the master-list summary line plus any data-quality warnings.
+
+    ``on_refresh``, when given, renders a "Refresh master list" button that
+    calls it (expected to clear the cached master-list bundle - see
+    ``app.py``'s ``_get_master_list_bundle``) and reruns the page. This is
+    needed for anything *other* than the app's own first load: Streamlit only
+    re-checks the workbook's modification time on a rerun (a widget
+    interaction or a browser refresh), so editing the workbook - or fixing
+    its location via the "Set up your shared master list" dialog - has no
+    visible effect until something triggers one. Clearing the cache outright
+    (rather than just rerunning) also covers the edge case where the
+    modification time hasn't actually changed yet (e.g. a Box Drive sync
+    still in flight), which a bare rerun would not catch.
+    """
     st.markdown("**Master list**")
     st.caption(_name_list_help(name_counts, master_list_path))
     for issue in issues or ():
         _render_issue(issue)
+    if on_refresh is not None and st.button(
+        "🔄 Refresh master list",
+        help=(
+            "Re-check the master list for changes - use this after editing "
+            "the workbook, or after fixing its location, instead of "
+            "reloading the whole page."
+        ),
+    ):
+        on_refresh()
+        st.rerun()

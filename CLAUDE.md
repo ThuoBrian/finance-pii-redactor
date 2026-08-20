@@ -240,7 +240,17 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   interaction), so widget interactions stay fast while edits to the Excel file
   still take effect immediately on refresh (the new mtime busts the cache),
   and switching master-list folders at runtime (see below) always busts it
-  too, even in the unlikely case two different files share an mtime.
+  too, even in the unlikely case two different files share an mtime. This
+  cache is process-wide (`@st.cache_resource` is shared across every browser
+  session hitting the same running server, not per-session), and it's only
+  ever re-checked on a Streamlit rerun (a widget interaction or a page
+  reload) - editing the workbook while the app sits idle has no visible
+  effect until something triggers one. `master_list_view.py`'s "🔄 Refresh
+  master list" button (rendered when `on_refresh` is passed, wired in
+  `app.py` to `_get_master_list_bundle.clear`) exists so a user doesn't need
+  to know to reload the page: it force-clears the cache *and* reruns, which
+  also covers the edge case where the mtime hasn't actually changed yet (e.g.
+  a Box Drive sync still in flight) that a bare rerun would not catch.
 - **In-app master-list setup:** `config.py`'s `_resolve_data_dir()` actually
   checks three sources in order: a small per-user settings file
   (`~/.finance_pii_redactor/settings.json`, read via

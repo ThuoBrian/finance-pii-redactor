@@ -98,8 +98,9 @@ operating system — the first run sets everything up automatically.
      secure — see below.
 
 To update the master list, edit it in place in the shared Box folder, save
-and close it, then refresh the browser page — every teammate's install picks
-up the change automatically.
+and close it, then click **🔄 Refresh master list** in **Advanced settings**
+(or reload the browser page) — every teammate's install picks up the change
+automatically.
 
 ## Handling sensitive data
 
