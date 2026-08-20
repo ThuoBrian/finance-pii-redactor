@@ -20,11 +20,21 @@ and won't put a copy in this repo for you.
 This team does not keep a per-install master list. Every teammate's install
 must point at the **same shared Box folder**, so the same name always gets
 the same code for everyone — never save or leave a copy of
-`Names List - Organized.xlsx` in this local `data/` folder. If the
-`FPR_MASTER_LIST_DIR` environment variable below is ever unset, the app
-silently falls back to reading whatever is in this local folder instead of
-the shared list (typically nothing, so names load as zero) — that fallback
-exists for standalone installs outside this team, not for us.
+`Names List - Organized.xlsx` in this local `data/` folder. If neither the
+in-app setting nor the `FPR_MASTER_LIST_DIR` environment variable below is
+ever set, the app silently falls back to reading whatever is in this local
+folder instead of the shared list (typically nothing, so names load as
+zero) — that fallback exists for standalone installs outside this team, not
+for us.
+
+**Easiest way (recommended):** just launch the app. If it can't find a
+master list, it automatically shows a **"Set up your shared master list"**
+dialog right in the browser — paste in your local path to the shared Box
+folder there and it takes effect immediately, no terminal or restart needed.
+The steps below are the manual, environment-variable alternative (useful for
+a scripted/IT-managed deployment across many machines, or if you'd rather not
+use the dialog); the in-app setting takes precedence over the environment
+variable if both end up set.
 
 1. Confirm the shared workbook is in your team's designated Box Drive folder
    (ask your list owner if you don't have the path) — **never** a

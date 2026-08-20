@@ -178,7 +178,9 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   (highlighted HTML, the findings + crosswalk tables); `crosswalk_view.py`
   renders the shared crosswalk expander + guarded CSV download;
   `master_list_view.py` renders the shared master-list summary line +
-  data-quality warnings shown in all three flows' Advanced settings panel.
+  data-quality warnings shown in all three flows' Advanced settings panel;
+  `master_list_setup.py` renders the "Set up your shared master list" modal
+  (see below).
 - **`finance_redactor/config.py`** — the single source of truth: an immutable
   `Settings` dataclass (language, spaCy model, entities, `categories`
   (category → (prefix, entity_type)), `category_sheets`, `auto_prefixes`,
@@ -188,13 +190,15 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
 - **Master list:** `data/Names List - Organized.xlsx` — a **top-level, user-owned folder**
   outside the package by default (resolved by `Settings.names_dir` via
   `config.py`'s `_resolve_data_dir()`), kept separate from the code (and out of
-  git). `_resolve_data_dir()` honors the `FPR_MASTER_LIST_DIR` environment
-  variable when set, so a team can instead point every install at one shared,
-  access-controlled location and get identical curated IDs across users — see
-  `data/README.md`'s "Sharing one master list across a team" and the matching
-  `docs/GOTCHA.md` entry; unset, behavior is unchanged (per-install local
-  folder). Note this only affects *curated* IDs — the auto-id fallback for
-  names not on the list is already consistent across installs by construction
+  git). `_resolve_data_dir()` honors an in-app persisted setting or the
+  `FPR_MASTER_LIST_DIR` environment variable when set (see "In-app
+  master-list setup" below for the precedence between the two), so a team
+  can instead point every install at one shared, access-controlled location
+  and get identical curated IDs across users — see `data/README.md`'s
+  "Sharing one master list across a team" and the matching `docs/GOTCHA.md`
+  entry; neither set, behavior is unchanged (per-install local folder). Note
+  this only affects *curated* IDs — the auto-id fallback for names not on the
+  list is already consistent across installs by construction
   (a plain hash of the normalized name plus a hardcoded prefix table), with or
   without a shared list. The
   workbook has one sheet per category (`Vendors`, `Funders`, `Staff`) with columns
@@ -228,12 +232,31 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   same id) are not flagged.
 - **Master-list caching:** `MasterListRepository` caches parsed rows keyed by the
   workbook's file modification time, and `app.py` wraps the whole
-  repo/recognizers/engine bundle in an `@st.cache_resource` factory keyed on that
-  same mtime. The first parse of the full ~26k-row workbook takes a few seconds;
-  subsequent Streamlit reruns with an unchanged mtime reuse the cached bundle
-  (instead of re-parsing and recompiling recognizer patterns on every widget
+  repo/recognizers/engine bundle in an `@st.cache_resource` factory keyed on
+  both the resolved `master_list_file` path and its mtime. The first parse of
+  the full ~26k-row workbook takes a few seconds; subsequent Streamlit reruns
+  with an unchanged path+mtime reuse the cached bundle (instead of
+  re-parsing and recompiling recognizer patterns on every widget
   interaction), so widget interactions stay fast while edits to the Excel file
-  still take effect immediately on refresh (the new mtime busts the cache).
+  still take effect immediately on refresh (the new mtime busts the cache),
+  and switching master-list folders at runtime (see below) always busts it
+  too, even in the unlikely case two different files share an mtime.
+- **In-app master-list setup:** `config.py`'s `_resolve_data_dir()` actually
+  checks three sources in order: a small per-user settings file
+  (`~/.finance_pii_redactor/settings.json`, read via
+  `read_persisted_master_list_dir()`/written via `save_master_list_dir()`),
+  then `FPR_MASTER_LIST_DIR`, then the local `data/` folder. The settings
+  file exists so a shared Box folder can be configured from the UI instead of
+  an OS environment variable that needs a fresh terminal/process to take
+  effect (see `docs/GOTCHA.md`'s "0 names" entry) - `app.py` calls
+  `config.current_settings()` (not the frozen `DEFAULT_SETTINGS`) so a saved
+  change is picked up on the next Streamlit rerun, no restart needed.
+  `finance_redactor/presentation/master_list_setup.py`'s
+  `render_master_list_setup_dialog` (an `@st.dialog`) is triggered from
+  `app.py` whenever the loaded master list has 0 entries, prompting for the
+  folder path with live validation (`master_list_exists_at`) before saving;
+  it's dismissible per session (`st.session_state.master_list_setup_dismissed`)
+  so a standalone/non-team install isn't nagged every rerun.
 - **Pseudonyms & crosswalk:** a name in the master list (or any of its alias
   variants — org-suffix equivalents, `&`/`and`) resolves to its curated ID; an
   unknown name gets a deterministic, stable auto-id (`PSN-AUTO-<hash>` /
@@ -297,7 +320,7 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
 - `pyproject.toml` defines dependencies, dev dependency group (`ruff`, `pytest`, `codespell`), and ruff rules. Key lint selections: `F`, `E`, `W`, `I`, `D`, `UP`, `SIM`. The `ignore` list is broader than just docstrings — besides `D100`/`D104`/`D105` (module/package/magic-method docstrings), it also disables the pydocstyle rules that conflict with the formatter (`D203`, `D205`, `D213`, `D206`, `D300`), several pycodestyle indentation rules, `E501` (length is the formatter's job), `SIM110`, and `TRY003`. Check the actual `ignore` array before assuming a rule is active.
 - `line-length = 88` and `target-version = "py312"`. `requires-python = ">=3.12,<3.14"`.
 - `codespell` is configured to skip `uv.lock`, all `.txt`, and all `.csv` files (the master list contains many names that look like typos), and to ignore a short list of words (`ignore-words-list` in `pyproject.toml`) — domain jargon like `master`, and `slave` (flagged only because `CLAUDE.md`'s own prose *about* the disabled `alex.Race` rule mentions the word it's disabling).
-- `pytest` is configured with `pythonpath = ["."]` so tests can import from the repo root. Tests live under `tests/` (20 files) and cover the pure domain logic (`pseudonyms`, `rules`, `aliases`, `fuzzy`, `quality`), the `master_list_repository` parser, infrastructure adapters (Presidio detector, PDF gateway, Excel gateway, Word gateway), and presentation-layer formatting; `tests/**` is exempt from `D103` via `per-file-ignores`.
+- `pytest` is configured with `pythonpath = ["."]` so tests can import from the repo root. Tests live under `tests/` (22 files) and cover the pure domain logic (`pseudonyms`, `rules`, `aliases`, `fuzzy`, `quality`), the `master_list_repository` parser, infrastructure adapters (Presidio detector, PDF gateway, Excel gateway, Word gateway), and presentation-layer formatting; `tests/**` is exempt from `D103` via `per-file-ignores`. `tests/conftest.py` has an `autouse` fixture that points `Path.home()` at a throwaway directory for every test, so the suite never reads or writes a real developer machine's persisted master-list settings file (see "In-app master-list setup" above).
 - `pre-commit` is **not** currently declared as a project dependency, and there is **no `.pre-commit-config.yaml`**, so no hooks (pre-commit or otherwise) run locally.
 - **CI:** `.github/workflows/ci.yml` runs on every push to `main` and on pull requests — `uv sync --locked`, then `ruff check`, `ruff format --check`, `pytest`, and `codespell`. Since distribution installs straight from `main` (`install.ps1`/`install.sh`), this is what stops a broken `main` from breaking the tool for every user on their next install/update.
 

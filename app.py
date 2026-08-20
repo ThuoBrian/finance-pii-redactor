@@ -15,7 +15,7 @@ import streamlit as st
 from finance_redactor.application.redact_docx import RedactDocxService
 from finance_redactor.application.redact_excel import RedactExcelService
 from finance_redactor.application.redact_pdf import RedactPdfService
-from finance_redactor.config import DEFAULT_SETTINGS
+from finance_redactor.config import current_settings
 from finance_redactor.infrastructure.detection.custom_recognizer import (
     build_custom_recognizers,
 )
@@ -30,12 +30,25 @@ from finance_redactor.infrastructure.names.master_list_repository import (
 )
 from finance_redactor.presentation.docx_view import run_docx_flow
 from finance_redactor.presentation.excel_view import run_excel_flow
+from finance_redactor.presentation.master_list_setup import (
+    render_master_list_setup_dialog,
+)
 from finance_redactor.presentation.pdf_view import run_pdf_flow
 
 
 def _main() -> None:
     """Run the Streamlit UI. Called only when executed via streamlit run."""
-    settings = DEFAULT_SETTINGS
+    # Must be the very first Streamlit command in the script - anything that
+    # renders before it (the master-list-setup dialog below, or even a
+    # cache_resource spinner on a cold cache) would otherwise raise.
+    st.set_page_config(
+        page_title="Finance PII Redactor", page_icon=":shield:", layout="wide"
+    )
+
+    # Re-resolved fresh (not DEFAULT_SETTINGS) so a folder saved via the in-app
+    # "Set up shared master list" dialog takes effect on the next rerun - see
+    # current_settings()'s docstring.
+    settings = current_settings()
 
     @st.cache_resource(show_spinner="Loading NLP model (first run only)...")
     def _get_nlp_engine():
@@ -43,14 +56,18 @@ def _main() -> None:
         return PresidioEngine._create_nlp_engine(settings)
 
     @st.cache_resource(show_spinner="Loading master list...")
-    def _get_master_list_bundle(_mtime: float | None):
-        """Parse the master list and build its detection engine, cached by mtime.
+    def _get_master_list_bundle(_path: str, _mtime: float | None):
+        """Parse the master list and build its detection engine, cached by path+mtime.
 
-        Keying on the workbook's modification time means identical mtimes
-        across reruns (e.g. toggling an unrelated widget) reuse the same
-        parsed rows and compiled recognizer patterns instead of redoing the
-        ~26k-row parse and regex compilation on every rerun, while a real edit
-        to the workbook changes the mtime and busts the cache immediately.
+        Keying on the workbook's path and modification time means identical
+        reruns (e.g. toggling an unrelated widget) reuse the same parsed rows
+        and compiled recognizer patterns instead of redoing the ~26k-row parse
+        and regex compilation every time, while a real edit to the workbook -
+        or the master-list folder changing (e.g. via the "Set up shared
+        master list" dialog) - busts the cache immediately. ``_path`` alone
+        would already change on a folder switch, but including both makes the
+        key robust even in the unlikely case two different files share an
+        mtime.
         """
         repo = MasterListRepository(
             settings.master_list_file,
@@ -77,12 +94,20 @@ def _main() -> None:
         master_list_mtime = None
 
     engine, master_map, name_counts, quality_issues = _get_master_list_bundle(
-        master_list_mtime
+        str(settings.master_list_file), master_list_mtime
     )
 
-    st.set_page_config(
-        page_title="Finance PII Redactor", page_icon=":shield:", layout="wide"
-    )
+    # A brand-new install (or one whose FPR_MASTER_LIST_DIR/persisted setting
+    # is missing, wrong, or not yet synced) loads 0 names - offer the in-app
+    # setup dialog right away instead of leaving the user to discover
+    # data/README.md's manual env-var steps on their own. Dismissible per
+    # session (via the dialog's own buttons) so it doesn't reappear on every
+    # rerun for someone who intentionally isn't using a shared list.
+    if sum(name_counts.values()) == 0 and not st.session_state.get(
+        "master_list_setup_dismissed", False
+    ):
+        render_master_list_setup_dialog(settings.names_dir)
+
     st.title("Finance PII Redactor")
     st.caption(
         "Upload an Excel, PDF, or Word file, choose what to pseudonymize, and "
