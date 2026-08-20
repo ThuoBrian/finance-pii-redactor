@@ -79,10 +79,13 @@ operating system — the first run sets everything up automatically.
 ## How it works
 
 1. The master list, `Names List - Organized.xlsx`, lives in the team's
-   shared Box folder — **not** in this repo's local `data/` folder. See
+   shared Box folder — **not** in this repo's local `data/` folder. The first
+   time the app can't find it, it automatically pops up a **"Set up your
+   shared master list"** dialog asking for the folder path — no terminal
+   needed. See
    **[Sharing one master list across a team](data/README.md#sharing-one-master-list-across-a-team)**
-   in `data/README.md` for the required, one-time setup that points your
-   install at it, and for the file format.
+   in `data/README.md` for the file format and a manual/environment-variable
+   alternative to the dialog.
 2. Upload an Excel, PDF, or Word file. It's processed entirely on your computer.
 3. Choose what to detect (people, organizations, emails) and review the
    results.
