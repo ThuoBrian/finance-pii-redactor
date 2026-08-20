@@ -9,7 +9,7 @@ stays fully editable, matching the Excel flow rather than the PDF flow.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import streamlit as st
@@ -29,6 +29,7 @@ def run_docx_flow(
     settings: Settings,
     name_counts: Mapping[str, int],
     quality_issues: Sequence[QualityIssue] | None = None,
+    on_refresh_master_list: Callable[[], None] | None = None,
 ) -> None:
     """Render the Word (.docx) pseudonymization flow in Streamlit."""
     if (
@@ -67,7 +68,10 @@ def run_docx_flow(
             key="docx_entities",
         )
         render_master_list_status(
-            name_counts, quality_issues, settings.master_list_file
+            name_counts,
+            quality_issues,
+            settings.master_list_file,
+            on_refresh=on_refresh_master_list,
         )
 
     if st.button("Pseudonymize Word document", type="primary", width="stretch"):

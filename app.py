@@ -140,6 +140,7 @@ def _main() -> None:
             settings=settings,
             name_counts=name_counts,
             quality_issues=quality_issues,
+            on_refresh_master_list=_get_master_list_bundle.clear,
         )
     elif extension == "pdf":
         run_pdf_flow(
@@ -154,6 +155,7 @@ def _main() -> None:
             settings=settings,
             name_counts=name_counts,
             quality_issues=quality_issues,
+            on_refresh_master_list=_get_master_list_bundle.clear,
         )
     elif extension == "docx":
         run_docx_flow(
@@ -168,6 +170,7 @@ def _main() -> None:
             settings=settings,
             name_counts=name_counts,
             quality_issues=quality_issues,
+            on_refresh_master_list=_get_master_list_bundle.clear,
         )
     else:
         st.error("Unsupported file type. Please upload an Excel, PDF, or Word file.")
