@@ -27,8 +27,19 @@ class OpenpyxlExcelGateway:
         return pd.read_excel(source, engine="openpyxl")
 
     def text_columns(self, df: pd.DataFrame) -> list[str]:
-        """Return free-text (object dtype) columns, used as the scan default."""
-        return [col for col in df.columns if df[col].dtype == object]
+        """Return free-text (string dtype) columns, used as the scan default.
+
+        Uses ``pandas.api.types.is_string_dtype`` rather than checking
+        ``dtype == object``: pandas 3.0 infers a dedicated string dtype
+        (``StringDtype``, shown as ``str`` in ``df.dtypes``) for text columns
+        read from Excel/CSV by default, not the legacy ``object`` dtype an
+        `== object` check was written against - that check silently matched
+        zero columns on pandas 3.0, so no column was ever pre-selected here.
+        ``is_string_dtype`` matches both the new string dtype and legacy
+        object-dtype string columns, while still excluding numeric/date
+        columns and an all-null object column.
+        """
+        return [col for col in df.columns if pd.api.types.is_string_dtype(df[col])]
 
     def write(
         self,

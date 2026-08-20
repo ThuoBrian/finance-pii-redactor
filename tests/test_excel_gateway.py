@@ -108,3 +108,53 @@ def test_write_handles_an_empty_crosswalk_without_crashing():
     read_back = pd.read_excel(BytesIO(result), sheet_name="Crosswalk")
     assert list(read_back.columns) == _CROSSWALK_COLUMNS
     assert len(read_back) == 0
+
+
+def _round_tripped_workbook_bytes(data: dict) -> bytes:
+    """Write ``data`` to real xlsx bytes and back, like an actual upload.
+
+    Constructing a DataFrame directly in memory (``pd.DataFrame({...})``)
+    does not reproduce the dtype a real upload gets: pandas 3.0 infers its
+    own string dtype when *reading* an xlsx file, which can differ from
+    whatever dtype an in-memory literal happens to get. Round-tripping
+    through real bytes via ``gateway.read()`` is what actually exercises
+    ``text_columns()`` the way the app does.
+    """
+    buffer = BytesIO()
+    pd.DataFrame(data).to_excel(buffer, index=False)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def test_text_columns_includes_string_columns_from_a_real_upload():
+    # Regression test: pandas 3.0 infers a dedicated string dtype (shown as
+    # "str" in df.dtypes) for text columns read from an xlsx file, not the
+    # legacy "object" dtype - a `dtype == object` check silently matched
+    # nothing, so no column was ever pre-selected for a real uploaded file.
+    gateway = OpenpyxlExcelGateway()
+    df = gateway.read(
+        BytesIO(
+            _round_tripped_workbook_bytes(
+                {"Description": ["Consulting payment"], "Payee": ["Jane Doe"]}
+            )
+        )
+    )
+
+    assert set(gateway.text_columns(df)) == {"Description", "Payee"}
+
+
+def test_text_columns_excludes_numeric_and_date_columns_from_a_real_upload():
+    gateway = OpenpyxlExcelGateway()
+    df = gateway.read(
+        BytesIO(
+            _round_tripped_workbook_bytes(
+                {
+                    "Payee": ["Jane Doe"],
+                    "Amount": [1000],
+                    "Date": pd.to_datetime(["2020-01-01"]),
+                }
+            )
+        )
+    )
+
+    assert gateway.text_columns(df) == ["Payee"]
