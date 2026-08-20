@@ -107,19 +107,23 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   shared `master_list_view`.
 - **`finance_redactor/domain/`** — framework-free core. `entities.py`
   (`PiiDetection`, `Span`, `Finding`, `DetectionSource` =
-  `MODEL`/`MASTER_LIST`/`CUSTOM`) is the one representation of a finding all
-  layers speak. `rules.py` holds `dedupe_overlapping` and `classify_source`
-  (score → model/master list). `dedupe_overlapping` breaks overlaps by
-  source first, using a 3-tier priority (`_SOURCE_PRIORITY`): `MASTER_LIST` >
-  `CUSTOM` > `MODEL`. A `MASTER_LIST` detection always wins over an
-  overlapping `MODEL` or `CUSTOM` detection regardless of which span is
-  longer — a curated exact match is a stronger signal than either a
-  statistical guess or an ad-hoc word the user typed for this run (e.g.
-  spaCy fusing a trailing hyphenated phrase onto a curated name, `"Brian
-  Thuo - Kakamega"`, must not out-vote the exact master-list match `"Brian
-  Thuo"`); a `CUSTOM` detection in turn beats an overlapping `MODEL` one,
-  since it's still an explicit exact match, just not curated. Within the
-  same source, leftmost/longest wins. `custom_words.py`'s
+  `MODEL`/`MASTER_LIST`/`CUSTOM`/`PATTERN`) is the one representation of a
+  finding all layers speak. `rules.py` holds `dedupe_overlapping` and
+  `classify_source` (score → model/master list). `dedupe_overlapping` breaks
+  overlaps by source first, using a 4-tier priority (`_SOURCE_PRIORITY`):
+  `MASTER_LIST` > `PATTERN` > `CUSTOM` > `MODEL`. A `MASTER_LIST` detection
+  always wins over an overlapping `MODEL`, `CUSTOM`, or `PATTERN` detection
+  regardless of which span is longer — a curated exact match is a stronger
+  signal than any of the other three (e.g. spaCy fusing a trailing
+  hyphenated phrase onto a curated name, `"Brian Thuo - Kakamega"`, must not
+  out-vote the exact master-list match `"Brian Thuo"`); a `PATTERN`
+  detection (a deterministic regex match — an email or URL, see
+  `infrastructure/detection/pattern_detector.py`) in turn beats an
+  overlapping `CUSTOM` or `MODEL` detection, since it's just as
+  deterministic as a curated lookup, just not curated; a `CUSTOM` detection
+  beats an overlapping `MODEL` one, since it's still an explicit exact
+  match, just not curated or pattern-validated. Within the same source,
+  leftmost/longest wins. `custom_words.py`'s
   `find_custom_words(text, words, score)` is the PDF/Word "words to redact"
   box's matcher: a small, framework-free, regex-based literal/case-insensitive
   matcher (word-boundary checked, whitespace-flexible for multi-word
@@ -307,35 +311,49 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
   "Crosswalk" sheet alongside "Redacted", so every downloaded Excel file
   carries its own re-identification key by default (see "Pseudonyms &
   crosswalk" below for the confidentiality consequence of that).
-- **PDF flow:** unlike Excel/Word, PDF has **no automatic detection at all** -
-  no spaCy model, no master-list matching. `RedactPdfService` (`redact_pdf.py`)
-  takes only a `custom_words` list (from the "Words/phrases to redact" box in
-  `pdf_view.py`'s Advanced settings - the sole input; the UI stops with a
-  message before the button even renders if it's empty, mirroring
-  `excel_view.py`'s "select at least one column" guard) and finds those
-  literal phrases via `domain/custom_words.find_custom_words` alone - every
+- **PDF flow:** unlike Excel/Word, PDF has **no spaCy-model or
+  master-list-based name/organization detection** - that stays removed (a
+  deliberate team decision: unreliable guessing on scanned financial PDFs).
+  It does automatically detect email addresses and websites via an injected
+  `pattern_detector: PiiDetector` (see
+  `infrastructure/detection/pattern_detector.py`'s `PatternDetector` -
+  wraps only Presidio's regex-based `EmailRecognizer`/`UrlRecognizer`, no
+  spaCy model involved, always on, no UI toggle), and by default blacks out
+  every embedded raster image/logo on the page (`redact_images`, defaulting
+  to checked in `pdf_view.py`, applies in **either** redaction style - the
+  gateway already fills images with solid black regardless of style, so
+  this was purely an application-layer gate). `RedactPdfService`
+  (`redact_pdf.py`) additionally takes a `custom_words` list (the
+  "Additional words/phrases to redact (optional)" box in `pdf_view.py`'s
+  Advanced settings - a supplement, same role it plays in Word) and finds
+  those literal phrases via `domain/custom_words.find_custom_words`. Every
+  pattern-detector match is `DetectionSource.PATTERN`; every custom-word
   match is `entity_type="CUSTOM"`/`DetectionSource.CUSTOM` and always
   resolves to a flagged `CST-AUTO-<hash>` id (`master_map` is still wired
   through to `Pseudonymizer` and could resolve a curated id, but `app.py`
   passes an explicit `{}` for it on the PDF branch, since there's nothing to
-  look up). The use case still pulls per-page raw text from the gateway,
+  look up). The use case pulls per-page raw text from the gateway,
   normalizes it (`pdf_text_normalizer.py`) to remove ligatures / hyphenation
-  / irregular whitespace before matching (so a custom phrase split across a
-  hyphenated line break is still found), applies the domain
-  `dedupe_overlapping` (now just leftmost/longest tie-breaking among
-  same-source matches, e.g. two overlapping typed phrases), resolves each
-  kept match to its pseudonym via a document-wide `Pseudonymizer`, records a
-  `Finding`, and tells the gateway to write the pseudonym into the text
-  layer. Spans found in normalized text are mapped back to the original
-  extracted text before replacement. The gateway also tries fallback search
-  variants when the exact text cannot be located. A match whose text can't
-  be found on the page is still reported (and in the crosswalk) but not
-  written. Every text-match rect from `page.search_for()` is vertically
-  inset (`_tighten_to_line`, `pdf_gateway.py`) before being covered, since
-  its height comes from font ascent/descent metrics rather than the
-  document's actual line spacing and can otherwise bleed into (and, via
-  `apply_redactions()`, delete text from) the line above in a tightly
-  single-spaced PDF — see `docs/GOTCHA.md`.
+  / irregular whitespace before matching (so an email/URL/custom phrase
+  split across a hyphenated line break is still found), merges the
+  pattern-detector and custom-word detections, applies the domain
+  `dedupe_overlapping` (source-priority plus leftmost/longest tie-breaking,
+  e.g. two overlapping typed phrases, or an email overlapping a URL match on
+  its own domain), resolves each kept match to its pseudonym via a
+  document-wide `Pseudonymizer`, records a `Finding`, and tells the gateway
+  to write the pseudonym into the text layer. Spans found in normalized text
+  are mapped back to the original extracted text before replacement. The
+  gateway also tries fallback search variants when the exact text cannot be
+  located. A match whose text can't be found on the page is still reported
+  (and in the crosswalk) but not written. Every text-match rect from
+  `page.search_for()` is vertically inset (`_tighten_to_line`,
+  `pdf_gateway.py`) before being covered, since its height comes from font
+  ascent/descent metrics rather than the document's actual line spacing and
+  can otherwise bleed into (and, via `apply_redactions()`, delete text from)
+  the line above in a tightly single-spaced PDF — see `docs/GOTCHA.md`.
+  **Known limits:** only embedded raster images count as a "logo" - one
+  drawn as vector art (lines/shapes, not a picture) isn't caught; image
+  scanning is PDF-only today (Word has no equivalent yet).
 - **Word flow:** pseudonymize-only (no blackout mode - Word text stays fully
   editable, matching the Excel flow rather than PDF). `PythonDocxDocument`
   (`docx_gateway.py`) enumerates every paragraph "block" once - document body,

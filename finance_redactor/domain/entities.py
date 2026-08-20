@@ -25,12 +25,17 @@ class DetectionSource(str, Enum):
     master list; ``MODEL`` covers names found only by the spaCy NER model;
     ``CUSTOM`` covers an ad-hoc word/phrase the user typed into the PDF/Word
     flows' "words to redact" box for this run only (see
-    ``domain/custom_words.py``) - not curated, not saved anywhere.
+    ``domain/custom_words.py``) - not curated, not saved anywhere; ``PATTERN``
+    covers a deterministic regex match (an email address or URL, see
+    ``infrastructure/detection/pattern_detector.py``) - not a guess like
+    ``MODEL``, not curated like ``MASTER_LIST``, not user-typed like
+    ``CUSTOM``, so it gets its own label.
     """
 
     MODEL = "model"
     MASTER_LIST = "master list"
     CUSTOM = "custom word"
+    PATTERN = "pattern match"
 
 
 @dataclass(frozen=True)

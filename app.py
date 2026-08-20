@@ -19,6 +19,7 @@ from finance_redactor.config import current_settings
 from finance_redactor.infrastructure.detection.custom_recognizer import (
     build_custom_recognizers,
 )
+from finance_redactor.infrastructure.detection.pattern_detector import PatternDetector
 from finance_redactor.infrastructure.detection.presidio_detector import PresidioEngine
 from finance_redactor.infrastructure.documents.docx_gateway import PythonDocxDocument
 from finance_redactor.infrastructure.documents.excel_gateway import (
@@ -54,6 +55,17 @@ def _main() -> None:
     def _get_nlp_engine():
         """Load the heavy spaCy model once and reuse it across reruns."""
         return PresidioEngine._create_nlp_engine(settings)
+
+    @st.cache_resource
+    def _get_pattern_detector():
+        """Build the spaCy-free email/URL detector once and reuse it.
+
+        Cheap compared to the spaCy model (no model weights loaded - see
+        ``infrastructure/detection/pattern_detector.py``), but still worth
+        caching so its one-time Presidio import cost isn't repeated on every
+        rerun.
+        """
+        return PatternDetector(settings.language)
 
     @st.cache_resource(show_spinner="Loading master list...")
     def _get_master_list_bundle(_path: str, _mtime: float | None):
@@ -143,15 +155,18 @@ def _main() -> None:
             on_refresh_master_list=_get_master_list_bundle.clear,
         )
     elif extension == "pdf":
-        # PDF has no automatic detection (no spaCy, no master list) - pass an
+        # PDF has no spaCy-/master-list-based name detection - pass an
         # explicit empty master_map rather than the loaded one, so it's clear
-        # at this call site that PDF never resolves against it.
+        # at this call site that PDF never resolves against it. It does get
+        # automatic email/URL detection (pattern_detector, no spaCy involved)
+        # plus the user's own words/phrases.
         run_pdf_flow(
             uploaded,
             pdf_service=RedactPdfService(
                 PyMuPdfDocument.open,
                 {},
                 settings.auto_prefixes,
+                _get_pattern_detector(),
                 settings.fuzzy_match_threshold,
                 settings.custom_words_score,
             ),

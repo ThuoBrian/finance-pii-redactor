@@ -131,7 +131,13 @@ _DEFAULT_CATEGORIES: Mapping[str, tuple[str, str]] = MappingProxyType(
 # failing loudly. ("CUSTOM"[:3].upper() would itself produce "CUS", not "CST" -
 # it's listed explicitly below rather than relying on that fallback.)
 _DEFAULT_AUTO_PREFIXES: Mapping[str, str] = MappingProxyType(
-    {"PERSON": "PSN", "ORGANIZATION": "ORG", "EMAIL_ADDRESS": "EML", "CUSTOM": "CST"}
+    {
+        "PERSON": "PSN",
+        "ORGANIZATION": "ORG",
+        "EMAIL_ADDRESS": "EML",
+        "URL": "URL",
+        "CUSTOM": "CST",
+    }
 )
 
 # Maps a master-list ``category`` to the Excel sheet name that contains it.
@@ -154,10 +160,15 @@ class Settings:
 
     language: str = "en"
     spacy_model: str = "en_core_web_lg"
-    # Name/organization/email entity types only - see the note on
+    # Name/organization/email/website entity types only - see the note on
     # `_DEFAULT_AUTO_PREFIXES` above for why non-name types (e.g. DATE_TIME)
     # must never be added here.
-    supported_entities: tuple[str, ...] = ("PERSON", "ORGANIZATION", "EMAIL_ADDRESS")
+    supported_entities: tuple[str, ...] = (
+        "PERSON",
+        "ORGANIZATION",
+        "EMAIL_ADDRESS",
+        "URL",
+    )
     categories: Mapping[str, tuple[str, str]] = _DEFAULT_CATEGORIES
     category_sheets: Mapping[str, str] = _DEFAULT_CATEGORY_SHEETS
     auto_prefixes: Mapping[str, str] = _DEFAULT_AUTO_PREFIXES

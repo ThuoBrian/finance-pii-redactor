@@ -1,9 +1,11 @@
 """Tests for the PDF pseudonymization / blackout use case.
 
-Framework-free: a fake :class:`PdfDocument` stands in for PyMuPDF, so these
-tests run without any heavy dependency. PDF has no detector at all - every
-test drives the service purely through the ``custom_words`` list, the only
-input this flow has.
+Framework-free: a fake :class:`PdfDocument` stands in for PyMuPDF and a fake
+:class:`PiiDetector` stands in for the real spaCy-free ``PatternDetector``,
+so these tests run without any heavy dependency. Most tests drive the
+service purely through the ``custom_words`` list (the fake pattern detector
+finds nothing by default); a few specifically exercise the pattern-detector
+merge.
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ from __future__ import annotations
 import pytest
 
 from finance_redactor.application.redact_pdf import RedactionStyle, RedactPdfService
+from finance_redactor.domain.entities import DetectionSource, PiiDetection, Span
 
 
 class FakePdfDocument:
@@ -90,17 +93,37 @@ class FakePdfDocument:
         return rects
 
 
+class FakePatternDetector:
+    """A ``PiiDetector`` double that returns a fixed, canned list of matches.
+
+    Real production code always hits the real ``PatternDetector`` for
+    emails/URLs; tests that don't care about that merge use the default
+    (finds nothing), keeping their assertions focused on custom words alone.
+    """
+
+    def __init__(self, detections: list[PiiDetection] | None = None) -> None:
+        """Store the canned detections to return from every ``analyze`` call."""
+        self._detections = detections or []
+
+    def analyze(
+        self, text: str, entities: list[str], threshold: float
+    ) -> list[PiiDetection]:
+        """Return the canned detections, ignoring the actual text/args."""
+        return list(self._detections)
+
+
 def _document_factory(source: object) -> FakePdfDocument:
     """Return the FakePdfDocument passed as the source."""
     assert isinstance(source, FakePdfDocument)
     return source
 
 
-def _service() -> RedactPdfService:
+def _service(pattern_detector: FakePatternDetector | None = None) -> RedactPdfService:
     return RedactPdfService(
         open_document=_document_factory,
         master_map={},
-        auto_prefixes={"CUSTOM": "CST"},
+        auto_prefixes={"CUSTOM": "CST", "EMAIL_ADDRESS": "EML", "URL": "URL"},
+        pattern_detector=pattern_detector or FakePatternDetector(),
     )
 
 
@@ -218,12 +241,13 @@ def test_blackout_mode_can_redact_images() -> None:
     assert sentinels == ["__IMAGE__"]
 
 
-def test_pseudonymize_mode_does_not_blackout_images() -> None:
-    """Pseudonymize mode never adds image redactions, even when requested.
+def test_pseudonymize_mode_can_redact_images_too() -> None:
+    """Image blackout is independent of redaction style, not blackout-only.
 
-    Uses a real word match (rather than an empty list) so ``redact_page`` is
-    actually invoked - otherwise there'd be nothing at all to redact on this
-    page and the assertions below would have nothing to check.
+    Previously gated to Blackout style only; now applies in Pseudonymize
+    style as well (the gateway already hardcodes black fill for images
+    regardless of style - only the application-layer gate changed here).
+    Text is still pseudonymized normally, not blacked out.
     """
     doc = FakePdfDocument(
         ["John paid"],
@@ -234,5 +258,39 @@ def test_pseudonymize_mode_does_not_blackout_images() -> None:
     )
 
     sentinels = [r for r, _ in doc.redactions_by_page[0] if r == "__IMAGE__"]
-    assert sentinels == []
+    assert sentinels == ["__IMAGE__"]
     assert doc.blackout_by_page[0] is False
+
+
+def test_pattern_detector_matches_are_merged_with_custom_words() -> None:
+    """Emails/URLs from the pattern detector are redacted alongside custom words.
+
+    Both sources contribute detections on the same page; each keeps its own
+    ``DetectionSource`` and resolves to its own pseudonym prefix.
+    """
+    text = "Contact jane@example.com or ask John for details"
+    email_span = Span(
+        text.index("jane@example.com"),
+        text.index("jane@example.com") + len("jane@example.com"),
+    )
+    detector = FakePatternDetector(
+        [
+            PiiDetection(
+                entity_type="EMAIL_ADDRESS",
+                span=email_span,
+                score=1.0,
+                text="jane@example.com",
+                source=DetectionSource.PATTERN,
+            )
+        ]
+    )
+    doc = FakePdfDocument([text])
+    result = _service(detector).execute(doc, ["John"])
+
+    assert result.entity_count == 2
+    sources = {f.detected_text: f.source for f in result.findings}
+    assert sources["jane@example.com"] == DetectionSource.PATTERN
+    assert sources["John"] == DetectionSource.CUSTOM
+    pseudonyms = {a.original_name: a.pseudonym for a in result.crosswalk}
+    assert pseudonyms["jane@example.com"].startswith("EML-AUTO-")
+    assert pseudonyms["John"].startswith("CST-AUTO-")

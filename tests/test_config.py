@@ -51,6 +51,14 @@ def test_date_time_is_never_a_supported_entity():
     assert "DATE_TIME" not in DEFAULT_SETTINGS.auto_prefixes
 
 
+def test_url_is_a_supported_entity_with_an_auto_prefix():
+    # Websites are detected in Word/Excel via Presidio's built-in UrlRecognizer
+    # (already loaded by default) and in PDF via the spaCy-free
+    # PatternDetector - both need "URL" present in both collections.
+    assert "URL" in DEFAULT_SETTINGS.supported_entities
+    assert DEFAULT_SETTINGS.auto_prefixes["URL"] == "URL"
+
+
 def test_no_persisted_setting_returns_none(monkeypatch):
     monkeypatch.delenv("FPR_MASTER_LIST_DIR", raising=False)
 

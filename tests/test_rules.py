@@ -124,3 +124,32 @@ def test_dedupe_master_list_wins_over_overlapping_custom_word() -> None:
     custom_hit = _detection(0, 25, score=1.0, source=DetectionSource.CUSTOM)
     kept = dedupe_overlapping([custom_hit, master_list_hit])
     assert kept == [master_list_hit]
+
+
+def test_dedupe_pattern_match_wins_over_overlapping_custom_word() -> None:
+    """A pattern match (email/URL) beats an overlapping custom word.
+
+    Both are deterministic, exact matches, but a regex-validated pattern
+    match ranks above a same-run typed word (see the PATTERN tier in
+    ``_SOURCE_PRIORITY``).
+    """
+    pattern_hit = _detection(0, 10, score=1.0, source=DetectionSource.PATTERN)
+    custom_hit = _detection(0, 25, score=1.0, source=DetectionSource.CUSTOM)
+    kept = dedupe_overlapping([custom_hit, pattern_hit])
+    assert kept == [pattern_hit]
+
+
+def test_dedupe_pattern_match_wins_over_overlapping_model_guess() -> None:
+    """A pattern match beats an overlapping model guess, regardless of span."""
+    pattern_hit = _detection(0, 10, score=1.0, source=DetectionSource.PATTERN)
+    model_hit = _detection(0, 25, score=0.85, source=DetectionSource.MODEL)
+    kept = dedupe_overlapping([model_hit, pattern_hit])
+    assert kept == [pattern_hit]
+
+
+def test_dedupe_master_list_wins_over_overlapping_pattern_match() -> None:
+    """A curated master-list match still wins over an overlapping pattern match."""
+    master_list_hit = _detection(0, 10, score=0.9, source=DetectionSource.MASTER_LIST)
+    pattern_hit = _detection(0, 25, score=1.0, source=DetectionSource.PATTERN)
+    kept = dedupe_overlapping([pattern_hit, master_list_hit])
+    assert kept == [master_list_hit]

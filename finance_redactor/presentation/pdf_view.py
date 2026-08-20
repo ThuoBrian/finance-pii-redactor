@@ -2,10 +2,15 @@
 
 Thin presentation: handles session state and widgets, delegates the whole
 pseudonymize pipeline to :class:`RedactPdfService`, and renders the summary
-via ``presenters``. Unlike Excel/Word, PDF has no automatic detection at all
-(no spaCy model, no master list) - the only thing redacted is whatever the
-user types into the "words to redact" box below, so this flow has no entity
-multiselect, no confidence threshold, and no master-list status panel.
+via ``presenters``. Unlike Excel/Word, PDF has no spaCy-model or
+master-list-based name/organization detection - that stays removed (a
+deliberate team decision: unreliable guessing on scanned financial PDFs).
+It does automatically detect email addresses and websites (deterministic
+regex, not a guess - see ``infrastructure/detection/pattern_detector.py``)
+and, by default, blacks out embedded images/logos; the words box below is a
+supplement for anything else (names, codenames, case numbers), same role it
+plays in Word. This flow still has no entity multiselect, no confidence
+threshold, and no master-list status panel - none of that applies here.
 """
 
 from __future__ import annotations
@@ -58,33 +63,28 @@ def run_pdf_flow(uploaded: Any, *, pdf_service: RedactPdfService) -> None:
             key="pdf_style",
         )
         custom_words_input = st.text_area(
-            "Words/phrases to redact",
+            "Additional words/phrases to redact (optional)",
             help=(
-                "One per line. This is the only thing redacted in PDF files - "
-                "there's no automatic name/organization detection for PDFs, so "
-                "type or paste every word or phrase you want covered (e.g. a "
-                "name, a project codename, a case number). Not saved anywhere; "
+                "One per line. Email addresses and websites are already caught "
+                "automatically. Add anything else you want covered too - e.g. a "
+                "name, a project codename, a case number. Not saved anywhere; "
                 "re-enter next time if needed."
             ),
             key="pdf_custom_words",
         )
         redact_images = st.checkbox(
             "Also black out images / logos",
-            value=False,
+            value=True,
             help=(
-                "Covers every image on each page with a black box. Only applies "
-                "when Black out is selected; in Pseudonymize mode this is ignored."
+                "Covers every image on each page with a black box, in either "
+                "redaction style. Only embedded raster images count as "
+                '"logos" - a logo drawn as vector art (lines/shapes, not a '
+                "picture) won't be caught."
             ),
             key="pdf_redact_images",
         )
 
     custom_words = [w.strip() for w in custom_words_input.splitlines() if w.strip()]
-    if not custom_words:
-        st.info(
-            "Type at least one word or phrase above to redact - PDF files have "
-            "no automatic detection, so there's nothing to do yet."
-        )
-        st.stop()
 
     button_label = (
         "Black out PDF" if style == RedactionStyle.BLACKOUT else "Pseudonymize PDF"
@@ -96,7 +96,7 @@ def run_pdf_flow(uploaded: Any, *, pdf_service: RedactPdfService) -> None:
                 uploaded,
                 custom_words,
                 style=style,
-                redact_images=(redact_images and style == RedactionStyle.BLACKOUT),
+                redact_images=redact_images,
             )
         st.session_state.pdf_buffer = result.data
         st.session_state.pdf_findings = result.findings
@@ -112,15 +112,24 @@ def run_pdf_flow(uploaded: Any, *, pdf_service: RedactPdfService) -> None:
     n_entities = len(pdf_findings)
     total_pages = st.session_state.pdf_pages
 
-    if n_entities == 0:
+    images_requested = st.session_state.get("pdf_redact_images", True)
+    if n_entities == 0 and not images_requested:
         st.info(
-            "None of the words/phrases you entered were found across "
+            "No emails, websites, or matching words/phrases were found across "
             f"{total_pages} page(s)."
         )
         st.stop()
 
     style_value = st.session_state.get("pdf_style", RedactionStyle.PSEUDONYMIZE.value)
-    if style_value == RedactionStyle.BLACKOUT.value:
+    if n_entities == 0:
+        # Nothing text-based to report, but images may still have been
+        # blacked out below (image redactions aren't tracked as findings).
+        st.info(
+            "No emails, websites, or matching words/phrases were found across "
+            f"{total_pages} page(s). Any images on the page(s) were still "
+            "blacked out in the downloaded PDF."
+        )
+    elif style_value == RedactionStyle.BLACKOUT.value:
         st.success(
             f"Found {n_entities} match(es) across {total_pages} page(s); "
             "matched areas will be blacked out in the downloaded PDF."

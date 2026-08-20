@@ -28,13 +28,17 @@ def classify_source(score: float, custom_match_score: float) -> DetectionSource:
 
 # Overlap priority, low to high: a master-list-sourced detection (an exact
 # match against the curated vocabulary) always wins, since a curated match is
-# a stronger signal than either a statistical guess or an ad-hoc word the user
-# typed for this run only; a custom word still beats a plain model guess,
-# since it's still an explicit, exact match, just not curated.
+# the strongest signal. A pattern match (a deterministic regex, e.g. an email
+# or URL - see domain/custom_words.py's sibling infrastructure/detection/
+# pattern_detector.py) ranks next, since it's just as deterministic as a
+# curated lookup, only uncurated. A custom word (typed in for this run only)
+# ranks above a plain model guess, since it's still an explicit, exact match,
+# just not curated or pattern-validated.
 _SOURCE_PRIORITY = {
     DetectionSource.MASTER_LIST: 0,
-    DetectionSource.CUSTOM: 1,
-    DetectionSource.MODEL: 2,
+    DetectionSource.PATTERN: 1,
+    DetectionSource.CUSTOM: 2,
+    DetectionSource.MODEL: 3,
 }
 
 
@@ -48,12 +52,14 @@ def dedupe_overlapping(detections: Iterable[PiiDetection]) -> list[PiiDetection]
     happens to contain a curated name (e.g. the model tagging ``"Brian Thuo -
     Kakamega"`` as one entity, which contains and outspans the master-list
     match ``"Brian Thuo"``) would win on length alone, and the name would
-    resolve to a flagged auto-id instead of its curated one. A custom word
-    (see ``domain/custom_words.py``) in turn beats an overlapping model
-    guess, since it's still an explicit, exact match the user typed for this
-    run, just not a curated one. Within the same source, leftmost wins; ties
-    break to the longest span. This is the exact algorithm the PDF flow used
-    inline, now isolated and reusable.
+    resolve to a flagged auto-id instead of its curated one. A pattern match
+    (see ``infrastructure/detection/pattern_detector.py`` - an email or URL)
+    ranks next, equally deterministic but not curated; a custom word (see
+    ``domain/custom_words.py``) in turn beats an overlapping model guess,
+    since it's still an explicit, exact match the user typed for this run,
+    just not curated or pattern-validated. Within the same source, leftmost
+    wins; ties break to the longest span. This is the exact algorithm the PDF
+    flow used inline, now isolated and reusable.
     """
     ordered = sorted(
         detections,
