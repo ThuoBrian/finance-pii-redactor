@@ -23,12 +23,15 @@ payments) stays visible in the data without ever showing the name.
 
 ## What it does
 
-- Redacts people, organizations, and email addresses in Excel, PDF, and Word files.
+- **Excel and Word:** automatically redacts people, organizations, and email
+  addresses. Codes come from a master list you control (see
+  **[data/README.md](data/README.md)**), so IDs stay stable over time; names
+  not on the list still get a consistent, flagged auto-code — nothing slips
+  through un-redacted.
+- **PDF:** no automatic detection — type or paste the exact words/phrases you
+  want redacted instead. Word files can *also* take extra typed-in words on
+  top of the automatic detection above.
 - Same identity → same code, every time, across every file you process.
-- Codes come from a master list you control (see
-  **[data/README.md](data/README.md)**), so IDs stay stable over time.
-- Names not on the list still get a consistent, flagged auto-code — nothing
-  slips through un-redacted.
 - Runs entirely offline on your own computer after first-time setup.
 
 ## Quick start
@@ -87,8 +90,15 @@ operating system — the first run sets everything up automatically.
    in `data/README.md` for the file format and a manual/environment-variable
    alternative to the dialog.
 2. Upload an Excel, PDF, or Word file. It's processed entirely on your computer.
-3. Choose what to detect (people, organizations, emails) and review the
-   results.
+3. **Excel and Word:** choose what to detect (people, organizations, emails)
+   and review the results. You can also type/paste extra words or phrases
+   into **Advanced settings**' "Additional words/phrases to redact" box —
+   anything one-off that isn't in the master list (a project codename, a
+   case number). **PDF:** there's no detection to choose — type or paste
+   every word/phrase you want redacted into the **Advanced settings**' "Words
+   to redact" box; that's the only thing PDF redacts. Either way, typed-in
+   words get a stable code too, just like everything else, but aren't saved
+   anywhere — re-enter them if you need them again in a later session.
 4. Download the pseudonymized file.
    - **Excel:** the download already includes the name-to-code mapping as a
      second sheet ("Crosswalk"), so the whole file is Confidential — see

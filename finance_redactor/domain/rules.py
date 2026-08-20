@@ -26,24 +26,39 @@ def classify_source(score: float, custom_match_score: float) -> DetectionSource:
     )
 
 
+# Overlap priority, low to high: a master-list-sourced detection (an exact
+# match against the curated vocabulary) always wins, since a curated match is
+# a stronger signal than either a statistical guess or an ad-hoc word the user
+# typed for this run only; a custom word still beats a plain model guess,
+# since it's still an explicit, exact match, just not curated.
+_SOURCE_PRIORITY = {
+    DetectionSource.MASTER_LIST: 0,
+    DetectionSource.CUSTOM: 1,
+    DetectionSource.MODEL: 2,
+}
+
+
 def dedupe_overlapping(detections: Iterable[PiiDetection]) -> list[PiiDetection]:
     """Remove overlapping detections.
 
     A master-list-sourced detection (an exact match against the curated
-    vocabulary) always wins over an overlapping model-sourced detection,
-    regardless of span length: a curated match is a stronger signal than a
-    statistical guess. Without this, a longer spaCy guess that merely happens
-    to contain a curated name (e.g. the model tagging ``"Brian Thuo -
+    vocabulary) always wins over an overlapping model- or custom-sourced
+    detection, regardless of span length: a curated match is a stronger
+    signal than either. Without this, a longer spaCy guess that merely
+    happens to contain a curated name (e.g. the model tagging ``"Brian Thuo -
     Kakamega"`` as one entity, which contains and outspans the master-list
     match ``"Brian Thuo"``) would win on length alone, and the name would
-    resolve to a flagged auto-id instead of its curated one. Within the same
-    source, leftmost wins; ties break to the longest span. This is the exact
-    algorithm the PDF flow used inline, now isolated and reusable.
+    resolve to a flagged auto-id instead of its curated one. A custom word
+    (see ``domain/custom_words.py``) in turn beats an overlapping model
+    guess, since it's still an explicit, exact match the user typed for this
+    run, just not a curated one. Within the same source, leftmost wins; ties
+    break to the longest span. This is the exact algorithm the PDF flow used
+    inline, now isolated and reusable.
     """
     ordered = sorted(
         detections,
         key=lambda d: (
-            d.source != DetectionSource.MASTER_LIST,
+            _SOURCE_PRIORITY[d.source],
             d.span.start,
             -d.span.end,
         ),

@@ -143,19 +143,18 @@ def _main() -> None:
             on_refresh_master_list=_get_master_list_bundle.clear,
         )
     elif extension == "pdf":
+        # PDF has no automatic detection (no spaCy, no master list) - pass an
+        # explicit empty master_map rather than the loaded one, so it's clear
+        # at this call site that PDF never resolves against it.
         run_pdf_flow(
             uploaded,
             pdf_service=RedactPdfService(
-                engine,
                 PyMuPdfDocument.open,
-                master_map,
+                {},
                 settings.auto_prefixes,
                 settings.fuzzy_match_threshold,
+                settings.custom_words_score,
             ),
-            settings=settings,
-            name_counts=name_counts,
-            quality_issues=quality_issues,
-            on_refresh_master_list=_get_master_list_bundle.clear,
         )
     elif extension == "docx":
         run_docx_flow(
@@ -166,6 +165,7 @@ def _main() -> None:
                 master_map,
                 settings.auto_prefixes,
                 settings.fuzzy_match_threshold,
+                settings.custom_words_score,
             ),
             settings=settings,
             name_counts=name_counts,

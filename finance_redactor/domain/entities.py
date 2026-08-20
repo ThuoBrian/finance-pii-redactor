@@ -22,11 +22,15 @@ class DetectionSource(str, Enum):
 
     The string values are also the human-readable labels shown in the UI's
     "Source" column. ``MASTER_LIST`` covers names matched against the maintained
-    master list; ``MODEL`` covers names found only by the spaCy NER model.
+    master list; ``MODEL`` covers names found only by the spaCy NER model;
+    ``CUSTOM`` covers an ad-hoc word/phrase the user typed into the PDF/Word
+    flows' "words to redact" box for this run only (see
+    ``domain/custom_words.py``) - not curated, not saved anywhere.
     """
 
     MODEL = "model"
     MASTER_LIST = "master list"
+    CUSTOM = "custom word"
 
 
 @dataclass(frozen=True)

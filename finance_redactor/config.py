@@ -118,17 +118,20 @@ _DEFAULT_CATEGORIES: Mapping[str, tuple[str, str]] = MappingProxyType(
 # Prefix used when a detected name is not in the master list and an auto/placeholder
 # pseudonym must be generated (keyed by entity type).
 #
-# Only add entity types here that identify a person or organization. Do NOT add
-# non-name entity types (e.g. Presidio's "DATE_TIME") to this map or to
+# Only add entity types here that identify a person/organization, or - like
+# "CUSTOM" - a deliberate ad-hoc redaction target the user typed into the
+# PDF/Word flows' "words to redact" box (see domain/custom_words.py). Do NOT
+# add non-name entity types (e.g. Presidio's "DATE_TIME") to this map or to
 # `supported_entities` below: dates/times aren't the PII this tool exists to
 # protect, and pseudonymizing them (e.g. turning "Jan-26" into a fake ID) is
 # noise, not redaction. Adding one carelessly is also a silent risk - any
 # entity type missing from this map falls back to `entity_type[:3].upper()` in
 # `Pseudonymizer._auto_pseudonym` (domain/pseudonyms.py) instead of raising an
 # error, so "DATE_TIME" would quietly mint "DAT-AUTO-<hash>" ids rather than
-# failing loudly.
+# failing loudly. ("CUSTOM"[:3].upper() would itself produce "CUS", not "CST" -
+# it's listed explicitly below rather than relying on that fallback.)
 _DEFAULT_AUTO_PREFIXES: Mapping[str, str] = MappingProxyType(
-    {"PERSON": "PSN", "ORGANIZATION": "ORG", "EMAIL_ADDRESS": "EML"}
+    {"PERSON": "PSN", "ORGANIZATION": "ORG", "EMAIL_ADDRESS": "EML", "CUSTOM": "CST"}
 )
 
 # Maps a master-list ``category`` to the Excel sheet name that contains it.
@@ -161,6 +164,9 @@ class Settings:
     custom_match_score: float = 0.9
     default_threshold: float = 0.35
     fuzzy_match_threshold: float = 0.84
+    # Confidence shown for an ad-hoc "words to redact" match (domain/custom_words.py) -
+    # an exact, user-typed term is maximal confidence, unlike a spaCy model guess.
+    custom_words_score: float = 1.0
     names_dir: Path = field(default=_DATA_DIR)
 
     @property
