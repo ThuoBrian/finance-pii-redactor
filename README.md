@@ -52,7 +52,16 @@ curl -fsSL https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main
 The installer asks where to put the tool, downloads it, and starts it. The
 first launch installs everything (~400 MB, a few minutes, needs internet once);
 after that it works offline. Run the same command again anytime to update — it
-preserves your existing master list automatically.
+preserves a master list kept in the local `data/` folder automatically.
+
+If your team keeps the master list in a **shared Box folder** instead (see
+"How it works" below), the installer doesn't know about that setup at all —
+it only ever touches its own install folder, never the Box folder, so a
+reinstall/update can't disturb a shared list either way. It also won't set
+the shared folder up for you on a brand-new machine: a first-time teammate
+still needs to do the one-time
+**[Sharing one master list across a team](data/README.md#sharing-one-master-list-across-a-team)**
+setup themselves before the master list will load.
 
 Already have a copy? Just double-click **`run.bat`** (Windows) or run
 **`./run.sh`** (macOS / Linux).

@@ -7,6 +7,14 @@
 # It asks where to install, downloads the latest version there, and starts the
 # app. The first launch sets up the environment (a few minutes, once).
 # To skip the prompt, set $env:FPR_INSTALL_DIR before running.
+#
+# Master list note: this script only preserves a master list kept locally at
+# <install>\data\Names List - Organized.xlsx. If your team instead points
+# installs at a shared Box folder via $env:FPR_MASTER_LIST_DIR (see
+# data/README.md), that setup lives entirely outside this script's install
+# folder, so it is untouched by install/update either way - but this script
+# also does NOT set FPR_MASTER_LIST_DIR up for you on a first run. A
+# brand-new machine still needs that one-time env-var setup done separately.
 
 $ErrorActionPreference = 'Stop'
 
