@@ -30,6 +30,8 @@ recognizers don't rely on to clear their own score thresholds.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator
+
 from presidio_analyzer import AnalyzerEngine, RecognizerRegistry, RecognizerResult
 from presidio_analyzer.nlp_engine import NlpArtifacts, NlpEngine
 from presidio_analyzer.predefined_recognizers import EmailRecognizer, UrlRecognizer
@@ -58,14 +60,21 @@ class _NullNlpEngine(NlpEngine):
         """Return empty artifacts - pattern recognizers don't need real NLP."""
         return NlpArtifacts(
             entities=[],
-            tokens=[],
+            tokens=[],  # type: ignore[arg-type]  # no real spaCy Doc - see module docstring
             tokens_indices=[],
             lemmas=[],
             nlp_engine=self,
             language=language,
         )
 
-    def process_batch(self, texts, language, batch_size=1, n_process=1, **kwargs):
+    def process_batch(
+        self,
+        texts: Iterable[str],
+        language: str,
+        batch_size: int = 1,
+        n_process: int = 1,
+        **kwargs: object,
+    ) -> Iterator[tuple[str, NlpArtifacts]]:
         """Yield empty artifacts for each text, matching the base signature."""
         for text in texts:
             yield text, self.process_text(text, language)

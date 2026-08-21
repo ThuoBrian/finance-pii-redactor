@@ -59,7 +59,7 @@ This project uses `uv` for environment management and Python 3.12.
   software — "fraud" isn't profanity — and "master list" isn't the master/slave
   sense the race rule targets).
 
-- **Run tests:**
+- **Run tests (with a coverage gate):**
 
   ```bash
   uv run pytest
@@ -71,7 +71,31 @@ This project uses `uv` for environment management and Python 3.12.
   `NlpEngineProvider` rather than the real spaCy model, the PDF gateway, and
   the Excel gateway), and presentation-layer formatting (presenters,
   master-list view). None of them require the real spaCy model to be
-  installed.
+  installed. `pytest-cov` runs automatically (wired via `addopts` in
+  `pyproject.toml`) and fails the run if coverage of `finance_redactor/`
+  drops below 80% (`[tool.coverage.report]`'s `fail_under`) - currently
+  ~95%. `app.py` (the Streamlit composition root) and
+  `finance_redactor/presentation/` (Streamlit widgets) are excluded from
+  that measurement (`[tool.coverage.run]`'s `omit`), since neither is
+  unit-tested by design (see above and "Tooling configuration" below) - the
+  80% floor only ever reflects the layers that actually have tests to lose.
+
+- **Run the type checker:**
+
+  ```bash
+  uv run mypy app.py finance_redactor/
+  ```
+
+  Deliberately scoped to production code, not `tests/` - test doubles
+  (fakes, `unittest.mock.MagicMock`/`patch`) routinely don't structurally
+  satisfy a `Protocol` or preserve `MagicMock`'s dynamic attributes under a
+  type checker, so fully typing every test double is a separate effort from
+  type-checking production code, not something to paper over with broad
+  ignores. `pandas`/`openpyxl` have real stub packages installed
+  (`pandas-stubs`, `types-openpyxl`); `fitz` (PyMuPDF) and `ahocorasick`
+  (pyahocorasick) ship neither a `py.typed` marker nor a stub package on
+  PyPI, so those two modules are explicitly exempted
+  (`[[tool.mypy.overrides]]`) rather than silently passing by accident.
 
 - **Regenerate the master list from legacy `.txt` lists** (one-off migration helper,
   only useful when migrating old plain-text lists to the Excel format):
@@ -389,12 +413,15 @@ PyMuPDF, openpyxl, Streamlit) are confined to the outermost layers.
 
 ## Tooling configuration
 
-- `pyproject.toml` defines dependencies, dev dependency group (`ruff`, `pytest`, `codespell`), and ruff rules. Key lint selections: `F`, `E`, `W`, `I`, `D`, `UP`, `SIM`. The `ignore` list is broader than just docstrings — besides `D100`/`D104`/`D105` (module/package/magic-method docstrings), it also disables the pydocstyle rules that conflict with the formatter (`D203`, `D205`, `D213`, `D206`, `D300`), several pycodestyle indentation rules, `E501` (length is the formatter's job), `SIM110`, and `TRY003`. Check the actual `ignore` array before assuming a rule is active.
+- `pyproject.toml` defines dependencies, dev dependency group (`ruff`, `pytest`, `pytest-cov`, `mypy`, `pandas-stubs`, `types-openpyxl`, `codespell`), and ruff rules. Key lint selections: `F`, `E`, `W`, `I`, `D`, `UP`, `SIM`. The `ignore` list is broader than just docstrings — besides `D100`/`D104`/`D105` (module/package/magic-method docstrings), it also disables the pydocstyle rules that conflict with the formatter (`D203`, `D205`, `D213`, `D206`, `D300`), several pycodestyle indentation rules, `E501` (length is the formatter's job), `SIM110`, and `TRY003`. Check the actual `ignore` array before assuming a rule is active.
 - `line-length = 88` and `target-version = "py312"`. `requires-python = ">=3.12,<3.14"`.
 - `codespell` is configured to skip `uv.lock`, all `.txt`, and all `.csv` files (the master list contains many names that look like typos), and to ignore a short list of words (`ignore-words-list` in `pyproject.toml`) — domain jargon like `master`, and `slave` (flagged only because `CLAUDE.md`'s own prose *about* the disabled `alex.Race` rule mentions the word it's disabling).
-- `pytest` is configured with `pythonpath = ["."]` so tests can import from the repo root. Tests live under `tests/` (23 files) and cover the pure domain logic (`pseudonyms`, `rules`, `aliases`, `fuzzy`, `quality`, `custom_words`), the `master_list_repository` parser, infrastructure adapters (Presidio detector, PDF gateway, Excel gateway, Word gateway), and presentation-layer formatting; `tests/**` is exempt from `D103` via `per-file-ignores`. `tests/conftest.py` has an `autouse` fixture that points `Path.home()` at a throwaway directory for every test, so the suite never reads or writes a real developer machine's persisted master-list settings file (see "In-app master-list setup" above).
+- `pytest` is configured with `pythonpath = ["."]` so tests can import from the repo root. Tests live under `tests/` (24 files) and cover the pure domain logic (`pseudonyms`, `rules`, `aliases`, `fuzzy`, `quality`, `custom_words`), the `master_list_repository` parser, infrastructure adapters (Presidio detector, the spaCy-free `PatternDetector`, PDF gateway, Excel gateway, Word gateway), and presentation-layer formatting; `tests/**` is exempt from `D103` via `per-file-ignores`. `tests/conftest.py` has an `autouse` fixture that points `Path.home()` at a throwaway directory for every test, so the suite never reads or writes a real developer machine's persisted master-list settings file (see "In-app master-list setup" above).
+- **Coverage:** `pytest-cov` runs on every `pytest` invocation via `addopts` (no separate command needed). `[tool.coverage.run]`'s `omit` excludes `app.py` and `finance_redactor/presentation/` (neither is unit-tested by design - see above), so `[tool.coverage.report]`'s `fail_under = 80` only ever measures domain/application/infrastructure, which currently sit around ~95%.
+- **Type checking:** `mypy` runs against `app.py`/`finance_redactor/` only, not `tests/` (test doubles routinely don't type-check cleanly against a `Protocol` or `MagicMock`'s dynamic attributes - see the command entry above). `pandas`/`openpyxl` get real stub packages (`pandas-stubs`, `types-openpyxl`); `fitz`/`ahocorasick` are explicitly exempted via `[[tool.mypy.overrides]]` since neither ships a `py.typed` marker or a stub package.
 - `pre-commit` is **not** currently declared as a project dependency, and there is **no `.pre-commit-config.yaml`**, so no hooks (pre-commit or otherwise) run locally.
-- **CI:** `.github/workflows/ci.yml` runs on every push to `main` and on pull requests — `uv sync --locked`, then `ruff check`, `ruff format --check`, `pytest`, and `codespell`. Since distribution installs straight from `main` (`install.ps1`/`install.sh`), this is what stops a broken `main` from breaking the tool for every user on their next install/update.
+- **Dependabot:** `.github/dependabot.yml` opens a weekly PR for outdated Python dependencies (reading `pyproject.toml`'s constraints) and outdated GitHub Actions (`actions/checkout`, `astral-sh/setup-uv` in `ci.yml`) - including ones fixing a known CVE. It doesn't resolve `uv.lock` itself, so a merged bump still needs a local `uv lock` run before `uv sync --locked` in CI will pass again.
+- **CI:** `.github/workflows/ci.yml` runs on every push to `main` and on pull requests — `uv sync --locked`, then `ruff check`, `ruff format --check`, `mypy`, `pytest` (which enforces the coverage floor above), and `codespell`. Since distribution installs straight from `main` (`install.ps1`/`install.sh`), this is what stops a broken `main` from breaking the tool for every user on their next install/update.
 
 ## Distribution notes
 

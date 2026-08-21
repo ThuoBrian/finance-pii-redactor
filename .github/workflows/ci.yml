@@ -34,7 +34,10 @@ jobs:
       - name: Ruff format check
         run: uv run ruff format --check app.py finance_redactor/ tests/ scripts/
 
-      - name: Run tests
+      - name: Mypy
+        run: uv run mypy app.py finance_redactor/
+
+      - name: Run tests (with coverage gate)
         run: uv run pytest
 
       - name: Codespell

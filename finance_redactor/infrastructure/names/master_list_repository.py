@@ -112,6 +112,11 @@ class MasterListRepository:
 
         mapping: dict[tuple[str, str], MasterEntry] = {}
         for row in curated:
+            # The list comprehension above already guarantees this, but the
+            # type checker can't see through a filtered list's element type -
+            # assert it explicitly (also a real safety net if that filter is
+            # ever weakened by a future edit).
+            assert row.pseudonym is not None
             key = (row.entity_type, normalize(row.name))
             entry = MasterEntry(
                 pseudonym=row.pseudonym, category=row.category, display_name=row.name
@@ -121,6 +126,7 @@ class MasterListRepository:
                 mapping[key] = entry
 
         for row in curated:
+            assert row.pseudonym is not None
             entry = MasterEntry(
                 pseudonym=row.pseudonym, category=row.category, display_name=row.name
             )

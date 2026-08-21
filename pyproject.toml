@@ -24,7 +24,15 @@ dependencies = [
 
 
 [dependency-groups]
-dev = ["codespell>=2.4.1", "pytest>=8.0.0", "ruff>=0.7.4"]
+dev = [
+    "codespell>=2.4.1",
+    "mypy>=2.3.1",
+    "pandas-stubs>=3.0.5.260730",
+    "pytest>=8.0.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.7.4",
+    "types-openpyxl>=3.1.5.20260807",
+]
 
 [tool.ruff]
 line-length = 88
@@ -74,6 +82,48 @@ docstring-code-line-length = 88
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+addopts = "--cov=finance_redactor --cov-report=term-missing --cov-fail-under=80"
+
+[tool.coverage.run]
+# app.py (the Streamlit composition root) and finance_redactor/presentation/
+# (Streamlit widgets/session state) are deliberately not unit-tested - see
+# CLAUDE.md's "Tooling configuration" section - so they're excluded from the
+# measured/enforced total below rather than dragging it down with a number
+# nothing can move (there's no unit-testable behavior to add tests for
+# there; that would need Streamlit's own testing harness, a separate effort).
+# domain/application/infrastructure - the actual business logic - stay in.
+omit = ["finance_redactor/presentation/*"]
+
+[tool.coverage.report]
+# 80 is a real floor just under the current ~90%+ for the measured layers
+# (domain/application/infrastructure), not a number picked to look good -
+# it's meant to fail CI on a genuine regression, with a little headroom for
+# normal fluctuation as code is added.
+fail_under = 80
+show_missing = true
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
+
+[tool.mypy]
+# Scoped to app.py/finance_redactor/ only (see the CI invocation) - not
+# tests/. Test doubles (fakes, unittest.mock.MagicMock/patch) routinely don't
+# structurally satisfy a Protocol or preserve MagicMock's dynamic attributes
+# under a type checker; fully typing every test double is a real but
+# separate effort from type-checking production code, so it's out of scope
+# here rather than silently loosened with broad ignores.
+python_version = "3.12"
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[[tool.mypy.overrides]]
+# Neither ships a py.typed marker or a types-* stub package on PyPI - a
+# known, accepted gap in each library's own packaging, not something this
+# project can fix. Everything else (pandas, openpyxl) has real stubs
+# installed above instead of being blanket-ignored here.
+module = ["fitz", "ahocorasick"]
+ignore_missing_imports = true
 
 [tool.codespell]
 builtin = "clear,rare,informal,usage,code,names"

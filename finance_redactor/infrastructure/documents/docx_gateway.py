@@ -10,6 +10,7 @@ text keeps its original formatting.
 from __future__ import annotations
 
 from io import BytesIO
+from typing import cast
 
 from docx import Document as open_docx
 from docx.document import Document
@@ -70,7 +71,11 @@ class PythonDocxDocument:
     def open(cls, source: object) -> PythonDocxDocument:
         """Open a .docx from bytes or a readable file-like object."""
         data = source.read() if hasattr(source, "read") else source
-        return cls(open_docx(BytesIO(data)))
+        # `source` is deliberately typed as `object` at the port boundary (it
+        # may be raw bytes or any file-like upload, e.g. Streamlit's
+        # UploadedFile) - the actual runtime contract (bytes in, either way)
+        # isn't expressible there without narrowing the port itself.
+        return cls(open_docx(BytesIO(cast(bytes, data))))
 
     @property
     def block_count(self) -> int:

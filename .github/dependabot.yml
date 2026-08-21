@@ -1,0 +1,23 @@
+version: 2
+updates:
+  # Python dependencies declared in pyproject.toml. Dependabot reads the
+  # version constraints there and opens a PR when a newer release exists
+  # (including one that fixes a known CVE) - it doesn't resolve uv.lock
+  # itself, so `uv lock` still needs a run after merging a bump (CI's
+  # `uv sync --locked` will fail loudly if that's forgotten).
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      python-dependencies:
+        patterns:
+          - "*"
+
+  # Keep the CI workflow's own actions (actions/checkout, astral-sh/setup-uv)
+  # up to date too - these run with repo access, so an out-of-date action
+  # pinned to an old tag is itself a supply-chain risk worth tracking.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

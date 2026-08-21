@@ -145,9 +145,15 @@ class PyMuPdfDocument:
                 for item in search_item:
                     candidates.append(item)
                     candidates.extend(_search_variants(item))
-                # Deduplicate while preserving order.
+                # Deduplicate while preserving order. Relies on set.add()
+                # always returning None (falsy), so `or` always evaluates and
+                # runs the add - a deliberate idiom, not a bug.
                 seen: set[str] = set()
-                candidates = [c for c in candidates if not (c in seen or seen.add(c))]
+                candidates = [
+                    c
+                    for c in candidates
+                    if not (c in seen or seen.add(c))  # type: ignore[func-returns-value]
+                ]
 
             rects: list[fitz.Rect] = []
             matched_candidate = ""
