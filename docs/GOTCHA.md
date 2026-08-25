@@ -134,6 +134,12 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Cause:** `en_core_web_lg` is an English-only model.
 - **Solution:** Add the non-English names to the master list (this is the recommended way, and they get curated IDs). For broader language support, a language-specific spaCy model or a multilingual transformer would be required, but that increases setup size and runtime cost.
 
+### Can't type an accented name (`José`, `Muñoz`, `André`) into the "words to redact" box
+
+- **Symptom:** A Latin American (or other accented) name in a PDF or Word document won't redact, because typing the exact accented characters into the "Additional words/phrases to redact" box isn't practical on a US/ASCII keyboard. This is a bigger problem for PDF specifically, since PDF has no automatic name/organization detection at all (see "PDF has no automatic name/organization detection" above) - the custom-words box is the *only* way to catch a name there.
+- **Cause (fixed):** `find_custom_words` (`finance_redactor/domain/custom_words.py`) used to be a purely literal, case-insensitive match, so typing the unaccented approximation (`Jose Garcia`) never matched the accented text (`José García`) in the document.
+- **Solution:** `find_custom_words` now folds accents (via `_fold_diacritics`, a length-preserving Unicode NFKD decomposition, the same technique `recasing.recase_uppercase` uses for ALL-CAPS) before matching, in both directions: typing `Jose Garcia` matches `José García` in the text, and typing `José García` matches an unaccented `Jose Garcia` (e.g. from an OCR pass that dropped accents). The detection reported in the crosswalk/review table still shows the real spelling as it appeared in the document, not the folded form. This only covers the PDF/Word custom-words box - master-list-based detection (used by Word/Excel's automatic name/organization matching) does not yet fold accents; add the exact accented spelling as it appears in `data/Names List - Organized.xlsx` for now.
+
 ### ALL-CAPS names and acronym false positives
 
 - **Symptom (fixed):** A fully-uppercase name like `MARY WANJIRU` used to be missed.
