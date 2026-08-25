@@ -62,3 +62,32 @@ def test_multiple_distinct_words_are_all_found() -> None:
 
     texts = {d.text for d in detections}
     assert texts == {"Case 4471-B", "Project Zeta"}
+
+
+def test_unaccented_typed_word_matches_accented_text() -> None:
+    """A US/ASCII keyboard can't easily type accents - typing the plain form
+    (``Jose Garcia``) must still find the accented spelling in the document.
+    """
+    detections = find_custom_words(
+        "Signed by José García on file.", ["Jose Garcia"], 1.0
+    )
+
+    assert len(detections) == 1
+    # The original, accented spelling is preserved in the reported detection.
+    assert detections[0].text == "José García"
+
+
+def test_accented_typed_word_matches_unaccented_text() -> None:
+    """The reverse direction also matches - e.g. an OCR pass that dropped accents."""
+    detections = find_custom_words(
+        "Signed by Jose Garcia on file.", ["José García"], 1.0
+    )
+
+    assert len(detections) == 1
+    assert detections[0].text == "Jose Garcia"
+
+
+def test_accent_insensitive_matching_still_respects_word_boundaries() -> None:
+    detections = find_custom_words("Muñoznik signed the form.", ["Munoz"], 1.0)
+
+    assert detections == []
