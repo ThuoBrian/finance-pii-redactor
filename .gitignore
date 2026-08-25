@@ -50,7 +50,13 @@ desktop.ini
 .env.*
 
 # ── Claude Code local files ──────────────────────────────────────────────────
+# Kept local rather than public: CLAUDE.md documents detection internals/
+# limitations (e.g. exactly what the PDF flow does and doesn't auto-detect) -
+# not a secret, but not something we want to hand a public roadmap of to
+# anyone who clones/forks this repo either. Untracked as of 2026-08-25; still
+# read locally by Claude Code, just no longer synced to GitHub going forward.
 .claude/
+CLAUDE.md
 
 # ── Legacy source (excluded from packaging too) ──────────────────────────────
 _legacy/

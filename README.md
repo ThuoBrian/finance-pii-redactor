@@ -91,10 +91,11 @@ Internal:
 
 ## For developers
 
-This README covers day-to-day use. See **[CLAUDE.md](CLAUDE.md)** for
-architecture and file structure, **[docs/GOTCHA.md](docs/GOTCHA.md)** for
+This README covers day-to-day use. **[docs/GOTCHA.md](docs/GOTCHA.md)** covers
 known issues and troubleshooting, and **[data/README.md](data/README.md)**
-for the master-list file format.
+covers the master-list file format. Architecture and internal file structure
+are documented in a local, non-public `CLAUDE.md` kept out of this repository
+— contact the maintainer if you need it for development.
 
 ## License
 
