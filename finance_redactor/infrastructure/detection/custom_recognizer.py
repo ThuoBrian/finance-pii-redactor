@@ -25,6 +25,7 @@ from presidio_analyzer import (
 
 from finance_redactor.domain.aliases import aliases
 from finance_redactor.domain.entities import Span
+from finance_redactor.domain.text_folding import fold_diacritics
 from finance_redactor.infrastructure.detection.pdf_text_normalizer import (
     normalize_pdf_text,
 )
@@ -44,9 +45,12 @@ class CustomNameRecognizer(EntityRecognizer):
     Every alias variant of every loaded name (org-suffix equivalents, ``&``/
     ``and`` swaps — see :mod:`finance_redactor.domain.aliases`) is inserted as a
     literal key into one Aho-Corasick automaton per entity type, lowercased for
-    case-insensitive matching. ``analyze`` then makes one pass over the
-    (whitespace-normalized) input text: automaton matches are exact literal hits,
-    so equivalents that a regex would express with ``\\s+`` or alternation are
+    case-insensitive matching and accent-folded (see
+    :mod:`finance_redactor.domain.text_folding`) so an accented master-list name
+    (``José García``) matches an unaccented spelling in a document, and vice
+    versa. ``analyze`` then makes one pass over the (whitespace-normalized,
+    accent-folded) input text: automaton matches are exact literal hits, so
+    equivalents that a regex would express with ``\\s+`` or alternation are
     instead pre-expanded into separate literal keys before matching, and a
     boundary check (equivalent to the old ``\\b...(?!\\w)`` regex wrapper) is
     applied to each raw match afterward.
@@ -69,7 +73,7 @@ class CustomNameRecognizer(EntityRecognizer):
         automaton = ahocorasick.Automaton()
         for raw_name in self.names:
             for variant in aliases(raw_name):
-                key = variant.lower()
+                key = fold_diacritics(variant.lower())
                 if key:
                     # Later names win ties on an identical alias key; harmless,
                     # since this only affects the informational explanation
@@ -101,8 +105,11 @@ class CustomNameRecognizer(EntityRecognizer):
         # `\s+` flexibility between name tokens (irregular spacing in Excel
         # cells, or PDF text already normalized upstream — reapplying here is
         # a no-op in that case). `to_raw_span` maps matches back to `text`.
+        # `fold_diacritics` is length-preserving (one output char per input
+        # char), so positions found in the folded haystack still line up with
+        # `normalized.text` and `to_raw_span` below.
         normalized = normalize_pdf_text(text)
-        haystack = normalized.text.lower()
+        haystack = fold_diacritics(normalized.text.lower())
 
         results: list[RecognizerResult] = []
         for end_index, (raw_name, key_len) in self._automaton.iter(haystack):

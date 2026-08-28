@@ -21,17 +21,23 @@ from dataclasses import dataclass
 from finance_redactor.domain.entities import PiiDetection
 from finance_redactor.domain.fuzzy import closest_match
 from finance_redactor.domain.rules import dedupe_overlapping
+from finance_redactor.domain.text_folding import fold_diacritics
 
 _WHITESPACE = re.compile(r"\s+")
 
 
 def normalize(name: str) -> str:
-    """Normalize a name for lookup: collapse whitespace, strip, casefold.
+    """Normalize a name for lookup: collapse whitespace, strip, casefold, fold accents.
 
-    Makes master-list matching robust to the case-insensitive recognizer and to
-    minor spacing differences between the list and the document text.
+    Makes master-list matching robust to the case-insensitive recognizer, to
+    minor spacing differences between the list and the document text, and to
+    accented vs. unaccented spellings (``José`` / ``Jose``) of the same name -
+    since :class:`~finance_redactor.infrastructure.detection.custom_recognizer.CustomNameRecognizer`
+    detects across that same accent difference, the master map and the
+    detected-text lookup key must fold accents identically or a curated name
+    would be detected but resolve as an unmatched auto-id.
     """
-    return _WHITESPACE.sub(" ", name).strip().casefold()
+    return fold_diacritics(_WHITESPACE.sub(" ", name).strip().casefold())
 
 
 @dataclass(frozen=True)

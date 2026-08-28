@@ -92,6 +92,38 @@ def test_suggestion_is_scoped_to_the_same_entity_type():
     assert assignment.suggested_pseudonym is None
 
 
+def test_normalize_folds_accents():
+    assert normalize("José García") == normalize("Jose Garcia")
+
+
+def test_accented_document_text_resolves_against_unaccented_master_entry():
+    """The master list stores ``Jose Garcia`` (no accents); the document spells it
+    ``José García``. The recognizer detects across that difference (see
+    ``CustomNameRecognizer``), so the lookup here must resolve it to the curated
+    id too, not fall through to an auto-id.
+    """
+    master = {("PERSON", normalize("Jose Garcia")): MasterEntry("STF-1", "Staff")}
+    p = Pseudonymizer(master, _AUTO_PREFIXES)
+
+    assignment = p.assign("PERSON", "José García")
+
+    assert assignment.pseudonym == "STF-1"
+    assert assignment.auto is False
+
+
+def test_unaccented_document_text_resolves_against_accented_master_entry():
+    """The reverse direction: master list has the accented spelling, document
+    text does not (e.g. an OCR pass that dropped accents).
+    """
+    master = {("PERSON", normalize("José García")): MasterEntry("STF-1", "Staff")}
+    p = Pseudonymizer(master, _AUTO_PREFIXES)
+
+    assignment = p.assign("PERSON", "Jose Garcia")
+
+    assert assignment.pseudonym == "STF-1"
+    assert assignment.auto is False
+
+
 def test_repeated_name_is_consistent_and_recorded_once():
     master = {("PERSON", normalize("Brian Thuo")): MasterEntry("STF-91345", "Staff")}
     p = Pseudonymizer(master, _AUTO_PREFIXES)

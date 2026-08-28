@@ -81,6 +81,30 @@ def test_matches_across_irregular_whitespace():
     assert len(hits) == 1
 
 
+def test_unaccented_master_list_name_matches_accented_text():
+    """A US/ASCII keyboard can't easily type accents - a master-list entry
+    stored without accents (``Jose Garcia``) must still match the accented
+    spelling as it actually appears in a document (``José García``).
+    """
+    rec = CustomNameRecognizer("PERSON", ["Jose Garcia"], score=0.9)
+    hits = rec.analyze("Signed by José García on file.", ["PERSON"], None)
+    assert len(hits) == 1
+    assert hits[0].start == 10
+    assert hits[0].end == 21
+
+
+def test_accented_master_list_name_matches_unaccented_text():
+    """The reverse direction also matches - e.g. an OCR pass that dropped accents."""
+    rec = CustomNameRecognizer("PERSON", ["José García"], score=0.9)
+    hits = rec.analyze("Signed by Jose Garcia on file.", ["PERSON"], None)
+    assert len(hits) == 1
+
+
+def test_accent_insensitive_matching_still_respects_word_boundaries():
+    rec = CustomNameRecognizer("PERSON", ["Munoz"], score=0.9)
+    assert rec.analyze("Muñoznik signed the form.", ["PERSON"], None) == []
+
+
 def test_scales_with_text_length_not_dictionary_size():
     """Guard against regressing to the old per-name regex loop.
 
