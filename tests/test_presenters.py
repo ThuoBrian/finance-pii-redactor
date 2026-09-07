@@ -6,7 +6,7 @@ import pandas as pd
 
 from finance_redactor.domain.entities import DetectionSource, Finding
 from finance_redactor.presentation.presenters import (
-    docx_findings_dataframe,
+    findings_dataframe,
     highlighted_html,
 )
 
@@ -45,7 +45,7 @@ def test_highlighted_html_still_highlights_selected_cells() -> None:
     assert 'style="padding:4px 8px">Bob</td>' in rendered
 
 
-def test_docx_findings_dataframe_labels_the_location_column_paragraph() -> None:
+def test_findings_dataframe_labels_the_location_column_paragraph() -> None:
     """Docx findings reuse Finding.page, labeled 'Paragraph' rather than 'Page'."""
     findings = [
         Finding(
@@ -56,7 +56,7 @@ def test_docx_findings_dataframe_labels_the_location_column_paragraph() -> None:
             source=DetectionSource.MODEL,
         )
     ]
-    df = docx_findings_dataframe(findings)
+    df = findings_dataframe(findings, "Paragraph")
     assert list(df.columns) == [
         "Paragraph",
         "Detected text",

@@ -113,33 +113,18 @@ def crosswalk_dataframe(crosswalk: list[Assignment]) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=_CROSSWALK_COLUMNS)
 
 
-def pdf_findings_dataframe(findings: list[Finding]) -> pd.DataFrame:
-    """Render PDF findings as a readable DataFrame for the UI."""
-    return pd.DataFrame(
-        [
-            {
-                "Page": f.page + 1,
-                "Detected text": f.detected_text,
-                "Entity type": f.entity_type,
-                "Confidence": round(f.score, 2),
-                "Source": f.source.value,
-            }
-            for f in findings
-        ]
-    )
+def findings_dataframe(findings: list[Finding], page_label: str) -> pd.DataFrame:
+    """Render PDF/Word findings as a readable DataFrame for the UI.
 
-
-def docx_findings_dataframe(findings: list[Finding]) -> pd.DataFrame:
-    """Render Word (.docx) findings as a readable DataFrame for the UI.
-
-    Same shape as :func:`pdf_findings_dataframe` - findings reuse
-    :class:`Finding`, whose ``page`` field holds the paragraph/block ordinal
-    here rather than a PDF page number, so the column is labeled "Paragraph".
+    Both flows reuse :class:`Finding`, whose ``page`` field holds a PDF page
+    number or a Word paragraph/block ordinal depending on the caller -
+    ``page_label`` names that column accordingly (``"Page"`` or
+    ``"Paragraph"``).
     """
     return pd.DataFrame(
         [
             {
-                "Paragraph": f.page + 1,
+                page_label: f.page + 1,
                 "Detected text": f.detected_text,
                 "Entity type": f.entity_type,
                 "Confidence": round(f.score, 2),
