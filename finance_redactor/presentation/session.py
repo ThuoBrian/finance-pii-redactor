@@ -34,9 +34,9 @@ def reset_on_new_upload(
     """Clear stale cached results when a new file (or file type) is uploaded.
 
     Compares ``uploaded.name``/``file_type`` against what's already recorded
-    in session_state; ``force`` lets a caller (Excel, which also depends on a
-    ``df`` key surviving) fold in an extra reset condition of its own. When a
-    reset is triggered, records the new ``uploaded_name``/``file_type`` and
+    in session_state; ``force`` allows a caller (Excel, which also depends on
+    a ``df`` key surviving) to fold in an extra reset condition of its own.
+    When a reset is triggered, records the new ``uploaded_name``/``file_type`` and
     pops each of ``clear_keys`` from session_state. Returns whether a reset
     happened, so callers can gate their own re-population (e.g. re-reading the
     upload into a DataFrame) on it.
