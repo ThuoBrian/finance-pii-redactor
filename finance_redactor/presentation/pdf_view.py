@@ -15,25 +15,25 @@ threshold, and no master-list status panel - none of that applies here.
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 import streamlit as st
 
 from finance_redactor.application.redact_pdf import RedactionStyle, RedactPdfService
 from finance_redactor.presentation.crosswalk_view import render_crosswalk_section
-from finance_redactor.presentation.presenters import pdf_findings_dataframe
+from finance_redactor.presentation.presenters import findings_dataframe
+from finance_redactor.presentation.session import (
+    reset_on_new_upload,
+    sanitize_base_name,
+)
 
 
 def run_pdf_flow(uploaded: Any, *, pdf_service: RedactPdfService) -> None:
     """Render the PDF pseudonymization flow in Streamlit."""
-    if (
-        st.session_state.get("uploaded_name") != uploaded.name
-        or st.session_state.get("file_type") != "pdf"
-    ):
-        st.session_state.uploaded_name = uploaded.name
-        st.session_state.file_type = "pdf"
-        for key in (
+    reset_on_new_upload(
+        uploaded,
+        "pdf",
+        (
             "df",
             "findings",
             "redacted_df",
@@ -42,8 +42,8 @@ def run_pdf_flow(uploaded: Any, *, pdf_service: RedactPdfService) -> None:
             "pdf_findings",
             "pdf_pages",
             "pdf_crosswalk",
-        ):
-            st.session_state.pop(key, None)
+        ),
+    )
 
     st.subheader("Configuration")
     with st.expander("Advanced settings", expanded=True):
@@ -137,14 +137,14 @@ def run_pdf_flow(uploaded: Any, *, pdf_service: RedactPdfService) -> None:
     else:
         st.success(f"Found {n_entities} match(es) across {total_pages} page(s).")
 
-    base_name = re.sub(r"[^\w\-]", "_", uploaded.name.rsplit(".", 1)[0])
+    base_name = sanitize_base_name(uploaded.name)
     render_crosswalk_section(
         st.session_state.pdf_crosswalk, base_name, key_prefix="pdf"
     )
 
     with st.expander(f"Detection details ({n_entities} finding(s))"):
         st.dataframe(
-            pdf_findings_dataframe(pdf_findings), width="stretch", hide_index=True
+            findings_dataframe(pdf_findings, "Page"), width="stretch", hide_index=True
         )
 
     st.subheader("Download")

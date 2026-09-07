@@ -7,7 +7,6 @@ and rendering to ``presenters``.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
@@ -24,6 +23,10 @@ from finance_redactor.presentation.presenters import (
     excel_findings_dataframe,
     highlighted_html,
 )
+from finance_redactor.presentation.session import (
+    reset_on_new_upload,
+    sanitize_base_name,
+)
 
 
 def run_excel_flow(
@@ -37,15 +40,10 @@ def run_excel_flow(
     on_refresh_master_list: Callable[[], None] | None = None,
 ) -> None:
     """Render the Excel pseudonymization flow in Streamlit."""
-    if (
-        "df" not in st.session_state
-        or st.session_state.get("uploaded_name") != uploaded.name
-        or st.session_state.get("file_type") != "excel"
-    ):
-        st.session_state.df = excel_gateway.read(uploaded)
-        st.session_state.uploaded_name = uploaded.name
-        st.session_state.file_type = "excel"
-        for key in (
+    is_new = reset_on_new_upload(
+        uploaded,
+        "excel",
+        (
             "findings",
             "redacted_df",
             "crosswalk",
@@ -53,8 +51,11 @@ def run_excel_flow(
             "pdf_findings",
             "pdf_pages",
             "pdf_crosswalk",
-        ):
-            st.session_state.pop(key, None)
+        ),
+        force="df" not in st.session_state,
+    )
+    if is_new:
+        st.session_state.df = excel_gateway.read(uploaded)
 
     df = st.session_state.df
     text_cols = excel_gateway.text_columns(df)
@@ -136,7 +137,7 @@ def run_excel_flow(
             unsafe_allow_html=True,
         )
 
-    base_name = re.sub(r"[^\w\-]", "_", uploaded.name.rsplit(".", 1)[0])
+    base_name = sanitize_base_name(uploaded.name)
     render_crosswalk_section(
         crosswalk, base_name, key_prefix="excel", download_separately=False
     )

@@ -8,7 +8,6 @@ stays fully editable, matching the Excel flow rather than the PDF flow.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
@@ -19,7 +18,11 @@ from finance_redactor.config import Settings
 from finance_redactor.domain.quality import QualityIssue
 from finance_redactor.presentation.crosswalk_view import render_crosswalk_section
 from finance_redactor.presentation.master_list_view import render_master_list_status
-from finance_redactor.presentation.presenters import docx_findings_dataframe
+from finance_redactor.presentation.presenters import findings_dataframe
+from finance_redactor.presentation.session import (
+    reset_on_new_upload,
+    sanitize_base_name,
+)
 
 
 def run_docx_flow(
@@ -32,13 +35,10 @@ def run_docx_flow(
     on_refresh_master_list: Callable[[], None] | None = None,
 ) -> None:
     """Render the Word (.docx) pseudonymization flow in Streamlit."""
-    if (
-        st.session_state.get("uploaded_name") != uploaded.name
-        or st.session_state.get("file_type") != "docx"
-    ):
-        st.session_state.uploaded_name = uploaded.name
-        st.session_state.file_type = "docx"
-        for key in (
+    reset_on_new_upload(
+        uploaded,
+        "docx",
+        (
             "df",
             "findings",
             "redacted_df",
@@ -47,8 +47,8 @@ def run_docx_flow(
             "docx_findings",
             "docx_blocks",
             "docx_crosswalk",
-        ):
-            st.session_state.pop(key, None)
+        ),
+    )
 
     st.subheader("Configuration")
     with st.expander("Advanced settings", expanded=True):
@@ -108,14 +108,16 @@ def run_docx_flow(
 
     st.success(f"Found {n_entities} PII instance(s) in this document.")
 
-    base_name = re.sub(r"[^\w\-]", "_", uploaded.name.rsplit(".", 1)[0])
+    base_name = sanitize_base_name(uploaded.name)
     render_crosswalk_section(
         st.session_state.docx_crosswalk, base_name, key_prefix="docx"
     )
 
     with st.expander(f"Detection details ({n_entities} finding(s))"):
         st.dataframe(
-            docx_findings_dataframe(docx_findings), width="stretch", hide_index=True
+            findings_dataframe(docx_findings, "Paragraph"),
+            width="stretch",
+            hide_index=True,
         )
 
     st.subheader("Download")
