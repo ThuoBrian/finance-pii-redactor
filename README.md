@@ -89,6 +89,13 @@ Internal:
 - **PDF and Word:** the crosswalk is only ever a separate CSV — keep it
   apart from the redacted file and store it securely.
 
+## Testing with users
+
+Running a user-acceptance round? **[docs/TESTING.md](docs/TESTING.md)** is a
+checklist testers can follow: install, build a small synthetic test master
+list, and work through the scenarios (Excel/PDF/Word, plus known edge cases)
+before reporting results.
+
 ## For developers
 
 This README covers day-to-day use. **[docs/GOTCHA.md](docs/GOTCHA.md)** covers
