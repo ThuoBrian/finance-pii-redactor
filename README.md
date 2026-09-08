@@ -107,6 +107,10 @@ notable changes. Architecture and internal file structure are documented in
 a local, non-public `CLAUDE.md` kept out of this repository — contact the
 maintainer if you need it for development.
 
+## Maintainer
+
+Brian Thuo, Systems Engineer — bthuo@poverty-action.org
+
 ## License
 
 [Apache 2.0](LICENSE)

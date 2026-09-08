@@ -80,3 +80,7 @@ comment.** Use synthetic test data (see
 
 If you need more architectural detail than this, ask the maintainer for
 `CLAUDE.md` (kept local, not tracked in this repo).
+
+## Maintainer
+
+Brian Thuo, Systems Engineer — bthuo@poverty-action.org
