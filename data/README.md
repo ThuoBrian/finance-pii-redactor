@@ -15,6 +15,13 @@ and is never committed to git (this local `data/` folder is gitignored).
 Keep it stored securely in Box — this is exactly why the app doesn't ship it
 and won't put a copy in this repo for you.
 
+## Contents
+
+- [Sharing one master list across a team](#sharing-one-master-list-across-a-team)
+  - [Keep the filename exactly as-is](#keep-the-filename-exactly-as-is)
+- [File format](#file-format)
+- [Data-quality checks (shown on load)](#data-quality-checks-shown-on-load)
+
 ## Sharing one master list across a team
 
 This team does not keep a per-install master list. Every teammate's install

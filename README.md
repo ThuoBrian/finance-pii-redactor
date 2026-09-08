@@ -98,11 +98,14 @@ before reporting results.
 
 ## For developers
 
-This README covers day-to-day use. **[docs/GOTCHA.md](docs/GOTCHA.md)** covers
-known issues and troubleshooting, and **[data/README.md](data/README.md)**
-covers the master-list file format. Architecture and internal file structure
-are documented in a local, non-public `CLAUDE.md` kept out of this repository
-— contact the maintainer if you need it for development.
+This README covers day-to-day use. **[CONTRIBUTING.md](CONTRIBUTING.md)**
+covers local setup and the checks to run before opening a PR,
+**[docs/GOTCHA.md](docs/GOTCHA.md)** covers known issues and
+troubleshooting, **[data/README.md](data/README.md)** covers the
+master-list file format, and **[CHANGELOG.md](CHANGELOG.md)** tracks
+notable changes. Architecture and internal file structure are documented in
+a local, non-public `CLAUDE.md` kept out of this repository — contact the
+maintainer if you need it for development.
 
 ## License
 

@@ -80,7 +80,7 @@ what happened instead — then file it.
   typed in.
 - [ ] A name/organization does **not** redact unless typed into "Additional
   words/phrases to redact" — this is expected (see
-  [GOTCHA.md](GOTCHA.md#pdf-has-no-automatic-name-organization-detection---only-emails-websites-images-and-typed-words)),
+  [GOTCHA.md](GOTCHA.md#pdf-has-no-automatic-nameorganization-detection---only-emails-websites-images-and-typed-words)),
   not a bug to report.
 - [ ] Typing a name into that box redacts every occurrence, case-insensitive.
 - [ ] Switching **Pseudonymize** vs **Black out** changes the output as

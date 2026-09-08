@@ -2,6 +2,38 @@
 
 This file records known errors, edge cases, and their solutions when developing or running the Finance PII Redactor.
 
+## Contents
+
+- [Environment and setup](#environment-and-setup)
+  - [`uv` is not found when running `run.sh` or `run.bat`](#uv-is-not-found-when-running-runsh-or-runbat)
+  - [`en_core_web_lg` spaCy model fails to download](#en_core_web_lg-spacy-model-fails-to-download)
+  - [`run.bat` crashes with `'────' is not recognized` or `do was unexpected at this time`](#runbat-crashes-with--is-not-recognized-or-do-was-unexpected-at-this-time)
+  - [Streamlit fails to start because port 8501 is in use](#streamlit-fails-to-start-because-port-8501-is-in-use)
+  - [The same name gets a different code for different teammates](#the-same-name-gets-a-different-code-for-different-teammates)
+  - [The master-list summary shows 0 names after pointing at the shared Box folder](#the-master-list-summary-shows-0-names-after-pointing-at-the-shared-box-folder)
+  - [The app fails to read the master list while it is open in Excel](#the-app-fails-to-read-the-master-list-while-it-is-open-in-excel)
+- [Code and dependencies](#code-and-dependencies)
+  - [Presidio `AnalysisExplanation` keyword arguments changed across versions](#presidio-analysisexplanation-keyword-arguments-changed-across-versions)
+  - [`app.py` cannot import from `finance_redactor`](#apppy-cannot-import-from-finance_redactor)
+  - [A name gets a flagged `*-AUTO-*` code instead of my curated ID](#a-name-gets-a-flagged--auto--code-instead-of-my-curated-id)
+  - [A custom word always gets a `CST-AUTO-*` code, never a curated one](#a-custom-word-always-gets-a-cst-auto--code-never-a-curated-one)
+  - [PDF has no automatic name/organization detection - only emails, websites, images, and typed words](#pdf-has-no-automatic-nameorganization-detection---only-emails-websites-images-and-typed-words)
+  - [Long multi-word names are not matched](#long-multi-word-names-are-not-matched)
+  - [A name followed by a bare hyphen resolves to a flagged auto-id](#a-name-followed-by-a-bare-hyphen-resolves-to-a-flagged-auto-id)
+  - [The Advanced settings panel shows master-list data-quality warnings](#the-advanced-settings-panel-shows-master-list-data-quality-warnings)
+  - [Editing the master list (or fixing its location) doesn't show up until I do *something*](#editing-the-master-list-or-fixing-its-location-doesnt-show-up-until-i-do-something)
+  - [A legacy name in the old `person.txt` had an ID appended (`Name - 90863`)](#a-legacy-name-in-the-old-persontxt-had-an-id-appended-name---90863)
+  - [Mixed-language text causes spaCy NER to miss names](#mixed-language-text-causes-spacy-ner-to-miss-names)
+  - [Can't type an accented name (`José`, `Muñoz`, `André`) into the "words to redact" box](#cant-type-an-accented-name-josé-muñoz-andré-into-the-words-to-redact-box)
+  - [ALL-CAPS names and acronym false positives](#all-caps-names-and-acronym-false-positives)
+  - [PDF text is not replaced, or a typed word/phrase isn't found](#pdf-text-is-not-replaced-or-a-typed-wordphrase-isnt-found)
+  - [Redacting a name in a PDF also blacks out/deletes part of the line above it](#redacting-a-name-in-a-pdf-also-blacks-outdeletes-part-of-the-line-above-it)
+  - [A name inside a Word text box, SmartArt, or embedded object is not detected](#a-name-inside-a-word-text-box-smartart-or-embedded-object-is-not-detected)
+  - [Why doesn't the tool touch dates/times?](#why-doesnt-the-tool-touch-datestimes)
+- [Testing and linting](#testing-and-linting)
+  - [`ruff` flags `E402` for the Streamlit context guard import](#ruff-flags-e402-for-the-streamlit-context-guard-import)
+  - [`codespell` flags HTML variable names like `thead` or `ws`](#codespell-flags-html-variable-names-like-thead-or-ws)
+
 ## Environment and setup
 
 ### `uv` is not found when running `run.sh` or `run.bat`
