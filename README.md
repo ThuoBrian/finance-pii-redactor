@@ -53,9 +53,10 @@ local master list automatically.
 
 Already installed? Double-click **`run.bat`** (Windows) or run
 **`./run.sh`** (macOS/Linux). If your team keeps the master list in a shared
-Box folder, see
+Box folder, see **[docs/BOX_SETUP.md](docs/BOX_SETUP.md)** for a quick
+one-time setup guide (or
 **[data/README.md](data/README.md#sharing-one-master-list-across-a-team)**
-for the one-time setup — the installer above doesn't touch that shared
+for the full reference) — the installer above doesn't touch that shared
 folder either way, so it's safe to re-run anytime.
 
 ## How it works

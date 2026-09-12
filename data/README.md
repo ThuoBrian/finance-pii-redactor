@@ -3,8 +3,9 @@
 `Names List - Organized.xlsx` is the **master list** — the one file that
 controls which names get which ID codes. **For this team, it lives in one
 shared Box folder — never in this local `data/` folder.** See
+**[docs/BOX_SETUP.md](../docs/BOX_SETUP.md)** for a quick setup guide, or
 [Sharing one master list across a team](#sharing-one-master-list-across-a-team)
-below for the required, one-time setup that points your install at it.
+below for the full reference.
 
 Once your install is pointed at the shared copy: edit it in place in Box,
 save and close the file, then refresh the page in your browser — no need to
