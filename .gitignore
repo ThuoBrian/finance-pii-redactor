@@ -57,6 +57,7 @@ desktop.ini
 # read locally by Claude Code, just no longer synced to GitHub going forward.
 .claude/
 CLAUDE.md
+.data/
 
 # ── Legacy source (excluded from packaging too) ──────────────────────────────
 _legacy/
