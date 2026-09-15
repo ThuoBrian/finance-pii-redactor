@@ -57,7 +57,6 @@ desktop.ini
 # read locally by Claude Code, just no longer synced to GitHub going forward.
 .claude/
 CLAUDE.md
-.data/
 
 # ── Legacy source (excluded from packaging too) ──────────────────────────────
 _legacy/
@@ -74,6 +73,12 @@ _legacy/
 *.xls
 *.xlsm
 *.pdf
+*.docx
+*.doc
 *_crosswalk.csv
 # Master list and any other data CSVs (real names) — keep local, never commit.
 data/*.csv
+# data/ is the local-only drop point for the master list and real input
+# documents: ignore everything in it whatever the extension, keep the README.
+data/*
+!data/README.md
