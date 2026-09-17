@@ -1,3 +1,9 @@
+<p align="center">
+  <img src="image/data-privacy-ai-dark.png"
+       alt="A shield enclosing a neural network, over rows of partly redacted data"
+       width="640">
+</p>
+
 # Finance PII Redactor
 
 [![CI](https://github.com/ThuoBrian/finance-pii-redactor/actions/workflows/ci.yml/badge.svg)](https://github.com/ThuoBrian/finance-pii-redactor/actions/workflows/ci.yml)
