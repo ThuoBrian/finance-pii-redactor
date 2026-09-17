@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="image/data-privacy-ai-dark.png"
+  <img src="image/data-privacy-ai-dark-nobg.svg"
        alt="A shield enclosing a neural network, over rows of partly redacted data"
        width="640">
 </p>
