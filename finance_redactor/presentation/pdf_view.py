@@ -20,6 +20,7 @@ from typing import Any
 import streamlit as st
 
 from finance_redactor.application.redact_pdf import RedactionStyle, RedactPdfService
+from finance_redactor.domain.errors import EncryptedPdfError
 from finance_redactor.presentation.crosswalk_view import render_crosswalk_section
 from finance_redactor.presentation.presenters import findings_dataframe
 from finance_redactor.presentation.session import (
@@ -91,13 +92,21 @@ def run_pdf_flow(uploaded: Any, *, pdf_service: RedactPdfService) -> None:
     )
     if st.button(button_label, type="primary", width="stretch"):
         uploaded.seek(0)
-        with st.spinner("Scanning PDF..."):
-            result = pdf_service.execute(
-                uploaded,
-                custom_words,
-                style=style,
-                redact_images=redact_images,
+        try:
+            with st.spinner("Scanning PDF..."):
+                result = pdf_service.execute(
+                    uploaded,
+                    custom_words,
+                    style=style,
+                    redact_images=redact_images,
+                )
+        except EncryptedPdfError:
+            st.error(
+                "This PDF is password-protected, so its pages can't be read. "
+                "Open it in a PDF reader, enter the password, save an "
+                "unlocked copy, and upload that copy instead."
             )
+            st.stop()
         st.session_state.pdf_buffer = result.data
         st.session_state.pdf_findings = result.findings
         st.session_state.pdf_pages = result.page_count

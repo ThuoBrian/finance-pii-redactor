@@ -14,6 +14,7 @@ from io import BytesIO
 import fitz  # PyMuPDF
 
 from finance_redactor.domain.entities import IMAGE_REDACTION_SENTINEL
+from finance_redactor.domain.errors import EncryptedPdfError
 
 # Common legal suffixes and punctuation variants a search might miss.
 _ORG_SUFFIX_RE = re.compile(
@@ -79,9 +80,26 @@ class PyMuPdfDocument:
 
     @classmethod
     def open(cls, source: object) -> PyMuPdfDocument:
-        """Open a PDF from bytes or a readable file-like object."""
+        """Open a PDF from bytes or a readable file-like object.
+
+        Raises :class:`EncryptedPdfError` when the PDF carries a user (open)
+        password. This has to be an explicit check: ``fitz.open`` accepts such
+        a document without complaint and even reports a correct
+        ``page_count``, then raises a bare ``ValueError("document closed or
+        encrypted")`` on the first page access - which surfaces to the user as
+        a raw traceback rather than something actionable.
+
+        A PDF with only an *owner* password (restricted printing/copying but
+        no password needed to view) reports ``needs_pass == 0``, so it opens
+        and redacts normally. Note that the redacted copy is written
+        unencrypted, dropping those restrictions.
+        """
         data = source.read() if hasattr(source, "read") else source
-        return cls(fitz.open(stream=data, filetype="pdf"))
+        doc = fitz.open(stream=data, filetype="pdf")
+        if doc.needs_pass:
+            doc.close()
+            raise EncryptedPdfError
+        return cls(doc)
 
     @property
     def page_count(self) -> int:

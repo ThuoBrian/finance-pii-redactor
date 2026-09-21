@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import fitz
+import pytest
 
+from finance_redactor.domain.errors import EncryptedPdfError
 from finance_redactor.infrastructure.documents.pdf_gateway import (
     PyMuPdfDocument,
     _search_variants,
@@ -118,3 +120,68 @@ def test_tighten_to_line_shrinks_symmetrically():
     assert tightened.x1 == rect.x1
     assert tightened.y0 == rect.y0 + 3
     assert tightened.y1 == rect.y1 - 3
+
+
+def _encrypted_pdf_bytes(*, user_pw: str | None) -> bytes:
+    """Build a one-page encrypted PDF carrying obviously-synthetic contact text.
+
+    ``user_pw=None`` produces the owner-password-only case: restricted
+    permissions, but no password needed to open it. Passing a user password
+    produces the "Acrobat prompts before showing anything" case.
+    """
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "Contact jane.test@example.org about invoice #4521.")
+    data = doc.tobytes(
+        encryption=fitz.PDF_ENCRYPT_AES_256,
+        owner_pw="owner-test-pw",
+        user_pw=user_pw,
+        permissions=int(fitz.PDF_PERM_ACCESSIBILITY | fitz.PDF_PERM_PRINT),
+    )
+    doc.close()
+    return data
+
+
+def test_open_rejects_a_password_protected_pdf():
+    """A user (open) password is refused up front rather than surfacing later as
+    PyMuPDF's bare ValueError on the first page read.
+    """
+    data = _encrypted_pdf_bytes(user_pw="user-test-pw")
+
+    with pytest.raises(EncryptedPdfError):
+        PyMuPdfDocument.open(data)
+
+
+def test_encrypted_pdf_error_carries_no_document_content():
+    """The error must not echo the document's text into a traceback."""
+    data = _encrypted_pdf_bytes(user_pw="user-test-pw")
+
+    with pytest.raises(EncryptedPdfError) as excinfo:
+        PyMuPdfDocument.open(data)
+
+    assert str(excinfo.value) == ""
+
+
+def test_open_accepts_an_owner_password_only_pdf():
+    """Restricted permissions without an open password still redact normally -
+    the needs_pass check must not reject this far more common case.
+    """
+    document = PyMuPdfDocument.open(_encrypted_pdf_bytes(user_pw=None))
+
+    assert document.page_count == 1
+    assert "jane.test@example.org" in document.page_text(0)
+
+    document.redact_page(0, [("jane.test@example.org", "EML-AUTO-1A2B3")])
+    redacted_bytes = document.to_bytes()
+    document.close()
+
+    redacted = PyMuPdfDocument.open(redacted_bytes)
+    text = redacted.page_text(0)
+    redacted.close()
+
+    assert "jane.test" not in text
+    assert "example.org" not in text
+    assert "EML-AUTO-1A2B3" in text
+    # The redacted copy is what gets downloaded, so the address must be gone
+    # from the raw bytes too, not merely covered in the rendered page.
+    assert b"jane.test@example.org" not in redacted_bytes
