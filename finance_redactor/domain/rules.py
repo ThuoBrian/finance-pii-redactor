@@ -49,9 +49,9 @@ def dedupe_overlapping(detections: Iterable[PiiDetection]) -> list[PiiDetection]
     vocabulary) always wins over an overlapping model- or custom-sourced
     detection, regardless of span length: a curated match is a stronger
     signal than either. Without this, a longer spaCy guess that merely
-    happens to contain a curated name (e.g. the model tagging ``"Brian Thuo -
-    Kakamega"`` as one entity, which contains and outspans the master-list
-    match ``"Brian Thuo"``) would win on length alone, and the name would
+    happens to contain a curated name (e.g. the model tagging ``"Jane Doe -
+    Springfield"`` as one entity, which contains and outspans the master-list
+    match ``"Jane Doe"``) would win on length alone, and the name would
     resolve to a flagged auto-id instead of its curated one. A pattern match
     (see ``infrastructure/detection/pattern_detector.py`` - an email or URL)
     ranks next, equally deterministic but not curated; a custom word (see

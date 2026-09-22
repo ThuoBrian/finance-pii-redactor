@@ -78,7 +78,7 @@ def test_dedupe_tie_on_start_prefers_longest_span() -> None:
 def test_dedupe_master_list_wins_over_longer_overlapping_model_span() -> None:
     """A curated master-list match must not lose to a longer model guess.
 
-    Regression test for the "Brian Thuo - Kakamega" case: the model tags the
+    Regression test for the "Jane Doe - Springfield" case: the model tags the
     whole hyphenated phrase as one PERSON entity, which overlaps and outspans
     the exact master-list match on the name alone. The curated match must win
     so the name still resolves to its stable ID instead of a flagged auto-id.

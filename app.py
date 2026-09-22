@@ -123,7 +123,7 @@ def _main() -> None:
     st.title("Finance PII Redactor")
     st.caption(
         "Upload an Excel, PDF, or Word file, choose what to pseudonymize, and "
-        "download a copy with names replaced by stable IDs (e.g. STF-91345). "
+        "download a copy with names replaced by stable IDs (e.g. STF-10010). "
         "All processing happens locally — no data leaves your laptop."
     )
 

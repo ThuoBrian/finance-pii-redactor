@@ -6,8 +6,18 @@ the `version` field in `pyproject.toml`.
 
 ## [Unreleased]
 
-Nothing yet — add entries here as changes are made, then move them under a
-new version heading when `pyproject.toml`'s version is bumped.
+### Security
+
+- Replaced real staff names, a real vendor/country pairing, and their real
+  `Internal ID`s with synthetic equivalents across test fixtures, docstrings,
+  and docs. These had been committed since `2ea8edd` and this repository is
+  public. Synthetic IDs now come from a reserved `10001`+ block. Removing them
+  from the working tree does not remove them from earlier commits, so the
+  disclosure stands on its own and is being handled separately.
+- Added `tests/test_no_real_pii_in_repo.py`, which fails if any of those
+  values reappears in a tracked file. The forbidden values are stored as
+  truncated hashes, never plaintext, so the guard cannot reintroduce what it
+  checks for.
 
 ## [0.1.0] - 2026-09-07
 
@@ -61,7 +71,7 @@ project's history to date.
 
 - PDF redaction in tightly single-spaced documents no longer bleeds into the
   line above the matched text.
-- Legacy names with an ID appended in the name itself (`Jane Doe - 22463`)
+- Legacy names with an ID appended in the name itself (`Jane Doe - 10001`)
   now match correctly.
 - ALL-CAPS names are now detected (spaCy's NER model misses them in the
   original casing).

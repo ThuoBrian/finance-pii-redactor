@@ -1,7 +1,7 @@
 """Pseudonymization: map detected names to stable IDs.
 
 The core of the tool's shift from redaction (``[PERSON]``) to pseudonymization
-(``STF-91345``). A name in the master list always resolves to its curated ID, so
+(``STF-10010``). A name in the master list always resolves to its curated ID, so
 the same person/organization gets the same pseudonym across every cell, page, and
 file — preserving the linkage needed for error-checking and fraud monitoring
 while removing the real identity.
@@ -38,7 +38,7 @@ def normalize(name: str) -> str:
 class MasterEntry:
     """A curated master-list mapping target for one normalized name.
 
-    ``display_name`` (original casing, e.g. ``"Michael Mugo"``) is optional and
+    ``display_name`` (original casing, e.g. ``"Michael Sample"``) is optional and
     used only for the fuzzy-match reviewer hint (see ``Assignment.suggested_name``);
     it defaults to ``""`` for callers (e.g. existing tests) that don't need it.
     """

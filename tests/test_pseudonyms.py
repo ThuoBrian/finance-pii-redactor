@@ -24,12 +24,12 @@ def _detection(start: int, end: int, text: str, entity: str = "PERSON") -> PiiDe
 
 
 def test_master_hit_returns_curated_id():
-    master = {("PERSON", normalize("Brian Thuo")): MasterEntry("STF-91345", "Staff")}
+    master = {("PERSON", normalize("Jane Doe")): MasterEntry("STF-10010", "Staff")}
     p = Pseudonymizer(master, _AUTO_PREFIXES)
 
-    assignment = p.assign("PERSON", "brian  thuo")  # case/space insensitive
+    assignment = p.assign("PERSON", "jane  doe")  # case/space insensitive
 
-    assert assignment.pseudonym == "STF-91345"
+    assert assignment.pseudonym == "STF-10010"
     assert assignment.category == "Staff"
     assert assignment.auto is False
 
@@ -51,26 +51,28 @@ def test_auto_prefix_follows_entity_type():
 
 def test_typo_gets_auto_id_plus_a_suggestion_not_a_silent_merge():
     master = {
-        ("PERSON", normalize("Michael Mugo")): MasterEntry(
-            "STF-91345", "Staff", display_name="Michael Mugo"
+        ("PERSON", normalize("Michael Sample")): MasterEntry(
+            "STF-10010", "Staff", display_name="Michael Sample"
         )
     }
     p = Pseudonymizer(master, _AUTO_PREFIXES)
 
-    assignment = p.assign("PERSON", "Micheal Mugo")  # typo: swapped "ae"
+    assignment = p.assign("PERSON", "Micheal Sample")  # typo: swapped "ae"
 
     # Never silently resolves to the curated id - still a flagged auto-id.
     assert assignment.auto is True
     assert assignment.pseudonym.startswith("PSN-AUTO-")
-    assert assignment.pseudonym != "STF-91345"
+    assert assignment.pseudonym != "STF-10010"
     # ...but carries a reviewer hint pointing at the likely intended match.
-    assert assignment.suggested_pseudonym == "STF-91345"
-    assert assignment.suggested_name == "Michael Mugo"
+    assert assignment.suggested_pseudonym == "STF-10010"
+    assert assignment.suggested_name == "Michael Sample"
     assert assignment.suggested_score is not None and assignment.suggested_score >= 0.84
 
 
 def test_no_suggestion_when_nothing_close_enough():
-    master = {("PERSON", normalize("Michael Mugo")): MasterEntry("STF-91345", "Staff")}
+    master = {
+        ("PERSON", normalize("Michael Sample")): MasterEntry("STF-10010", "Staff")
+    }
     p = Pseudonymizer(master, _AUTO_PREFIXES)
 
     assignment = p.assign("PERSON", "Completely Different Name")
@@ -93,27 +95,29 @@ def test_suggestion_is_scoped_to_the_same_entity_type():
 
 
 def test_repeated_name_is_consistent_and_recorded_once():
-    master = {("PERSON", normalize("Brian Thuo")): MasterEntry("STF-91345", "Staff")}
+    master = {("PERSON", normalize("Jane Doe")): MasterEntry("STF-10010", "Staff")}
     p = Pseudonymizer(master, _AUTO_PREFIXES)
 
-    first = p.assign("PERSON", "Brian Thuo")
-    second = p.assign("PERSON", "brian thuo")
+    first = p.assign("PERSON", "Jane Doe")
+    second = p.assign("PERSON", "jane doe")
 
     assert first.pseudonym == second.pseudonym
     assert len(p.crosswalk()) == 1
 
 
 def test_apply_replacements_handles_multiple_and_overlap():
-    text = "Brian Thuo paid Safaricom"
+    text = "Jane Doe paid Northwind Supplies"
     detections = [
-        _detection(0, 10, "Brian Thuo"),
-        _detection(16, 25, "Safaricom", entity="ORGANIZATION"),
+        _detection(0, 8, "Jane Doe"),
+        _detection(14, 32, "Northwind Supplies", entity="ORGANIZATION"),
         # Overlapping shorter span that should be dropped by dedupe.
-        _detection(0, 5, "Brian"),
+        _detection(0, 4, "Jane"),
     ]
     master = {
-        ("PERSON", normalize("Brian Thuo")): MasterEntry("STF-91345", "Staff"),
-        ("ORGANIZATION", normalize("Safaricom")): MasterEntry("VND-1045", "Vendor"),
+        ("PERSON", normalize("Jane Doe")): MasterEntry("STF-10010", "Staff"),
+        ("ORGANIZATION", normalize("Northwind Supplies")): MasterEntry(
+            "VND-10011", "Vendor"
+        ),
     }
     p = Pseudonymizer(master, _AUTO_PREFIXES)
 
@@ -121,7 +125,7 @@ def test_apply_replacements_handles_multiple_and_overlap():
         text, detections, lambda d: p.assign(d.entity_type, d.text).pseudonym
     )
 
-    assert result == "STF-91345 paid VND-1045"
+    assert result == "STF-10010 paid VND-10011"
 
 
 def test_apply_replacements_preserves_offsets_right_to_left():

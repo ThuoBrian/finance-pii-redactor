@@ -201,7 +201,7 @@ def test_custom_words_do_not_override_an_overlapping_master_list_hit() -> None:
         detector=_MasterListStyleDetector(),
         open_document=_document_factory,
         master_map={
-            ("PERSON", "jane doe"): MasterEntry(pseudonym="STF-91345", category="Staff")
+            ("PERSON", "jane doe"): MasterEntry(pseudonym="STF-10010", category="Staff")
         },
         auto_prefixes={"PERSON": "PSN", "CUSTOM": "CST"},
     )
@@ -209,8 +209,8 @@ def test_custom_words_do_not_override_an_overlapping_master_list_hit() -> None:
     result = service.execute(doc, ["PERSON"], 0.35, custom_words=["Jane Doe"])
 
     assert result.entity_count == 1
-    assert result.crosswalk[0].pseudonym == "STF-91345"
-    assert doc.replacements_by_block[0][0][1] == "STF-91345"
+    assert result.crosswalk[0].pseudonym == "STF-10010"
+    assert doc.replacements_by_block[0][0][1] == "STF-10010"
 
 
 def test_document_is_closed_even_on_detector_error() -> None:

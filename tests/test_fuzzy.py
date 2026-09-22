@@ -6,20 +6,20 @@ from finance_redactor.domain.fuzzy import closest_match
 
 
 def test_finds_close_typo_match():
-    result = closest_match("micheal mugo", ["michael mugo", "jane doe"], 0.84)
+    result = closest_match("micheal sample", ["michael sample", "jane doe"], 0.84)
 
     assert result is not None
     name, score = result
-    assert name == "michael mugo"
+    assert name == "michael sample"
     assert score >= 0.84
 
 
 def test_no_match_below_threshold():
-    assert closest_match("someone else entirely", ["michael mugo"], 0.84) is None
+    assert closest_match("someone else entirely", ["michael sample"], 0.84) is None
 
 
 def test_no_candidates_returns_none():
-    assert closest_match("michael mugo", [], 0.84) is None
+    assert closest_match("michael sample", [], 0.84) is None
 
 
 def test_length_delta_guard_skips_unrelated_candidates():
@@ -31,9 +31,9 @@ def test_length_delta_guard_skips_unrelated_candidates():
 
 def test_picks_the_closest_of_several_candidates():
     result = closest_match(
-        "micheal mugo", ["mitchell mugo", "michael mugo", "someone else"], 0.5
+        "micheal sample", ["mitchell sample", "michael sample", "someone else"], 0.5
     )
 
     assert result is not None
     name, _ = result
-    assert name == "michael mugo"
+    assert name == "michael sample"

@@ -131,5 +131,5 @@ def run_docx_flow(
     )
     st.caption(
         "Detected names and organizations are replaced with their pseudonyms "
-        "(e.g. STF-91345) directly in the document text."
+        "(e.g. STF-10010) directly in the document text."
     )

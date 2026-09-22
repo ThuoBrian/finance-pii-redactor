@@ -12,7 +12,7 @@ This tool takes the real names out of your finance files and puts a short
 code in their place, so you can share the file without showing who anyone
 is. It handles Excel, PDF, and Word files.
 
-"Jane Doe" becomes `STF-91345`. "Acme Ltd" becomes `VND-1045`. The same name
+"Jane Doe" becomes `STF-10010`. "Acme Ltd" becomes `VND-10011`. The same name
 always gets the same code, in this file and in every file you redact later,
 so you can still spot patterns (one vendor showing up across many payments,
 for example) when you're checking for errors or reviewing for fraud.
@@ -26,10 +26,10 @@ anything else that points back to a real person or organization.*
 
 | In your file                     | After redaction              |
 | -------------------------------- | ---------------------------- |
-| Paid to **Jane Doe**             | Paid to **STF-91345**        |
-| Vendor: **Acme Ltd**             | Vendor: **VND-1045**         |
-| Funder: **Global Aid Partners**  | Funder: **FND-7745**         |
-| Memo: approved by **Jane Doe**   | Memo: approved by **STF-91345** |
+| Paid to **Jane Doe**             | Paid to **STF-10010**        |
+| Vendor: **Acme Ltd**             | Vendor: **VND-10011**         |
+| Funder: **Global Aid Partners**  | Funder: **FND-10012**         |
+| Memo: approved by **Jane Doe**   | Memo: approved by **STF-10010** |
 
 ## What gets redacted
 

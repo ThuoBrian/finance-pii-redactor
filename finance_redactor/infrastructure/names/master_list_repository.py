@@ -14,7 +14,7 @@ file yields empty results. Parsing is cached per instance and refreshed when the
 file modification time changes.
 
 Staff names imported from legacy sources sometimes embed the ID inside the
-``Name`` column (``Isaac Henry - 22463``). Those suffixes are stripped and the
+``Name`` column (``Jane Doe - 10001``). Those suffixes are stripped and the
 ``Internal ID`` column is always used as the curated ID.
 """
 
@@ -38,7 +38,7 @@ from finance_redactor.domain.quality import (
 )
 
 _WHITESPACE = re.compile(r"\s+")
-# Strip a trailing legacy ID suffix such as "Isaac Henry - 22463".
+# Strip a trailing legacy ID suffix such as "Jane Doe - 10001".
 _LEGACY_SUFFIX = re.compile(r"\s+-\s+.*$")
 
 

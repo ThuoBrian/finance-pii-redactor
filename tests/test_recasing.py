@@ -29,8 +29,8 @@ def test_single_letter_caps_unchanged():
 
 
 def test_mixed_case_and_clean_text_unchanged():
-    assert recase_uppercase("Mary Wanjiru paid Safaricom") == (
-        "Mary Wanjiru paid Safaricom"
+    assert recase_uppercase("Mary Wanjiru paid Northwind Supplies") == (
+        "Mary Wanjiru paid Northwind Supplies"
     )
 
 

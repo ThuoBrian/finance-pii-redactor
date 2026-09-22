@@ -33,26 +33,26 @@ def _repo(tmp_path, category_sheets=None):
         "Staff": pd.DataFrame(
             {
                 "Category": ["Staff", "Staff", "Staff"],
-                "Internal ID": [91345, None, 99],
-                "Name": ["Brian Thuo", "No Id Person", ""],
-                "Primary Subsidiary": ["IPA-Kenya", "", ""],
-                "Country": ["Kenya", "", ""],
+                "Internal ID": [10010, None, 99],
+                "Name": ["Jane Doe", "No Id Person", ""],
+                "Primary Subsidiary": ["IPA-Testland", "", ""],
+                "Country": ["Testland", "", ""],
             }
         ),
         "Vendors": pd.DataFrame(
             {
                 "Category": ["Vendor"],
-                "Internal ID": [1045],
-                "Name": ["Safaricom LTD"],
-                "Primary Subsidiary": ["IPA-Kenya"],
-                "Country": ["Kenya"],
+                "Internal ID": [10011],
+                "Name": ["Northwind Supplies LTD"],
+                "Primary Subsidiary": ["IPA-Testland"],
+                "Country": ["Testland"],
             }
         ),
         "Funders": pd.DataFrame(
             {
                 "Category": ["Funder", "Mystery"],
-                "Internal ID": [7745, 5],
-                "Name": ["Gates Foundation", "Unknown Category"],
+                "Internal ID": [10012, 5],
+                "Name": ["Global Aid Trust", "Unknown Category"],
                 "Primary Subsidiary": ["", ""],
                 "Country": ["", ""],
             }
@@ -72,15 +72,15 @@ def test_missing_file_yields_empty(tmp_path):
 
 def test_names_grouped_by_entity_includes_blank_id(tmp_path):
     grouped = _repo(tmp_path, _CATEGORY_SHEETS).names_by_entity()
-    assert grouped["PERSON"] == ["Brian Thuo", "No Id Person"]
-    assert grouped["ORGANIZATION"] == ["Safaricom LTD", "Gates Foundation"]
+    assert grouped["PERSON"] == ["Jane Doe", "No Id Person"]
+    assert grouped["ORGANIZATION"] == ["Northwind Supplies LTD", "Global Aid Trust"]
 
 
 def test_master_map_only_includes_curated_ids(tmp_path):
     mapping = _repo(tmp_path, _CATEGORY_SHEETS).master_map()
-    assert mapping[("PERSON", normalize("Brian Thuo"))].pseudonym == "STF-91345"
-    assert mapping[("ORGANIZATION", normalize("Gates Foundation"))].pseudonym == (
-        "FND-7745"
+    assert mapping[("PERSON", normalize("Jane Doe"))].pseudonym == "STF-10010"
+    assert mapping[("ORGANIZATION", normalize("Global Aid Trust"))].pseudonym == (
+        "FND-10012"
     )
     # Blank-id row is detectable but absent from the curated map.
     assert ("PERSON", normalize("No Id Person")) not in mapping
@@ -217,7 +217,7 @@ def _variant_repo(path):
         "Vendors": pd.DataFrame(
             {
                 "Category": ["Vendor", "Vendor"],
-                "Internal ID": [1045, 200],
+                "Internal ID": [10011, 200],
                 "Name": ["Acme Ltd", "Smith & Co"],
                 "Primary Subsidiary": ["", ""],
                 "Country": ["", ""],
@@ -237,7 +237,7 @@ def test_master_map_resolves_suffix_variants(tmp_path):
     for surface in ["Acme Ltd", "Acme Ltd.", "Acme Limited", "Acme Limited."]:
         key = ("ORGANIZATION", normalize(surface))
         assert key in mapping, surface
-        assert mapping[key].pseudonym == "VND-1045"
+        assert mapping[key].pseudonym == "VND-10011"
 
 
 def test_master_map_resolves_ampersand_variants(tmp_path):

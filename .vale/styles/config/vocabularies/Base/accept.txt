@@ -64,3 +64,6 @@ Aho-Corasick
 automaton
 [Dd]ependabot
 mypy
+
+# The PII guard test stores forbidden values as hashes, never as this.
+[Pp]laintext

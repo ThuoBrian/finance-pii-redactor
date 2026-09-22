@@ -95,8 +95,8 @@ def test_master_list_span_wins_over_longer_overlapping_model_span(
     """A curated master-list match must not lose to a longer, overlapping model guess.
 
     Regression test for spaCy fusing a trailing hyphenated phrase onto a
-    curated name (e.g. tagging "Brian Thuo - Kakamega" as one PERSON entity,
-    which overlaps and outspans the master-list match "Brian Thuo"). Without
+    curated name (e.g. tagging "Jane Doe - Springfield" as one PERSON entity,
+    which overlaps and outspans the master-list match "Jane Doe"). Without
     master-list priority in the dedupe rule, the longer model span would win
     on length alone and the name would resolve to a flagged auto-id instead of
     its curated one.
@@ -108,7 +108,7 @@ def test_master_list_span_wins_over_longer_overlapping_model_span(
         _result(start=0, end=10, score=DEFAULT_SETTINGS.custom_match_score),
     ]
 
-    detections = engine.analyze("Brian Thuo - Kakamega", ["PERSON"], 0.35)
+    detections = engine.analyze("Jane Doe - Springfield", ["PERSON"], 0.35)
 
     assert len(detections) == 1
     assert detections[0].span.start == 0

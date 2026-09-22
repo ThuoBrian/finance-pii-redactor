@@ -11,6 +11,13 @@ cases into things to actually click through and confirm.
   staff, vendor, or funder records. This round is about the tool's behavior,
   not a review of real Confidential data, and the fewer real identities
   involved the easier it is to share results/screenshots with the team.
+- The same rule applies to anything committed to this repository, including
+  test fixtures, docstrings, and examples in these docs. It is enforced by
+  `tests/test_no_real_pii_in_repo.py`, which fails if a known real name,
+  organization, or `Internal ID` reappears in a tracked file. It stores those
+  values as hashes rather than plaintext, so a failure tells you the file and
+  line but not the matched value — look at the line it reports. Use IDs from
+  the `10001`+ synthetic block so they can never collide with real ones.
 - Each tester installs their own local copy (do **not** point at the shared
   Box master list for this round — see [Test data](#test-data) below).
 - Have a way to report issues open before you begin: [open a GitHub
@@ -63,7 +70,7 @@ what happened instead — then file it.
 - [ ] Upload a workbook; text columns are pre-selected, numeric/date columns
   aren't.
 - [ ] A test name/vendor/funder in your master list redacts to its curated
-  ID (e.g. `STF-91345`), consistently on every occurrence.
+  ID (e.g. `STF-10010`), consistently on every occurrence.
 - [ ] A name **not** in your master list still redacts, to a flagged
   `*-AUTO-*` ID (check the crosswalk's **Flagged** column).
 - [ ] Lowering the confidence threshold flags more text; raising it flags

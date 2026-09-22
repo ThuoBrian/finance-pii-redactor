@@ -108,7 +108,7 @@ Each sheet must have these columns:
 
 - **Category** — `Staff`, `Vendor`, or `Funder`.
 - **Internal ID** — the number you assign. The app builds the code as
-  `<prefix>-<Internal ID>` (Staff `91345` → `STF-91345`). Leave blank to still
+  `<prefix>-<Internal ID>` (Staff `10010` → `STF-10010`). Leave blank to still
   detect the name but give it a flagged auto-code for now.
 - **Name** — the name as it appears in your files. You only need **one row per
   entity**: matching is alias-aware, so equivalent surface forms resolve to the
@@ -120,7 +120,7 @@ Each sheet must have these columns:
 
   Spelling, word order, and middle initials are **not** matched automatically —
   add a separate row for each genuinely distinct surface form. For `Staff`,
-  legacy entries sometimes embed the ID inside the name (e.g. `Jane Doe - 22463`).
+  legacy entries sometimes embed the ID inside the name (e.g. `Jane Doe - 10001`).
   The app strips the trailing `- <anything>` and uses the `Internal ID` column as
   the curated ID.
 - **Primary Subsidiary** and **Country** — ignored by the app; kept for reference.
