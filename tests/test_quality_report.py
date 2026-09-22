@@ -49,9 +49,9 @@ def test_clean_workbook_has_no_issues(tmp_path):
     repo = _repo(
         tmp_path / "clean.xlsx",
         {
-            "Staff": _sheet("Staff", [(1, "Brian Thuo")]),
+            "Staff": _sheet("Staff", [(1, "Jane Doe")]),
             "Vendors": _sheet("Vendor", [(100, "Acme Ltd")]),
-            "Funders": _sheet("Funder", [(200, "Gates Foundation")]),
+            "Funders": _sheet("Funder", [(200, "Global Aid Trust")]),
         },
     )
     assert repo.quality_report() == []
@@ -134,7 +134,7 @@ def test_exact_duplicate_row_not_flagged(tmp_path):
 def test_ambiguous_common_word_name_is_advisory_info(tmp_path):
     repo = _repo(
         tmp_path / "ambiguous.xlsx",
-        {"Funders": _sheet("Funder", [(200, "Across"), (201, "Gates Foundation")])},
+        {"Funders": _sheet("Funder", [(200, "Across"), (201, "Global Aid Trust")])},
     )
     issues = {i.kind: i for i in repo.quality_report()}
     assert "ambiguous_common_word" in issues
@@ -142,7 +142,7 @@ def test_ambiguous_common_word_name_is_advisory_info(tmp_path):
     assert issue.severity == SEVERITY_INFO
     assert issue.total == 1
     assert any("Across" in ex for ex in issue.examples)
-    assert not any("Gates Foundation" in ex for ex in issue.examples)
+    assert not any("Global Aid Trust" in ex for ex in issue.examples)
 
 
 def test_multi_word_name_is_not_flagged_as_ambiguous(tmp_path):

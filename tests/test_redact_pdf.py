@@ -14,6 +14,7 @@ import pytest
 
 from finance_redactor.application.redact_pdf import RedactionStyle, RedactPdfService
 from finance_redactor.domain.entities import DetectionSource, PiiDetection, Span
+from finance_redactor.domain.pseudonyms import MasterEntry, normalize
 
 
 class FakePdfDocument:
@@ -104,11 +105,13 @@ class FakePatternDetector:
     def __init__(self, detections: list[PiiDetection] | None = None) -> None:
         """Store the canned detections to return from every ``analyze`` call."""
         self._detections = detections or []
+        self.requested_entities: list[str] = []
 
     def analyze(
         self, text: str, entities: list[str], threshold: float
     ) -> list[PiiDetection]:
-        """Return the canned detections, ignoring the actual text/args."""
+        """Return the canned detections, recording which entities were asked for."""
+        self.requested_entities = list(entities)
         return list(self._detections)
 
 
@@ -118,10 +121,13 @@ def _document_factory(source: object) -> FakePdfDocument:
     return source
 
 
-def _service(pattern_detector: FakePatternDetector | None = None) -> RedactPdfService:
+def _service(
+    pattern_detector: FakePatternDetector | None = None,
+    master_map: dict | None = None,
+) -> RedactPdfService:
     return RedactPdfService(
         open_document=_document_factory,
-        master_map={},
+        master_map=master_map or {},
         auto_prefixes={"CUSTOM": "CST", "EMAIL_ADDRESS": "EML", "URL": "URL"},
         pattern_detector=pattern_detector or FakePatternDetector(),
     )
@@ -143,15 +149,15 @@ def test_execute_returns_redacted_document_and_findings() -> None:
     assert result.findings[1].page == 2
 
 
-def test_pseudonym_is_consistent_across_pages() -> None:
-    """The same word on different pages maps to the same pseudonym."""
+def test_label_is_consistent_across_pages() -> None:
+    """The same word on different pages gets the same document-local label."""
     doc = FakePdfDocument(["John paid", "John approved"])
     _service().execute(doc, ["John"])
 
     page_0_label = doc.redactions_by_page[0][0][1]
     page_1_label = doc.redactions_by_page[1][0][1]
     assert page_0_label == page_1_label
-    assert page_0_label.startswith("CST-AUTO-")
+    assert page_0_label == "[001]"
 
 
 def test_empty_pages_are_skipped() -> None:
@@ -194,8 +200,7 @@ def test_custom_word_with_pdf_artifacts_is_detected_after_normalization() -> Non
     assert result.entity_count == 1
     assert result.findings[0].detected_text == "Acme Supplies"
     # The page text was updated using whichever candidate the gateway could find.
-    pseudonym = result.crosswalk[0].pseudonym
-    assert pseudonym in doc._pages[0]
+    assert result.crosswalk[0].label in doc._pages[0]
 
 
 def test_document_is_closed_even_if_page_text_raises() -> None:
@@ -221,9 +226,9 @@ def test_blackout_mode_passes_blackout_flag() -> None:
     )
 
     assert doc.blackout_by_page[0] is True
-    # Text redaction still records the matched text and assigned pseudonym.
+    # Text redaction still records the matched text and assigned label.
     assert doc.redactions_by_page[0][0][0] == "John"
-    assert doc.redactions_by_page[0][0][1].startswith("CST-AUTO-")
+    assert doc.redactions_by_page[0][0][1] == "[001]"
 
 
 def test_blackout_mode_can_redact_images() -> None:
@@ -294,3 +299,89 @@ def test_pattern_detector_matches_are_merged_with_custom_words() -> None:
     pseudonyms = {a.original_name: a.pseudonym for a in result.crosswalk}
     assert pseudonyms["jane@example.com"].startswith("EML-AUTO-")
     assert pseudonyms["John"].startswith("CST-AUTO-")
+
+
+def test_existing_bracketed_numbers_in_the_source_are_counted() -> None:
+    """Labels look like [001], so the tool reports pre-existing brackets.
+
+    The label format is fixed, so the collision cannot be designed away. The
+    operator is told instead, and decides whether the output is readable.
+    """
+    doc = FakePdfDocument(["John paid, per note [4] and item [12]."])
+    result = _service().execute(doc, ["John"])
+
+    assert result.source_bracketed_numbers == 2
+
+
+def test_no_bracketed_numbers_reports_zero() -> None:
+    doc = FakePdfDocument(["John paid the invoice."])
+    result = _service().execute(doc, ["John"])
+
+    assert result.source_bracketed_numbers == 0
+
+
+def test_typed_word_resolves_to_its_curated_internal_id() -> None:
+    """A typed word carries the master-list Internal ID into the mapping.
+
+    This is the second hop of the scheme and the reason the PDF flow is now
+    wired to the real master map: [001] is useless unless it points at an ID.
+    """
+    master = {
+        ("ORGANIZATION", normalize("Care Organisation")): MasterEntry(
+            "VND-17728", "Vendor", internal_id="17728"
+        )
+    }
+    doc = FakePdfDocument(["Paid to Care Organisation for services."])
+    result = _service(master_map=master).execute(doc, ["Care Organisation"])
+
+    assert doc.redactions_by_page[0][0][1] == "[001]"
+    assert result.crosswalk[0].internal_id == "17728"
+    assert result.crosswalk[0].auto is False
+
+
+def test_curated_name_is_redacted_without_being_typed_in() -> None:
+    """End to end: a master-list name in a PDF needs nothing typed in the box.
+
+    Regression test for a PDF that came back with only its emails redacted
+    while a curated name sat untouched in the text.
+    """
+    master = {
+        ("PERSON", normalize("Jane Doe")): MasterEntry(
+            "STF-10010", "Staff", internal_id="10010"
+        )
+    }
+    detector = FakePatternDetector(
+        [
+            PiiDetection(
+                entity_type="PERSON",
+                span=Span(8, 16),
+                score=0.9,
+                text="Jane Doe",
+                source=DetectionSource.MASTER_LIST,
+            )
+        ]
+    )
+    doc = FakePdfDocument(["Paid to Jane Doe."])
+
+    result = _service(pattern_detector=detector, master_map=master).execute(doc, [])
+
+    assert result.entity_count == 1
+    assert doc.redactions_by_page[0][0][1] == "[001]"
+    # Resolves on the exact (PERSON, name) key, so it carries the curated ID.
+    assert result.crosswalk[0].internal_id == "10010"
+    assert result.crosswalk[0].auto is False
+
+
+def test_person_and_organization_are_requested_from_the_detector() -> None:
+    """The service must ask for the curated entity types, or they never arrive.
+
+    ``CustomNameRecognizer.analyze`` returns nothing when its supported entity
+    is absent from the requested list, so this is the wiring that makes
+    master-list detection reachable at all in the PDF flow.
+    """
+    detector = FakePatternDetector([])
+    _service(pattern_detector=detector).execute(FakePdfDocument(["text"]), [])
+
+    assert "PERSON" in detector.requested_entities
+    assert "ORGANIZATION" in detector.requested_entities
+    assert "EMAIL_ADDRESS" in detector.requested_entities

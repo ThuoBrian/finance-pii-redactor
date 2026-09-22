@@ -30,14 +30,14 @@ def _crosswalk_df(rows: list[dict]) -> pd.DataFrame:
 
 
 def test_write_produces_redacted_and_crosswalk_sheets():
-    df = pd.DataFrame({"notes": ["Paid to STF-91345"]})
+    df = pd.DataFrame({"notes": ["Paid to STF-10010"]})
     crosswalk_df = _crosswalk_df(
         [
             {
                 "Original name": "Jane Doe",
                 "Entity type": "PERSON",
                 "Category": "Staff",
-                "Pseudonym": "STF-91345",
+                "Pseudonym": "STF-10010",
                 "Flagged": "",
                 "Possible match": "",
             }
@@ -51,7 +51,7 @@ def test_write_produces_redacted_and_crosswalk_sheets():
 
 
 def test_redacted_sheet_content_and_highlighting_are_preserved():
-    df = pd.DataFrame({"notes": ["Paid to STF-91345", "no name here"]})
+    df = pd.DataFrame({"notes": ["Paid to STF-10010", "no name here"]})
 
     result = OpenpyxlExcelGateway().write(df, {(0, "notes")}, _crosswalk_df([]))
 
@@ -59,7 +59,7 @@ def test_redacted_sheet_content_and_highlighting_are_preserved():
     sheet = workbook["Redacted"]
     # Header row, then two data rows.
     assert sheet.cell(row=1, column=1).value == "notes"
-    assert sheet.cell(row=2, column=1).value == "Paid to STF-91345"
+    assert sheet.cell(row=2, column=1).value == "Paid to STF-10010"
     assert sheet.cell(row=3, column=1).value == "no name here"
     # Row 0 ("notes" -> column 1) was flagged as changed; row 1 was not.
     assert sheet.cell(row=2, column=1).fill.fgColor.rgb == "00FFFF00"
@@ -74,17 +74,17 @@ def test_crosswalk_sheet_matches_the_passed_dataframe():
                 "Original name": "Jane Doe",
                 "Entity type": "PERSON",
                 "Category": "Staff",
-                "Pseudonym": "STF-91345",
+                "Pseudonym": "STF-10010",
                 "Flagged": "",
                 "Possible match": "",
             },
             {
-                "Original name": "Micheal Mugo",
+                "Original name": "Micheal Sample",
                 "Entity type": "PERSON",
                 "Category": "",
                 "Pseudonym": "PSN-AUTO-0BA3D",
                 "Flagged": "yes",
-                "Possible match": "Michael Mugo (STF-12345, 92% match)",
+                "Possible match": "Michael Sample (STF-12345, 92% match)",
             },
         ]
     )

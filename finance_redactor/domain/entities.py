@@ -16,6 +16,11 @@ from enum import Enum
 # gateway (which recognizes it) so the two stay in sync.
 IMAGE_REDACTION_SENTINEL = "__IMAGE__"
 
+# Entity type for a word/phrase the user typed into the "words to redact" box.
+# Unlike PERSON/ORGANIZATION it is never a master-list key, which is why
+# ``Pseudonymizer`` resolves it by name alone - see its ``_resolve_by_name``.
+CUSTOM_ENTITY_TYPE = "CUSTOM"
+
 
 class DetectionSource(str, Enum):
     """Where a detection originated.

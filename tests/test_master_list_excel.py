@@ -39,11 +39,11 @@ def test_legacy_staff_suffix_is_stripped(tmp_path):
         "Staff": pd.DataFrame(
             {
                 "Category": ["Staff", "Staff", "Staff"],
-                "Internal ID": [22463, 92972, 15013],
+                "Internal ID": [10001, 10002, 10003],
                 "Name": [
-                    "Isaac Henry - 22463",
-                    "  Domonyang   Nelly - 92972  ",
-                    "Geoffrey Nkurunziza - 15013",
+                    "Jane Doe - 10001",
+                    "  Mary   Testcase - 10002  ",
+                    "Peter Sample - 10003",
                 ],
                 "Primary Subsidiary": ["", "", ""],
                 "Country": ["", "", ""],
@@ -54,14 +54,14 @@ def test_legacy_staff_suffix_is_stripped(tmp_path):
     rows = repo.rows()
 
     assert [r.name for r in rows] == [
-        "Isaac Henry",
-        "Domonyang Nelly",
-        "Geoffrey Nkurunziza",
+        "Jane Doe",
+        "Mary Testcase",
+        "Peter Sample",
     ]
     assert [r.pseudonym for r in rows] == [
-        "STF-22463",
-        "STF-92972",
-        "STF-15013",
+        "STF-10001",
+        "STF-10002",
+        "STF-10003",
     ]
 
 
@@ -70,17 +70,17 @@ def test_numeric_internal_id_without_decimal_point(tmp_path):
         "Vendors": pd.DataFrame(
             {
                 "Category": ["Vendor"],
-                "Internal ID": [520638.0],  # pandas may read numeric IDs as float
-                "Name": ["Barka Multi-Services Ci"],
-                "Primary Subsidiary": ["IPA-Côte d'Ivoire"],
-                "Country": ["Côte d'Ivoire"],
+                "Internal ID": [10004.0],  # pandas may read numeric IDs as float
+                "Name": ["Northwind Traders Ltd"],
+                "Primary Subsidiary": ["IPA-Testland"],
+                "Country": ["Testland"],
             }
         )
     }
     repo = _repo_with_sheets(tmp_path, sheets)
     row = repo.rows()[0]
 
-    assert row.pseudonym == "VND-520638"
+    assert row.pseudonym == "VND-10004"
 
 
 def test_blank_internal_id_yields_none_pseudonym(tmp_path):

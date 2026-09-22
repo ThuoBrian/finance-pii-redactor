@@ -50,11 +50,11 @@ def test_ampersand_and_swapped_both_ways():
 
 def test_no_suffix_passthrough():
     # A name with no suffix and no ampersand has only itself as a variant.
-    assert aliases("Brian Thuo") == ["Brian Thuo"]
+    assert aliases("Jane Doe") == ["Jane Doe"]
 
 
 def test_single_token_no_suffix():
-    assert aliases("Safaricom") == ["Safaricom"]
+    assert aliases("Northwind") == ["Northwind"]
 
 
 def test_last_token_only_treated_as_suffix():

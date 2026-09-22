@@ -6,8 +6,78 @@ the `version` field in `pyproject.toml`.
 
 ## [Unreleased]
 
-Nothing yet — add entries here as changes are made, then move them under a
-new version heading when `pyproject.toml`'s version is bumped.
+### Changed
+
+- **PDF redaction now writes a per-document label (`[001]`) instead of a
+  pseudonym.** A pseudonym is literally `<prefix>-<Internal ID>`, so the
+  redacted PDF used to carry the master list's own join key: anyone holding
+  the master list could re-identify the file with no mapping at all. A label
+  means nothing outside the document it came from. Decoding takes two hops —
+  the mapping says `[001] = 17728`, the master list says what 17728 is — which
+  splits re-identification between two sets of hands.
+- **The PDF mapping download contains no names**, only label, Internal ID,
+  category, entity type, a flag, and which master list it was made from. It is
+  therefore *Internal* rather than *Confidential* and can be kept with the
+  redacted PDF. Names are still shown in the on-screen review table.
+  Filename changed from `*_crosswalk.csv` to `*_mapping.csv`.
+- Labels restart at `[001]` in every document. Cross-document linkage is now
+  recovered by joining two mapping files on the Internal ID, not by reading the
+  documents. Old and new redacted PDFs cannot be cross-referenced by eye.
+- **Excel and Word are unchanged**: still `STF-10010`-style pseudonyms, still a
+  names-bearing crosswalk, same classification as before. One entity therefore
+  looks different in a PDF than in an Excel export of the same data.
+
+### Added
+
+- PDF typed words are now resolved against the master list, so a word on the
+  list carries its curated `Internal ID` into the mapping. This adds no
+  automatic name detection to PDFs — it only resolves matches the user asked
+  for. A word that is not on the list, or that matches several rows with
+  conflicting IDs, is still redacted but flagged with no Internal ID rather
+  than being given a guessed one.
+- Unresolved entities get a deterministic `AUTO-` placeholder in the mapping's
+  Internal ID column rather than a blank, so they stay visibly unresolved and
+  still link across documents. It is a hash of the name, not the name.
+- PDF mappings are stamped with the master list's filename, modification time,
+  and row count, so a decode against a since-edited list is detectable.
+- A warning when a PDF already contains its own bracketed numbers (footnote
+  markers, line items), since those are indistinguishable from labels, and
+  when a typed word is itself label-shaped.
+
+### Fixed
+
+- **PDFs now redact names that are on the master list, without them being
+  typed in.** Previously a PDF full of curated names came back with only its
+  email addresses redacted. Excluding spaCy from the PDF flow was meant to
+  keep *statistical guessing* out, but it also dropped exact matching against
+  the master list, which is as deterministic as the email regex that was
+  already running. The curated recognizer (an Aho-Corasick automaton, the same
+  object Excel and Word use) now runs in the PDF flow. spaCy still does not: a
+  name not on the master list is still only redacted if typed into the box.
+- PDF's Advanced settings now shows the master-list status panel, like Excel
+  and Word. The PDF flow depends on the master list for detection, so an empty
+  or unsynced list silently leaves curated names in the document; that panel is
+  what makes the condition visible.
+- Accent folding was applied when matching typed words but not when resolving
+  them, so a typed `Jose Garcia` could match `José García` in a document and
+  then silently fail to resolve against a `Jose Garcia` master-list row. Both
+  paths now share one implementation.
+- PDF label numbering follows position on the page. `dedupe_overlapping` sorts
+  by detection source before position, which would otherwise have numbered a
+  match late in the document before one near the top.
+
+### Security
+
+- Replaced real staff names, a real vendor/country pairing, and their real
+  `Internal ID`s with synthetic equivalents across test fixtures, docstrings,
+  and docs. These had been committed since `2ea8edd` and this repository is
+  public. Synthetic IDs now come from a reserved `10001`+ block. Removing them
+  from the working tree does not remove them from earlier commits, so the
+  disclosure stands on its own and is being handled separately.
+- Added `tests/test_no_real_pii_in_repo.py`, which fails if any of those
+  values reappears in a tracked file. The forbidden values are stored as
+  truncated hashes, never plaintext, so the guard cannot reintroduce what it
+  checks for.
 
 ## [0.1.0] - 2026-09-07
 
@@ -61,7 +131,7 @@ project's history to date.
 
 - PDF redaction in tightly single-spaced documents no longer bleeds into the
   line above the matched text.
-- Legacy names with an ID appended in the name itself (`Jane Doe - 22463`)
+- Legacy names with an ID appended in the name itself (`Jane Doe - 10001`)
   now match correctly.
 - ALL-CAPS names are now detected (spaCy's NER model misses them in the
   original casing).

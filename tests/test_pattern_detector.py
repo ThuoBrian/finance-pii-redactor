@@ -13,6 +13,9 @@ from __future__ import annotations
 import sys
 
 from finance_redactor.domain.entities import DetectionSource
+from finance_redactor.infrastructure.detection.custom_recognizer import (
+    build_custom_recognizers,
+)
 from finance_redactor.infrastructure.detection.pattern_detector import (
     PatternDetector,
 )
@@ -83,3 +86,75 @@ def test_entities_filter_is_respected() -> None:
     results = detector.analyze(text, ["EMAIL_ADDRESS"], threshold=0.4)
 
     assert [r.entity_type for r in results] == ["EMAIL_ADDRESS"]
+
+
+# --- Curated master-list names -----------------------------------------------
+#
+# Added after a PDF containing a name that *was* on the master list came back
+# with only its email addresses redacted. Excluding spaCy was meant to keep
+# statistical guessing out of the PDF flow, not to drop exact matching against
+# the curated list.
+
+_ALL = ["EMAIL_ADDRESS", "URL", "PERSON", "ORGANIZATION"]
+
+
+def _curated_detector() -> PatternDetector:
+    return PatternDetector(
+        "en",
+        master_list_recognizers=build_custom_recognizers(
+            ["Jane Doe"], ["Care Organisation"], 0.9
+        ),
+    )
+
+
+def test_detects_a_curated_person_without_it_being_typed_in() -> None:
+    """A master-list name is found with nothing in the words-to-redact box."""
+    detections = _curated_detector().analyze("Paid to Jane Doe today.", _ALL, 0.4)
+
+    found = {(d.entity_type, d.text) for d in detections}
+    assert ("PERSON", "Jane Doe") in found
+
+
+def test_detects_a_curated_organization_alongside_an_email() -> None:
+    detections = _curated_detector().analyze(
+        "Care Organisation, billing@example.org", _ALL, 0.4
+    )
+
+    found = {(d.entity_type, d.text) for d in detections}
+    assert ("ORGANIZATION", "Care Organisation") in found
+    assert ("EMAIL_ADDRESS", "billing@example.org") in found
+
+
+def test_curated_hits_are_attributed_to_the_master_list() -> None:
+    """The source drives overlap priority in ``dedupe_overlapping``.
+
+    Attributed by entity type rather than by score: only the master-list
+    recognizer can emit PERSON/ORGANIZATION from this registry, so a score
+    comparison (which PresidioEngine needs, because spaCy emits these too)
+    would be a needless coincidence to rely on here.
+    """
+    detections = _curated_detector().analyze(
+        "Jane Doe at billing@example.org", _ALL, 0.4
+    )
+
+    by_type = {d.entity_type: d.source for d in detections}
+    assert by_type["PERSON"] is DetectionSource.MASTER_LIST
+    assert by_type["EMAIL_ADDRESS"] is DetectionSource.PATTERN
+
+
+def test_a_name_not_on_the_master_list_is_still_not_detected() -> None:
+    """SpaCy stays out, so an uncurated name needs the words box.
+
+    This is the boundary of the change: deterministic matching only. If this
+    ever starts passing, statistical guessing has crept into the PDF flow.
+    """
+    detections = _curated_detector().analyze("Paid to Someone Uncurated.", _ALL, 0.4)
+
+    assert detections == []
+
+
+def test_without_recognizers_it_stays_an_email_url_detector() -> None:
+    """The default construction is unchanged, which is what most callers want."""
+    detections = PatternDetector("en").analyze("Paid to Jane Doe today.", _ALL, 0.4)
+
+    assert detections == []

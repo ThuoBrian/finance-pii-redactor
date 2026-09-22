@@ -11,6 +11,13 @@ cases into things to actually click through and confirm.
   staff, vendor, or funder records. This round is about the tool's behavior,
   not a review of real Confidential data, and the fewer real identities
   involved the easier it is to share results/screenshots with the team.
+- The same rule applies to anything committed to this repository, including
+  test fixtures, docstrings, and examples in these docs. It is enforced by
+  `tests/test_no_real_pii_in_repo.py`, which fails if a known real name,
+  organization, or `Internal ID` reappears in a tracked file. It stores those
+  values as hashes rather than plaintext, so a failure tells you the file and
+  line but not the matched value — look at the line it reports. Use IDs from
+  the `10001`+ synthetic block so they can never collide with real ones.
 - Each tester installs their own local copy (do **not** point at the shared
   Box master list for this round — see [Test data](#test-data) below).
 - Have a way to report issues open before you begin: [open a GitHub
@@ -63,7 +70,7 @@ what happened instead — then file it.
 - [ ] Upload a workbook; text columns are pre-selected, numeric/date columns
   aren't.
 - [ ] A test name/vendor/funder in your master list redacts to its curated
-  ID (e.g. `STF-91345`), consistently on every occurrence.
+  ID (e.g. `STF-10010`), consistently on every occurrence.
 - [ ] A name **not** in your master list still redacts, to a flagged
   `*-AUTO-*` ID (check the crosswalk's **Flagged** column).
 - [ ] Lowering the confidence threshold flags more text; raising it flags
@@ -78,13 +85,37 @@ what happened instead — then file it.
 
 - [ ] An email address and a website URL redact automatically, with nothing
   typed in.
-- [ ] A name/organization does **not** redact unless typed into "Additional
-  words/phrases to redact" — this is expected (see
-  [GOTCHA.md](GOTCHA.md#pdf-has-no-automatic-nameorganization-detection---only-emails-websites-images-and-typed-words)),
+- [ ] A name/organization **that is on your test master list** redacts with
+  nothing typed into "Additional words/phrases to redact".
+- [ ] A name that is **not** on the master list does **not** redact unless
+  typed into that box — expected (see
+  [GOTCHA.md](GOTCHA.md#pdf-only-auto-detects-what-can-be-matched-exactly---no-spacy-guessing)),
   not a bug to report.
+- [ ] The master-list summary appears in PDF's **Advanced settings**, showing
+  the same row counts as Excel and Word. If it shows 0 names, curated names
+  will silently not be redacted — that is the check that catches it.
 - [ ] Typing a name into that box redacts every occurrence, case-insensitive.
+- [ ] Redacted text is replaced by a numbered label (`[001]`, `[002]`, and so on),
+  **not** an ID code, and the same name gets the same label everywhere in
+  that one PDF.
+- [ ] Redact a **second** PDF: its labels start over at `[001]`. Expected -
+  labels are per-document by design.
+- [ ] A name that **is** in your test master list shows a real `Internal ID`
+  in the mapping's **Internal ID** column.
+- [ ] A name that is **not** in the master list still redacts, and its
+  mapping row shows an `AUTO-` placeholder plus a reason under **Flagged**.
+  A warning about it appears *above* the mapping panel, not buried inside it.
+- [ ] **Download the label mapping (CSV) and confirm it contains no names.**
+  This is the most important check on this page: the file is only safe to
+  keep with the redacted PDF because it cannot identify anyone alone.
+- [ ] The mapping's **Master list** column names the workbook it was made
+  from, with a timestamp and row count.
+- [ ] Redact a PDF that already contains bracketed numbers of its own (e.g.
+  a footnote marker `[4]`) — a warning says labels may be ambiguous in the
+  output.
 - [ ] Switching **Pseudonymize** vs **Black out** changes the output as
-  described in each option's help text.
+  described in each option's help text. Blackout produces no mapping, since
+  there is nothing to decode.
 - [ ] With "Also black out images/logos" checked (default), an embedded
   image on the page is covered by a black box.
 - [ ] A scanned/image-only PDF (no selectable text) is left untouched aside
@@ -111,6 +142,13 @@ what happened instead — then file it.
   rows with the same name in different categories, or two names sharing one
   `Internal ID`) — a warning banner appears under **Advanced settings** the
   next time you load a file.
+- [ ] Put the **same name in two categories with different `Internal ID`s**,
+  then type it into a PDF's words box. It should still redact, but its
+  mapping row should say `ambiguous` and carry no `Internal ID` — the tool
+  refuses to guess between the two rather than recording a wrong ID.
+- [ ] Redact the **same data** as both an Excel file and a PDF. The outputs
+  deliberately look different (`STF-10010` vs `[001]`); they can only be
+  cross-referenced through the `Internal ID`, not by eye.
 
 ## Reporting results
 

@@ -34,6 +34,31 @@ _CROSSWALK_COLUMNS = [
     "Possible match",
 ]
 
+# The PDF mapping file. Deliberately has no name column - see
+# :func:`pdf_mapping_dataframe`.
+_PDF_MAPPING_COLUMNS = [
+    "Label",
+    "Internal ID",
+    "Category",
+    "Entity type",
+    "Flagged",
+    "Master list",
+]
+
+# The PDF on-screen review table. Shows names; never written to a file.
+_PDF_REVIEW_COLUMNS = [
+    "Label",
+    "Original name",
+    "Entity type",
+    "Category",
+    "Internal ID",
+    "Flagged",
+    "Possible match",
+]
+
+_FLAG_NOT_CURATED = "not in master list"
+_FLAG_AMBIGUOUS = "ambiguous - matched several master-list rows"
+
 
 def highlighted_html(df: pd.DataFrame, cell_keys: set[tuple[int, str]], bg: str) -> str:
     """Render ``df`` as an HTML table, shading the given cells with ``bg``.
@@ -111,6 +136,82 @@ def crosswalk_dataframe(crosswalk: list[Assignment]) -> pd.DataFrame:
         for a in crosswalk
     ]
     return pd.DataFrame(rows, columns=_CROSSWALK_COLUMNS)
+
+
+def pdf_review_dataframe(crosswalk: list[Assignment]) -> pd.DataFrame:
+    """Render the PDF crosswalk for the on-screen review table only.
+
+    Includes ``Original name`` so the operator can check that ``[001]`` really
+    is who they think it is, and the ``Internal ID`` it resolved to. This is a
+    screen-only frame: it is never written to a file. The downloadable frame
+    is :func:`pdf_mapping_dataframe`, which has no name column at all - they
+    are separate functions precisely so that editing the review table cannot
+    put names into the download.
+    """
+    rows = [
+        {
+            "Label": a.label,
+            "Original name": a.original_name,
+            "Entity type": a.entity_type,
+            "Category": a.category or "(unknown)",
+            "Internal ID": a.internal_id or "",
+            "Flagged": (
+                _FLAG_AMBIGUOUS if a.ambiguous else _FLAG_NOT_CURATED if a.auto else ""
+            ),
+            "Possible match": (
+                f"{a.suggested_name} ({a.suggested_pseudonym}, "
+                f"{a.suggested_score:.0%} match)"
+                if a.suggested_pseudonym
+                else ""
+            ),
+        }
+        for a in crosswalk
+    ]
+    return pd.DataFrame(rows, columns=_PDF_REVIEW_COLUMNS)
+
+
+def pdf_mapping_dataframe(
+    crosswalk: list[Assignment], master_list_fingerprint: str = ""
+) -> pd.DataFrame:
+    """Render the PDF label->Internal ID mapping for download.
+
+    **This frame must never contain a name.** It is the reason the two-hop
+    scheme exists: the redacted PDF shows only ``[001]``, this file says
+    ``[001] = 17728``, and only the access-controlled master list turns 17728
+    into a person or organization. Because it carries no names it is
+    *Internal* rather than *Confidential*, so it can travel with the redacted
+    PDF. Add a name column here and that property is gone, along with the
+    point of the whole design. ``crosswalk_dataframe`` is the names-bearing
+    frame, for the on-screen review table and for the Excel/Word flows.
+
+    Rows that resolved against the master list carry its raw ``Internal ID``.
+    Rows that did not carry their deterministic auto-pseudonym instead (e.g.
+    ``CST-AUTO-3F9A1``) - a hash of the name, not the name, so the file stays
+    names-free, and content-addressed so the same unresolved entity still
+    links across documents. It cannot be mistaken for a master-list ID, and
+    the ``Flagged`` column says why it is there. Note the hash is a *linkage*
+    token, not a secrecy guarantee: a short digest of a guessable name is
+    confirmable by anyone who can guess the name.
+
+    ``master_list_fingerprint`` stamps which master list this mapping decodes
+    against. With no names in the file there is nothing to cross-check a
+    stale decode against, so an edited or reused ``Internal ID`` would
+    otherwise mis-decode silently.
+    """
+    rows = [
+        {
+            "Label": a.label,
+            "Internal ID": a.internal_id or a.pseudonym,
+            "Category": a.category or "(unknown)",
+            "Entity type": a.entity_type,
+            "Flagged": (
+                _FLAG_AMBIGUOUS if a.ambiguous else _FLAG_NOT_CURATED if a.auto else ""
+            ),
+            "Master list": master_list_fingerprint,
+        }
+        for a in crosswalk
+    ]
+    return pd.DataFrame(rows, columns=_PDF_MAPPING_COLUMNS)
 
 
 def findings_dataframe(findings: list[Finding], page_label: str) -> pd.DataFrame:

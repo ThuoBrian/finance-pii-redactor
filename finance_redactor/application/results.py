@@ -45,12 +45,21 @@ class ExcelScanResult:
 
 @dataclass(frozen=True)
 class PdfRedactionResult:
-    """Outcome of pseudonymizing a PDF: bytes, findings, pages, and crosswalk."""
+    """Outcome of pseudonymizing a PDF: bytes, findings, pages, and crosswalk.
+
+    ``source_bracketed_numbers`` counts ``[12]``-style strings that were
+    already in the document before redaction. Labels are written as ``[001]``,
+    so in a document with its own bracketed numbering (footnote markers, note
+    references, line items) a reader cannot always tell a redaction from
+    original content. The tool cannot fix that without changing the label
+    format, so it reports it and leaves the judgement to the operator.
+    """
 
     data: bytes
     findings: list[Finding]
     page_count: int
     crosswalk: list[Assignment]
+    source_bracketed_numbers: int = 0
 
     @property
     def entity_count(self) -> int:

@@ -1,27 +1,41 @@
 """PDF pseudonymization / blackout use case.
 
-The PDF flow has no spaCy-model or master-list-based name/organization
-detection - that stays a deliberate team decision (unreliable guessing on
-scanned financial PDFs). It does, however, automatically catch email
-addresses and websites (via the injected ``pattern_detector`` - see
-``infrastructure/detection/pattern_detector.py``, which is deterministic
-regex matching, not a statistical guess, and never loads a spaCy model) and,
-by default, blacks out embedded images/logos. The words/phrases the user
-types into the "words to redact" box (`pdf_view.py`'s Advanced settings) are
-a *supplement* on top of that, for anything pattern-matching and image
-blackout don't cover (names, project codenames, case numbers). Orchestrates
+The PDF flow detects what can be matched *deterministically* and nothing
+more. Via the injected ``pattern_detector`` (see
+``infrastructure/detection/pattern_detector.py``, which never loads a spaCy
+model) that means email addresses and websites by regex, plus curated
+master-list names by exact automaton match. It also blacks out embedded
+images/logos by default.
+
+What stays out is spaCy NER, which is a statistical guess and behaves badly
+on scanned financial PDFs. So a name that is **not** on the master list is
+still only redacted if the user types it into the "words to redact" box
+(`pdf_view.py`'s Advanced settings), which remains the way to cover project
+codenames, case numbers, and anyone not yet curated. Orchestrates
 the per-page pipeline: extract text (gateway) -> normalize PDF artifacts ->
 find emails/URLs (``pattern_detector``) and the user's words
 (`domain/custom_words.find_custom_words`) -> dedupe overlaps (domain rule) ->
 resolve pseudonyms (domain) -> redact (gateway). A single
-:class:`Pseudonymizer` spans the whole document so the same word is
-pseudonymized consistently across pages, and the accumulated crosswalk is
-returned alongside the redacted bytes. A custom-word match is
-``entity_type="CUSTOM"``/``DetectionSource.CUSTOM`` and always resolves to a
-flagged ``CST-AUTO-<hash>`` id - there's no master list to resolve a curated
-one against (``master_map`` is still accepted, and still wired through to
-``Pseudonymizer``, purely so a real master list could be reinstated later by
-passing one at the composition root - nothing here special-cases PDF).
+:class:`Pseudonymizer` spans the whole document so the same word gets the
+same label across pages, and the accumulated crosswalk is returned alongside
+the redacted bytes.
+
+What gets written into the PDF is a **document-local label** (``[001]``), not
+the pseudonym. The pseudonym embeds the master-list ``Internal ID``, so
+stamping it into the document hands a reader the join key, so anyone
+holding the master list can re-identify the file with no mapping at all. The
+label means nothing outside this one document; the separately downloaded
+mapping carries ``label -> Internal ID`` (and no names), and the master list
+turns that ID into a name. Two hops, two sets of hands. Excel and Word still
+write pseudonyms directly - this scheme is PDF-only for now.
+
+A custom-word match is ``entity_type="CUSTOM"``/``DetectionSource.CUSTOM``.
+The master map is keyed ``(PERSON|ORGANIZATION, name)``, so such a match
+cannot resolve on an exact key; ``Pseudonymizer`` resolves it by name alone
+instead (see its ``_resolve_by_name``), which is how a typed word carries
+a curated ``Internal ID`` into the mapping. A word that isn't on the list, or
+one that matches two curated rows disagreeing on the ID, is still redacted
+but flagged with no ``Internal ID``.
 
 PDF text extraction can introduce ligatures, hyphenation, and irregular
 whitespace that break exact matching. The text is therefore normalized
@@ -43,6 +57,7 @@ cannot be located on the page; redactions are applied per page.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from enum import Enum
 
@@ -63,7 +78,12 @@ from finance_redactor.infrastructure.detection.pdf_text_normalizer import (
 # before assigning a score, so this only needs to be low enough to admit the
 # lower-confidence URL patterns (e.g. schema-less matches score 0.5).
 _PATTERN_THRESHOLD = 0.4
-_PATTERN_ENTITIES = ["EMAIL_ADDRESS", "URL"]
+_PATTERN_ENTITIES = ["EMAIL_ADDRESS", "URL", "PERSON", "ORGANIZATION"]
+
+# Bracketed numbers already present in the source, which look like the
+# ``[001]`` labels this flow writes. Counted, reported, and otherwise left
+# alone - the label format is fixed (see domain/pseudonyms.format_label).
+_BRACKETED_NUMBER = re.compile(r"\[\d{1,4}\]")
 
 
 class RedactionStyle(str, Enum):
@@ -127,6 +147,7 @@ class RedactPdfService:
         )
         try:
             findings: list[Finding] = []
+            bracketed = 0
             for page_index in range(document.page_count):
                 raw_text = document.page_text(page_index)
                 has_text = bool(raw_text.strip())
@@ -148,12 +169,27 @@ class RedactPdfService:
                     else []
                 )
 
-                kept = dedupe_overlapping(detections)
+                # Sorted by position, not by dedupe_overlapping's own order:
+                # that sorts by source priority first (see domain/rules.py), so
+                # a master-list match late on the page would otherwise be
+                # assigned - and therefore numbered - before a custom-word match
+                # near the top. The gateway adds all annotations and applies
+                # them in one pass, so the order it receives them in is
+                # irrelevant to the output; it only fixes the label numbering.
+                bracketed += len(_BRACKETED_NUMBER.findall(normalized.text))
+
+                kept = sorted(
+                    dedupe_overlapping(detections), key=lambda d: d.span.start
+                )
                 redactions: list[tuple[str | list[str], str]] = []
                 for detection in kept:
-                    pseudonym = pseudonymizer.assign(
+                    # The document gets the document-local label, never the
+                    # pseudonym: the pseudonym embeds the master-list Internal
+                    # ID, and keeping that out of the output is the whole point
+                    # of the two-hop scheme (see domain/pseudonyms.py).
+                    label = pseudonymizer.assign(
                         detection.entity_type, detection.text
-                    ).pseudonym
+                    ).label
                     findings.append(
                         Finding(
                             page=page_index,
@@ -171,7 +207,7 @@ class RedactPdfService:
                     candidates: list[str] = [detection.text]
                     if raw_substring != detection.text:
                         candidates.append(raw_substring)
-                    redactions.append((candidates, pseudonym))
+                    redactions.append((candidates, label))
 
                 if redact_images and document.page_image_rects(page_index):
                     redactions.append((IMAGE_REDACTION_SENTINEL, ""))
@@ -188,6 +224,7 @@ class RedactPdfService:
                 findings=findings,
                 page_count=document.page_count,
                 crosswalk=pseudonymizer.crosswalk(),
+                source_bracketed_numbers=bracketed,
             )
         finally:
             document.close()

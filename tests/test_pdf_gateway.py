@@ -99,7 +99,7 @@ def test_redact_page_does_not_delete_text_from_the_line_above():
         _tightly_spaced_two_line_pdf_bytes(11, "John Smith")
     )
 
-    document.redact_page(0, [("John Smith", "STF-91345")], blackout=True)
+    document.redact_page(0, [("John Smith", "STF-10010")], blackout=True)
     redacted_bytes = document.to_bytes()
     document.close()
 
