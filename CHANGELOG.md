@@ -46,6 +46,18 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **PDFs now redact names that are on the master list, without them being
+  typed in.** Previously a PDF full of curated names came back with only its
+  email addresses redacted. Excluding spaCy from the PDF flow was meant to
+  keep *statistical guessing* out, but it also dropped exact matching against
+  the master list, which is as deterministic as the email regex that was
+  already running. The curated recognizer (an Aho-Corasick automaton, the same
+  object Excel and Word use) now runs in the PDF flow. spaCy still does not: a
+  name not on the master list is still only redacted if typed into the box.
+- PDF's Advanced settings now shows the master-list status panel, like Excel
+  and Word. The PDF flow depends on the master list for detection, so an empty
+  or unsynced list silently leaves curated names in the document; that panel is
+  what makes the condition visible.
 - Accent folding was applied when matching typed words but not when resolving
   them, so a typed `Jose Garcia` could match `José García` in a document and
   then silently fail to resolve against a `Jose Garcia` master-list row. Both

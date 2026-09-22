@@ -85,10 +85,15 @@ what happened instead — then file it.
 
 - [ ] An email address and a website URL redact automatically, with nothing
   typed in.
-- [ ] A name/organization does **not** redact unless typed into "Additional
-  words/phrases to redact" — this is expected (see
-  [GOTCHA.md](GOTCHA.md#pdf-has-no-automatic-nameorganization-detection---only-emails-websites-images-and-typed-words)),
+- [ ] A name/organization **that is on your test master list** redacts with
+  nothing typed into "Additional words/phrases to redact".
+- [ ] A name that is **not** on the master list does **not** redact unless
+  typed into that box — expected (see
+  [GOTCHA.md](GOTCHA.md#pdf-only-auto-detects-what-can-be-matched-exactly---no-spacy-guessing)),
   not a bug to report.
+- [ ] The master-list summary appears in PDF's **Advanced settings**, showing
+  the same row counts as Excel and Word. If it shows 0 names, curated names
+  will silently not be redacted — that is the check that catches it.
 - [ ] Typing a name into that box redacts every occurrence, case-insensitive.
 - [ ] Redacted text is replaced by a numbered label (`[001]`, `[002]`, and so on),
   **not** an ID code, and the same name gets the same label everywhere in

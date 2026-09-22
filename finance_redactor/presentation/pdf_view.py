@@ -2,27 +2,36 @@
 
 Thin presentation: handles session state and widgets, delegates the whole
 pseudonymize pipeline to :class:`RedactPdfService`, and renders the summary
-via ``presenters``. Unlike Excel/Word, PDF has no spaCy-model or
-master-list-based name/organization detection - that stays removed (a
-deliberate team decision: unreliable guessing on scanned financial PDFs).
-It does automatically detect email addresses and websites (deterministic
-regex, not a guess - see ``infrastructure/detection/pattern_detector.py``)
-and, by default, blacks out embedded images/logos; the words box below is a
-supplement for anything else (names, codenames, case numbers), same role it
-plays in Word. This flow still has no entity multiselect, no confidence
-threshold, and no master-list status panel - none of that applies here.
+via ``presenters``. PDF detects everything that can be matched
+deterministically - emails and websites by regex, curated master-list names
+by exact automaton match (see
+``infrastructure/detection/pattern_detector.py``) - and by default blacks out
+embedded images/logos. What stays removed is the spaCy model, whose
+statistical guessing is unreliable on scanned financial PDFs, so the words
+box below covers anything not yet on the master list (a new name, a
+codename, a case number), the same role it plays in Word.
+
+This flow still has no entity multiselect and no confidence threshold:
+neither applies to exact matching. It *does* show the master-list status
+panel, because the master list now drives detection here too - a PDF
+redacted against an empty or unsynced list would silently leave curated
+names in place, and that panel is what makes it visible.
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import streamlit as st
 
 from finance_redactor.application.redact_pdf import RedactionStyle, RedactPdfService
+from finance_redactor.config import Settings
 from finance_redactor.domain.errors import EncryptedPdfError
+from finance_redactor.domain.quality import QualityIssue
 from finance_redactor.presentation.crosswalk_view import render_pdf_mapping_section
+from finance_redactor.presentation.master_list_view import render_master_list_status
 from finance_redactor.presentation.presenters import findings_dataframe
 from finance_redactor.presentation.session import (
     reset_on_new_upload,
@@ -38,6 +47,10 @@ def run_pdf_flow(
     uploaded: Any,
     *,
     pdf_service: RedactPdfService,
+    settings: Settings,
+    name_counts: Mapping[str, int],
+    quality_issues: Sequence[QualityIssue] | None = None,
+    on_refresh_master_list: Callable[[], None] | None = None,
     master_list_fingerprint: str = "",
 ) -> None:
     """Render the PDF pseudonymization flow in Streamlit.
@@ -83,10 +96,11 @@ def run_pdf_flow(
         custom_words_input = st.text_area(
             "Additional words/phrases to redact (optional)",
             help=(
-                "One per line. Email addresses and websites are already caught "
-                "automatically. Add anything else you want covered too - e.g. a "
-                "name, a project codename, a case number. Not saved anywhere; "
-                "re-enter next time if needed."
+                "One per line. Email addresses, websites, and any name already "
+                "on the master list are caught automatically - you don't need "
+                "to list those. Use this for anything else: a name not yet on "
+                "the master list, a project codename, a case number. Not saved "
+                "anywhere; re-enter next time if needed."
             ),
             key="pdf_custom_words",
         )
@@ -100,6 +114,12 @@ def run_pdf_flow(
                 "picture) won't be caught."
             ),
             key="pdf_redact_images",
+        )
+        render_master_list_status(
+            name_counts,
+            quality_issues,
+            settings.master_list_file,
+            on_refresh=on_refresh_master_list,
         )
 
     custom_words = [w.strip() for w in custom_words_input.splitlines() if w.strip()]

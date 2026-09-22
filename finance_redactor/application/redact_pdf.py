@@ -1,15 +1,17 @@
 """PDF pseudonymization / blackout use case.
 
-The PDF flow has no spaCy-model or master-list-based name/organization
-detection - that stays a deliberate team decision (unreliable guessing on
-scanned financial PDFs). It does, however, automatically catch email
-addresses and websites (via the injected ``pattern_detector`` - see
-``infrastructure/detection/pattern_detector.py``, which is deterministic
-regex matching, not a statistical guess, and never loads a spaCy model) and,
-by default, blacks out embedded images/logos. The words/phrases the user
-types into the "words to redact" box (`pdf_view.py`'s Advanced settings) are
-a *supplement* on top of that, for anything pattern-matching and image
-blackout don't cover (names, project codenames, case numbers). Orchestrates
+The PDF flow detects what can be matched *deterministically* and nothing
+more. Via the injected ``pattern_detector`` (see
+``infrastructure/detection/pattern_detector.py``, which never loads a spaCy
+model) that means email addresses and websites by regex, plus curated
+master-list names by exact automaton match. It also blacks out embedded
+images/logos by default.
+
+What stays out is spaCy NER, which is a statistical guess and behaves badly
+on scanned financial PDFs. So a name that is **not** on the master list is
+still only redacted if the user types it into the "words to redact" box
+(`pdf_view.py`'s Advanced settings), which remains the way to cover project
+codenames, case numbers, and anyone not yet curated. Orchestrates
 the per-page pipeline: extract text (gateway) -> normalize PDF artifacts ->
 find emails/URLs (``pattern_detector``) and the user's words
 (`domain/custom_words.find_custom_words`) -> dedupe overlaps (domain rule) ->
@@ -76,7 +78,7 @@ from finance_redactor.infrastructure.detection.pdf_text_normalizer import (
 # before assigning a score, so this only needs to be low enough to admit the
 # lower-confidence URL patterns (e.g. schema-less matches score 0.5).
 _PATTERN_THRESHOLD = 0.4
-_PATTERN_ENTITIES = ["EMAIL_ADDRESS", "URL"]
+_PATTERN_ENTITIES = ["EMAIL_ADDRESS", "URL", "PERSON", "ORGANIZATION"]
 
 # Bracketed numbers already present in the source, which look like the
 # ``[001]`` labels this flow writes. Counted, reported, and otherwise left

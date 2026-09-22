@@ -105,11 +105,13 @@ class FakePatternDetector:
     def __init__(self, detections: list[PiiDetection] | None = None) -> None:
         """Store the canned detections to return from every ``analyze`` call."""
         self._detections = detections or []
+        self.requested_entities: list[str] = []
 
     def analyze(
         self, text: str, entities: list[str], threshold: float
     ) -> list[PiiDetection]:
-        """Return the canned detections, ignoring the actual text/args."""
+        """Return the canned detections, recording which entities were asked for."""
+        self.requested_entities = list(entities)
         return list(self._detections)
 
 
@@ -335,3 +337,51 @@ def test_typed_word_resolves_to_its_curated_internal_id() -> None:
     assert doc.redactions_by_page[0][0][1] == "[001]"
     assert result.crosswalk[0].internal_id == "17728"
     assert result.crosswalk[0].auto is False
+
+
+def test_curated_name_is_redacted_without_being_typed_in() -> None:
+    """End to end: a master-list name in a PDF needs nothing typed in the box.
+
+    Regression test for a PDF that came back with only its emails redacted
+    while a curated name sat untouched in the text.
+    """
+    master = {
+        ("PERSON", normalize("Jane Doe")): MasterEntry(
+            "STF-10010", "Staff", internal_id="10010"
+        )
+    }
+    detector = FakePatternDetector(
+        [
+            PiiDetection(
+                entity_type="PERSON",
+                span=Span(8, 16),
+                score=0.9,
+                text="Jane Doe",
+                source=DetectionSource.MASTER_LIST,
+            )
+        ]
+    )
+    doc = FakePdfDocument(["Paid to Jane Doe."])
+
+    result = _service(pattern_detector=detector, master_map=master).execute(doc, [])
+
+    assert result.entity_count == 1
+    assert doc.redactions_by_page[0][0][1] == "[001]"
+    # Resolves on the exact (PERSON, name) key, so it carries the curated ID.
+    assert result.crosswalk[0].internal_id == "10010"
+    assert result.crosswalk[0].auto is False
+
+
+def test_person_and_organization_are_requested_from_the_detector() -> None:
+    """The service must ask for the curated entity types, or they never arrive.
+
+    ``CustomNameRecognizer.analyze`` returns nothing when its supported entity
+    is absent from the requested list, so this is the wiring that makes
+    master-list detection reachable at all in the PDF flow.
+    """
+    detector = FakePatternDetector([])
+    _service(pattern_detector=detector).execute(FakePdfDocument(["text"]), [])
+
+    assert "PERSON" in detector.requested_entities
+    assert "ORGANIZATION" in detector.requested_entities
+    assert "EMAIL_ADDRESS" in detector.requested_entities

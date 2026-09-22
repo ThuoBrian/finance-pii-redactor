@@ -73,11 +73,13 @@ See **[data/README.md](data/README.md)** for what goes in that file.
 **Excel and Word files:** the tool finds people, organizations, email
 addresses, and website links on its own.
 
-**PDF files:** email addresses, website links, and images or logos are
-found automatically. Names and organizations are not, because in a PDF the
-tool can't reliably tell a name from any other text and we'd rather it
-didn't guess. So for PDFs you type or paste the exact words you want
-covered.
+**PDF files:** email addresses, website links, images or logos, and any name
+or organization **that is on the master list** are found automatically. What
+the tool won't do in a PDF is guess at a name it doesn't already know: the
+statistical name-spotting it uses for Excel and Word is unreliable on
+scanned financial PDFs, so it's switched off there. For a name that isn't on
+the master list yet, either add it to the list or type it into the box for
+that one run.
 
 ## Installing it
 

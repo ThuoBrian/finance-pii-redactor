@@ -57,15 +57,21 @@ def _main() -> None:
         return PresidioEngine._create_nlp_engine(settings)
 
     @st.cache_resource
-    def _get_pattern_detector():
-        """Build the spaCy-free email/URL detector once and reuse it.
+    def _get_pattern_detector(_path: str, _mtime: float | None, _recognizers):
+        """Build the spaCy-free PDF detector once per master-list version.
 
         Cheap compared to the spaCy model (no model weights loaded - see
         ``infrastructure/detection/pattern_detector.py``), but still worth
         caching so its one-time Presidio import cost isn't repeated on every
         rerun.
+
+        Keyed on the master-list path and mtime, like
+        ``_get_master_list_bundle``, because the curated recognizers baked into
+        it change whenever the workbook does. ``_recognizers`` is
+        underscore-prefixed so Streamlit doesn't try to hash the automatons;
+        the path and mtime are the real cache key.
         """
-        return PatternDetector(settings.language)
+        return PatternDetector(settings.language, master_list_recognizers=_recognizers)
 
     @st.cache_resource(show_spinner="Loading master list...")
     def _get_master_list_bundle(_path: str, _mtime: float | None):
@@ -99,6 +105,7 @@ def _main() -> None:
             repo.counts_by_category(),
             repo.quality_report(),
             repo.fingerprint(),
+            recognizers,
         )
 
     try:
@@ -112,6 +119,7 @@ def _main() -> None:
         name_counts,
         quality_issues,
         master_list_fingerprint,
+        master_list_recognizers,
     ) = _get_master_list_bundle(str(settings.master_list_file), master_list_mtime)
 
     # A brand-new install (or one whose FPR_MASTER_LIST_DIR/persisted setting
@@ -162,23 +170,30 @@ def _main() -> None:
             on_refresh_master_list=_get_master_list_bundle.clear,
         )
     elif extension == "pdf":
-        # PDF still has no spaCy-/master-list-based name detection - that
-        # stays a deliberate decision (unreliable guessing on scanned financial
-        # PDFs). It does get automatic email/URL detection (pattern_detector,
-        # no spaCy involved) plus the user's own words/phrases, and the real
-        # master_map is passed so a typed word resolves to its curated Internal
-        # ID for the mapping file. Passing the map does not add name detection;
-        # it only resolves matches the user asked for by name.
+        # PDF still has no spaCy-based name detection - that stays a deliberate
+        # decision (unreliable guessing on scanned financial PDFs). It does get
+        # everything deterministic: email/URL regex plus exact master-list
+        # matching, both via pattern_detector with no spaCy involved. The real
+        # master_map is passed as well, so a name the user types resolves to
+        # its curated Internal ID for the mapping file.
         run_pdf_flow(
             uploaded,
             pdf_service=RedactPdfService(
                 PyMuPdfDocument.open,
                 master_map,
                 settings.auto_prefixes,
-                _get_pattern_detector(),
+                _get_pattern_detector(
+                    str(settings.master_list_file),
+                    master_list_mtime,
+                    master_list_recognizers,
+                ),
                 settings.fuzzy_match_threshold,
                 settings.custom_words_score,
             ),
+            settings=settings,
+            name_counts=name_counts,
+            quality_issues=quality_issues,
+            on_refresh_master_list=_get_master_list_bundle.clear,
             master_list_fingerprint=master_list_fingerprint,
         )
     elif extension == "docx":

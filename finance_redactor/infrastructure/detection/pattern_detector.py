@@ -1,11 +1,24 @@
-"""Lightweight, spaCy-free email/URL detection for the PDF flow.
+"""Lightweight, spaCy-free detection for the PDF flow.
 
 Implements the :class:`PiiDetector` port, like ``PresidioEngine``, but
-deliberately does *not* wrap the full spaCy-backed analyzer: PDF has no
-automatic name/organization detection at all (a deliberate team decision -
-see ``application/redact_pdf.py``), yet emails and websites are still worth
-catching automatically, since matching them is a deterministic pattern, not
-a statistical guess. Presidio's own ``EmailRecognizer``/``UrlRecognizer`` are
+deliberately does *not* wrap the full spaCy-backed analyzer. The dividing
+line is **deterministic matching versus statistical guessing**, not
+"names versus everything else":
+
+- Emails and websites are caught by regex.
+- Curated master-list names are caught by ``CustomNameRecognizer``, an exact
+  literal Aho-Corasick match against the workbook.
+- spaCy NER, which *is* a statistical guess and behaves badly on scanned
+  financial PDFs, stays out. A name absent from the master list is still only
+  redacted if the user types it into the "words to redact" box.
+
+This detector originally covered email/URL alone, which meant a PDF
+containing a name that *was* on the master list came back with only its
+email addresses redacted. That was never the intent of excluding spaCy: an
+automaton hit on a curated name is as deterministic as the email regex
+already running here.
+
+Presidio's own ``EmailRecognizer``/``UrlRecognizer`` are
 plain regex (``PatternRecognizer`` subclasses) - reused here directly rather
 than hand-rolling a URL/TLD regex, since Presidio's is already well-tested
 and already a project dependency.
@@ -38,6 +51,15 @@ from presidio_analyzer.predefined_recognizers import EmailRecognizer, UrlRecogni
 
 from finance_redactor.domain.entities import DetectionSource, PiiDetection, Span
 from finance_redactor.domain.rules import dedupe_overlapping
+from finance_redactor.infrastructure.detection.custom_recognizer import (
+    CustomNameRecognizer,
+)
+
+# Entity types only the master-list recognizer can supply here, so a hit on one
+# is attributable to the curated list by type alone - no score comparison
+# needed (see PresidioEngine, which has to use ``classify_source`` because
+# spaCy can also emit these).
+_MASTER_LIST_ENTITIES = frozenset({"PERSON", "ORGANIZATION"})
 
 
 class _NullNlpEngine(NlpEngine):
@@ -97,14 +119,25 @@ class _NullNlpEngine(NlpEngine):
 
 
 class PatternDetector:
-    """Detects only email addresses and URLs, with no NLP model involved."""
+    """Detects emails, URLs, and curated master-list names, with no NLP model."""
 
-    def __init__(self, language: str = "en") -> None:
-        """Build an analyzer containing only the two pattern recognizers."""
+    def __init__(
+        self,
+        language: str = "en",
+        master_list_recognizers: Iterable[CustomNameRecognizer] = (),
+    ) -> None:
+        """Build an analyzer from the pattern recognizers plus curated names.
+
+        ``master_list_recognizers`` comes from ``build_custom_recognizers``,
+        the same objects the Excel/Word engine uses. Passing none leaves this
+        an email/URL-only detector, which is what most tests want.
+        """
         self._language = language
         registry = RecognizerRegistry()
         registry.add_recognizer(EmailRecognizer(supported_language=language))
         registry.add_recognizer(UrlRecognizer(supported_language=language))
+        for recognizer in master_list_recognizers:
+            registry.add_recognizer(recognizer)
         self._analyzer = AnalyzerEngine(
             registry=registry,
             nlp_engine=_NullNlpEngine(),
@@ -114,12 +147,12 @@ class PatternDetector:
     def analyze(
         self, text: str, entities: list[str], threshold: float
     ) -> list[PiiDetection]:
-        """Return all email/URL matches in ``text`` for the requested entity types.
+        """Return all matches in ``text`` for the requested entity types.
 
-        ``entities`` is still respected (e.g. a caller can request only
-        ``["EMAIL_ADDRESS"]``), but this detector can never return anything
-        other than ``EMAIL_ADDRESS``/``URL`` regardless, since that's all its
-        registry contains.
+        ``entities`` is respected (e.g. a caller can request only
+        ``["EMAIL_ADDRESS"]``). What this detector *can* return is bounded by
+        its registry: ``EMAIL_ADDRESS``/``URL`` always, plus ``PERSON``/
+        ``ORGANIZATION`` when master-list recognizers were supplied.
         """
         if not text.strip():
             return []
@@ -139,5 +172,13 @@ class PatternDetector:
             span=Span(result.start, result.end),
             score=result.score,
             text=text[result.start : result.end],
-            source=DetectionSource.PATTERN,
+            # By entity type, not by score: only the master-list recognizer can
+            # emit PERSON/ORGANIZATION in this registry. The source matters
+            # because ``dedupe_overlapping`` ranks a curated match above an
+            # overlapping pattern or typed-word match.
+            source=(
+                DetectionSource.MASTER_LIST
+                if result.entity_type in _MASTER_LIST_ENTITIES
+                else DetectionSource.PATTERN
+            ),
         )
