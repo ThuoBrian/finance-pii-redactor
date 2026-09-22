@@ -9,12 +9,14 @@ The HTML/markup is byte-for-byte identical to the original.
 from __future__ import annotations
 
 import html
+from collections import Counter
+from collections.abc import Sequence
 
 import pandas as pd
 
 from finance_redactor.application.results import ExcelScanResult
 from finance_redactor.domain.entities import Finding
-from finance_redactor.domain.pseudonyms import Assignment
+from finance_redactor.domain.pseudonyms import Assignment, normalize
 
 _EXCEL_COLUMNS = [
     "Row",
@@ -108,6 +110,27 @@ def excel_findings_dataframe(scan_result: ExcelScanResult) -> pd.DataFrame:
         for detection in cell.detections
     ]
     return pd.DataFrame(rows, columns=_EXCEL_COLUMNS)
+
+
+def scan_result_findings(scan_result: ExcelScanResult) -> list[Finding]:
+    """Flatten an Excel scan result into :class:`Finding` objects.
+
+    Only so Excel can share :func:`detection_editor_dataframe` with the PDF
+    and Word flows, which already work in ``Finding``. ``page`` carries the
+    row index here, the same way it carries a paragraph ordinal in the Word
+    flow - see :func:`findings_dataframe`.
+    """
+    return [
+        Finding(
+            page=cell.row,
+            detected_text=detection.text,
+            entity_type=detection.entity_type,
+            score=detection.score,
+            source=detection.source,
+        )
+        for cell in scan_result.findings
+        for detection in cell.detections
+    ]
 
 
 def crosswalk_dataframe(crosswalk: list[Assignment]) -> pd.DataFrame:
@@ -234,3 +257,75 @@ def findings_dataframe(findings: list[Finding], page_label: str) -> pd.DataFrame
             for f in findings
         ]
     )
+
+
+# The deselect editor. One row per distinct detected term, because a word
+# appearing forty times is one decision, not forty.
+_EDITOR_COLUMNS = [
+    "Redact?",
+    "Detected text",
+    "Entity type",
+    "Source",
+    "Occurrences",
+]
+
+_REDACT_COLUMN = "Redact?"
+_TERM_COLUMN = "Detected text"
+
+
+def detection_editor_dataframe(
+    findings: Sequence[Finding], excluded: frozenset[str] = frozenset()
+) -> pd.DataFrame:
+    """Render detections as a tickable table for rejecting false positives.
+
+    One row per distinct detected term, ordered by first appearance, with
+    ``Redact?`` seeded from ``excluded`` so an unticked row stays unticked
+    across reruns. Pair with :func:`excluded_terms` to read the ticks back.
+
+    ``Source`` is here on purpose: it is what tells the operator which fix
+    applies. ``master list`` means a row in the workbook matches this word, so
+    unticking is a per-document patch and editing the workbook is the real fix.
+    ``model`` means spaCy guessed, and the confidence threshold is a lever.
+    ``custom word`` means it came from the words box, so clearing that box
+    fixes it.
+
+    Grouping is keyed on :func:`normalize`, matching how ``exclude`` is
+    compared in the redaction services, so a term ticked off here matches every
+    casing and spacing of itself in the document.
+    """
+    # Insertion-ordered, so rows read in order of first appearance. Counts are
+    # kept in their own dict rather than mutated inside the row dicts, which
+    # keeps both dicts singly typed.
+    first_seen: dict[str, Finding] = {}
+    counts: Counter[str] = Counter()
+    for finding in findings:
+        key = normalize(finding.detected_text)
+        first_seen.setdefault(key, finding)
+        counts[key] += 1
+
+    rows = [
+        {
+            _REDACT_COLUMN: key not in excluded,
+            _TERM_COLUMN: finding.detected_text,
+            "Entity type": finding.entity_type,
+            "Source": finding.source.value,
+            "Occurrences": counts[key],
+        }
+        for key, finding in first_seen.items()
+    ]
+    return pd.DataFrame(rows, columns=_EDITOR_COLUMNS)
+
+
+def excluded_terms(edited: pd.DataFrame) -> frozenset[str]:
+    """Read back the normalized terms the operator unticked in the editor.
+
+    The inverse of :func:`detection_editor_dataframe`. Returns normalized
+    terms, ready to hand to a redaction service's ``exclude`` argument.
+
+    A missing or empty frame yields an empty set, which means "redact
+    everything" - the safe direction if the widget state is ever lost.
+    """
+    if edited is None or edited.empty or _REDACT_COLUMN not in edited.columns:
+        return frozenset()
+    unticked = edited.loc[~edited[_REDACT_COLUMN].fillna(True).astype(bool)]
+    return frozenset(normalize(str(term)) for term in unticked[_TERM_COLUMN])

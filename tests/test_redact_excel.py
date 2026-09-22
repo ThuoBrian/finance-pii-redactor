@@ -77,3 +77,56 @@ def test_scan_skips_missing_columns_and_scans_across_columns():
     result = _service(detector).scan(df, ["a", "b", "missing"], ["PERSON"], 0.35)
 
     assert [(f.row, f.column) for f in result.findings] == [(0, "a")]
+
+
+# --- redact(), and the exclusion filter on it --------------------------------
+#
+# redact() had no test before the deselect control was added; these are the
+# first, so they also pin the basic scan -> redact cycle.
+
+
+def test_redact_replaces_detected_names_in_place():
+    """The baseline redact() behaviour these exclusion tests build on."""
+    detector = CountingDetector()
+    df = pd.DataFrame({"notes": ["John paid", "no name"]})
+    service = _service(detector)
+    scan = service.scan(df, ["notes"], ["PERSON"], 0.35)
+
+    redacted, crosswalk = service.redact(df, scan, ["notes"])
+
+    assert "John" not in redacted.at[0, "notes"]
+    assert redacted.at[1, "notes"] == "no name"
+    assert [a.original_name for a in crosswalk] == ["John"]
+
+
+def test_excluded_term_is_left_alone_by_redact():
+    """Unticking a false positive leaves the cell untouched."""
+    detector = CountingDetector()
+    df = pd.DataFrame({"notes": ["John paid"]})
+    service = _service(detector)
+    scan = service.scan(df, ["notes"], ["PERSON"], 0.35)
+
+    redacted, crosswalk = service.redact(
+        df, scan, ["notes"], exclude=frozenset({"john"})
+    )
+
+    assert redacted.at[0, "notes"] == "John paid"
+    assert crosswalk == []
+
+
+def test_reapplying_with_a_different_exclusion_never_rescans():
+    """Why scan and redact are separate: a tick change costs no detection.
+
+    If this breaks, changing a tick box in the Excel view starts reloading
+    spaCy on every click.
+    """
+    detector = CountingDetector()
+    df = pd.DataFrame({"notes": ["John paid"]})
+    service = _service(detector)
+    scan = service.scan(df, ["notes"], ["PERSON"], 0.35)
+    calls_after_scan = list(detector.calls)
+
+    service.redact(df, scan, ["notes"])
+    service.redact(df, scan, ["notes"], exclude=frozenset({"john"}))
+
+    assert detector.calls == calls_after_scan

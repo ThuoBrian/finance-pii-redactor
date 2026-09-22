@@ -17,6 +17,10 @@ from finance_redactor.application.redact_docx import RedactDocxService
 from finance_redactor.config import Settings
 from finance_redactor.domain.quality import QualityIssue
 from finance_redactor.presentation.crosswalk_view import render_crosswalk_section
+from finance_redactor.presentation.exclusion_view import (
+    render_deselect_editor,
+    render_exclusion_warning,
+)
 from finance_redactor.presentation.master_list_view import render_master_list_status
 from finance_redactor.presentation.presenters import findings_dataframe
 from finance_redactor.presentation.session import (
@@ -47,6 +51,8 @@ def run_docx_flow(
             "docx_findings",
             "docx_blocks",
             "docx_crosswalk",
+            "docx_all_findings",
+            "docx_excluded_applied",
         ),
     )
 
@@ -95,6 +101,10 @@ def run_docx_flow(
         st.session_state.docx_findings = result.findings
         st.session_state.docx_blocks = result.block_count
         st.session_state.docx_crosswalk = result.crosswalk
+        # Unfiltered baseline for the deselect editor - see pdf_view for why
+        # this must not be refiltered on a re-run.
+        st.session_state.docx_all_findings = result.findings
+        st.session_state.docx_excluded_applied = frozenset()
 
     if "docx_buffer" not in st.session_state or st.session_state.docx_buffer is None:
         st.stop()
@@ -113,6 +123,30 @@ def run_docx_flow(
         st.session_state.docx_crosswalk, base_name, key_prefix="docx"
     )
 
+    excluded = render_deselect_editor(
+        st.session_state.get("docx_all_findings", []),
+        key_prefix="docx",
+        excluded=st.session_state.get("docx_excluded_applied", frozenset()),
+    )
+    if excluded != st.session_state.get("docx_excluded_applied", frozenset()):
+        # The expensive case: unlike Excel, the Word flow has no scan/redact
+        # split, so this re-runs spaCy over every block. Splitting it the way
+        # redact_excel.py is split would remove the cost.
+        uploaded.seek(0)
+        with st.spinner("Re-scanning the document without those terms..."):
+            rerun = docx_service.execute(
+                uploaded,
+                entity_options,
+                threshold,
+                custom_words=custom_words,
+                exclude=excluded,
+            )
+        st.session_state.docx_buffer = rerun.data
+        st.session_state.docx_findings = rerun.findings
+        st.session_state.docx_crosswalk = rerun.crosswalk
+        st.session_state.docx_excluded_applied = excluded
+        st.rerun()
+
     with st.expander(f"Detection details ({n_entities} finding(s))"):
         st.dataframe(
             findings_dataframe(docx_findings, "Paragraph"),
@@ -121,6 +155,7 @@ def run_docx_flow(
         )
 
     st.subheader("Download")
+    render_exclusion_warning(st.session_state.get("docx_excluded_applied", frozenset()))
     st.download_button(
         label="Download pseudonymized Word document",
         data=st.session_state.docx_buffer,

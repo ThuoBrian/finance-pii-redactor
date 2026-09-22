@@ -31,6 +31,10 @@ from finance_redactor.config import Settings
 from finance_redactor.domain.errors import EncryptedPdfError
 from finance_redactor.domain.quality import QualityIssue
 from finance_redactor.presentation.crosswalk_view import render_pdf_mapping_section
+from finance_redactor.presentation.exclusion_view import (
+    render_deselect_editor,
+    render_exclusion_warning,
+)
 from finance_redactor.presentation.master_list_view import render_master_list_status
 from finance_redactor.presentation.presenters import findings_dataframe
 from finance_redactor.presentation.session import (
@@ -72,6 +76,8 @@ def run_pdf_flow(
             "pdf_pages",
             "pdf_crosswalk",
             "pdf_bracketed",
+            "pdf_all_findings",
+            "pdf_excluded_applied",
         ),
     )
 
@@ -156,6 +162,12 @@ def run_pdf_flow(
         st.session_state.pdf_pages = result.page_count
         st.session_state.pdf_crosswalk = result.crosswalk
         st.session_state.pdf_bracketed = result.source_bracketed_numbers
+        # The unfiltered detections, kept as the deselect editor's stable row
+        # list. Never overwritten by a re-run below, so a term can be unticked
+        # and re-ticked; refiltering it would take the tick box away with the
+        # row and strand the decision.
+        st.session_state.pdf_all_findings = result.findings
+        st.session_state.pdf_excluded_applied = frozenset()
         # The radio widget already stores pdf_style in session_state; do not
         # overwrite it after the widget has been instantiated.
 
@@ -209,12 +221,37 @@ def run_pdf_flow(
             master_list_fingerprint=master_list_fingerprint,
         )
 
+    excluded = render_deselect_editor(
+        st.session_state.get("pdf_all_findings", []),
+        key_prefix="pdf",
+        excluded=st.session_state.get("pdf_excluded_applied", frozenset()),
+    )
+    if excluded != st.session_state.get("pdf_excluded_applied", frozenset()):
+        # Re-redacting is the whole cost of a tick change here, and it is
+        # cheap: the PDF detector never loads spaCy (see
+        # infrastructure/detection/pattern_detector.py's _NullNlpEngine).
+        uploaded.seek(0)
+        with st.spinner("Rebuilding the file without those terms..."):
+            rerun = pdf_service.execute(
+                uploaded,
+                custom_words,
+                style=style,
+                redact_images=redact_images,
+                exclude=excluded,
+            )
+        st.session_state.pdf_buffer = rerun.data
+        st.session_state.pdf_findings = rerun.findings
+        st.session_state.pdf_crosswalk = rerun.crosswalk
+        st.session_state.pdf_excluded_applied = excluded
+        st.rerun()
+
     with st.expander(f"Detection details ({n_entities} finding(s))"):
         st.dataframe(
             findings_dataframe(pdf_findings, "Page"), width="stretch", hide_index=True
         )
 
     st.subheader("Download")
+    render_exclusion_warning(st.session_state.get("pdf_excluded_applied", frozenset()))
     if style_value == RedactionStyle.BLACKOUT.value:
         label = "Download blacked-out PDF"
         file_name = f"{base_name}_blacked_out.pdf"

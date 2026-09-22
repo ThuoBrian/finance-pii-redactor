@@ -21,7 +21,11 @@ from finance_redactor.application.ports import PiiDetector, WordDocumentFactory
 from finance_redactor.application.results import DocxRedactionResult
 from finance_redactor.domain.custom_words import find_custom_words
 from finance_redactor.domain.entities import Finding
-from finance_redactor.domain.pseudonyms import MasterEntry, Pseudonymizer
+from finance_redactor.domain.pseudonyms import (
+    MasterEntry,
+    Pseudonymizer,
+    normalize,
+)
 from finance_redactor.domain.rules import dedupe_overlapping
 
 
@@ -60,6 +64,7 @@ class RedactDocxService:
         threshold: float,
         *,
         custom_words: list[str] | None = None,
+        exclude: frozenset[str] = frozenset(),
     ) -> DocxRedactionResult:
         """Pseudonymize ``source`` and return new bytes, findings, crosswalk.
 
@@ -69,6 +74,13 @@ class RedactDocxService:
         ``domain/custom_words.find_custom_words``), even if not in the master
         list. Not curated, not saved anywhere: re-supplied by the caller on
         every run.
+
+        ``exclude`` is a set of already-normalized terms (see
+        ``domain/pseudonyms.normalize``) the operator ticked off in the review
+        table as false positives. A matching detection is dropped before it
+        reaches the pseudonymizer, so it is neither replaced in the output nor
+        recorded in the crosswalk. Per-run only: nothing about it persists, and
+        the caller re-supplies it on every call.
         """
         document = self._open_document(source)
         pseudonymizer = Pseudonymizer(
@@ -86,7 +98,11 @@ class RedactDocxService:
                     detections = detections + find_custom_words(
                         text, custom_words, self._custom_words_score
                     )
-                kept = dedupe_overlapping(detections)
+                kept = [
+                    d
+                    for d in dedupe_overlapping(detections)
+                    if normalize(d.text) not in exclude
+                ]
                 if not kept:
                     continue
 

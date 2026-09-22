@@ -6,6 +6,35 @@ the `version` field in `pyproject.toml`.
 
 ## [Unreleased]
 
+### Added
+
+- **A way to reject a false positive.** Every detection now appears in a
+  **Check what was detected** table with a `Redact?` tick box; unticking a term
+  rebuilds the output without it, for that document only. Nothing persists.
+  Prompted by the ordinary word "salaries" being redacted from a PDF, which
+  turned out to be a master-list row named `Salaries` — and which nothing in
+  the tool could refuse, since every stage only ever added detections.
+  Available in all three formats; for PDF it is the first such lever of any
+  kind, as that flow has no confidence threshold or entity filter.
+- The table reports **Source** per term, because that determines the lasting
+  fix: `master list` means edit the workbook, `model` means raise the
+  threshold, `custom word` means clear the words box. Terms are grouped by
+  normalized text, so a word appearing forty times is one tick box and
+  unticking it covers every casing and spacing of it.
+- Unticking is a deliberate under-redaction, so the affected terms are named
+  in a warning above the download button and the downloaded file contains them
+  verbatim.
+- `RedactExcelService.redact`, `RedactPdfService.execute` and
+  `RedactDocxService.execute` take an `exclude` set of normalized terms,
+  applied before the pseudonymizer so an excluded term reaches neither the
+  output nor the crosswalk, and the PDF labels that are written stay
+  contiguous. Re-applying in Excel reuses the existing scan result and never
+  re-runs detection.
+- `docs/GOTCHA.md` gains "An ordinary word is being redacted", covering how to
+  tell the three causes apart. It also documents that raising the confidence
+  threshold past 0.90 stops **every** curated master-list name from matching,
+  which was previously undocumented.
+
 ### Changed
 
 - **PDF redaction now writes a per-document label (`[001]`) instead of a

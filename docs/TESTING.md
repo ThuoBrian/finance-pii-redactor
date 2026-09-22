@@ -130,6 +130,23 @@ what happened instead — then file it.
 - [ ] Downloaded document keeps original formatting (bold, tables, etc.)
   around the redacted text.
 
+### Rejecting a false positive
+
+- [ ] Add a row to your test master list whose `Name` is an ordinary word
+  (`Salaries` works), then redact a document that uses that word normally.
+  It should be redacted — that is the bug this control exists for.
+- [ ] Open **Check what was detected**. The word appears as **one** row, not
+  one per occurrence, with an **Occurrences** count and **Source** =
+  `master list`.
+- [ ] Untick it. The file rebuilds, and the downloaded file now contains the
+  word while **every other detection is still redacted**. That second half is
+  the important check.
+- [ ] A warning appears above the download button naming what was left
+  un-redacted.
+- [ ] Re-tick it. The file goes back to fully redacted.
+- [ ] Try the same in all three formats. In Excel it should be near-instant
+  (no re-scan); in Word expect a pause, since it re-runs the language model.
+
 ### Edge cases worth specifically trying
 
 - [ ] An ALL-CAPS name (e.g. `JANE MUTHONI`) is still detected.

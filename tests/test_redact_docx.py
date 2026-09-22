@@ -229,3 +229,36 @@ def test_document_is_closed_even_on_detector_error() -> None:
         service.execute(doc, ["PERSON"], 0.35)
 
     assert doc.closed is True
+
+
+def test_excluded_term_is_not_replaced_in_any_block() -> None:
+    """Unticking a false positive drops it from the Word output too."""
+    doc = FakeWordDocument(["Total salaries paid", "John approved salaries"])
+
+    result = _service().execute(
+        doc,
+        ["PERSON"],
+        0.35,
+        custom_words=["salaries"],
+        exclude=frozenset({"salaries"}),
+    )
+
+    replaced = [
+        text for block in doc.replacements_by_block.values() for _, text in block
+    ]
+    assert all("salaries" not in t for t in replaced)
+    assert all(a.original_name != "salaries" for a in result.crosswalk)
+
+
+def test_excluding_one_term_leaves_others_replaced_in_word() -> None:
+    doc = FakeWordDocument(["John paid salaries"])
+
+    result = _service().execute(
+        doc,
+        ["PERSON"],
+        0.35,
+        custom_words=["salaries"],
+        exclude=frozenset({"salaries"}),
+    )
+
+    assert [a.original_name for a in result.crosswalk] == ["John"]

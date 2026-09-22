@@ -16,6 +16,7 @@ This file records known errors, edge cases, and their solutions when developing 
   - [Presidio `AnalysisExplanation` keyword arguments changed across versions](#presidio-analysisexplanation-keyword-arguments-changed-across-versions)
   - [`app.py` cannot import from `finance_redactor`](#apppy-cannot-import-from-finance_redactor)
   - [A name gets a flagged `*-AUTO-*` code instead of my curated ID](#a-name-gets-a-flagged--auto--code-instead-of-my-curated-id)
+  - [An ordinary word is being redacted](#an-ordinary-word-is-being-redacted)
   - [A typed word gets a flagged code instead of a curated Internal ID](#a-typed-word-gets-a-flagged-code-instead-of-a-curated-internal-id)
   - [A redacted PDF shows `[001]` instead of an ID code](#a-redacted-pdf-shows-001-instead-of-an-id-code)
   - [PDF only auto-detects what can be matched exactly - no spaCy guessing](#pdf-only-auto-detects-what-can-be-matched-exactly---no-spacy-guessing)
@@ -114,6 +115,18 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Symptom:** A name shows up in the crosswalk as e.g. `PSN-AUTO-3F9A1` with **Flagged = yes**, not the `STF-12345` you expected.
 - **Cause:** The name was detected but is **not in the master list with a curated `Internal ID`** — either it is missing, the `Internal ID` column is blank, or the spelling/spacing in the master list does not match the document text. Matching is case-insensitive and whitespace-normalized, and **alias-aware**: organization suffix equivalents (`Ltd`=`Limited`, `Inc`=`Incorporated`, `Corp`=`Corporation`, `Co`=`Company`; `LLC`/`PLC` period-tolerant) and `&`↔`and` swaps are matched automatically, so `Acme Ltd` in the list covers `Acme Limited` in a document. Spelling, word order, and middle initials are **not** matched.
 - **Solution:** Add the name to `data/Names List - Organized.xlsx` with the correct sheet/category and a non-blank `Internal ID`, using the exact text as it appears in the data, then refresh the app in the browser. Edits to the master list take effect on the next Streamlit rerun (the Excel workbook is reloaded each time; only the heavy spaCy model is cached). Auto-codes are deterministic (the same unknown name always yields the same code, even across files), so existing outputs stay consistent until you re-run. Check the crosswalk's **Possible match** column first — if the flagged name is a near-miss typo of a curated name (e.g. document `Micheal Sample` vs. master-list `Michael Sample`), it already names the likely intended match as a reviewer hint (`finance_redactor/domain/fuzzy.py`); this is advisory only and is never auto-applied, so you still need to fix the name (in your data or the master list) and re-run.
+
+### An ordinary word is being redacted
+
+- **Symptom:** An everyday word is replaced in the output - `salaries`, `rent`, `transport`, `bank`. It happens on every occurrence, in every document.
+- **First, find out why it matched.** Open **Check what was detected** and read the **Source** column for that word. It tells you which of three different problems you have:
+  - **`master list`** - the workbook has a row whose `Name` is that word. Someone added a payee or account called `Salaries`, and the tool matches master-list names exactly, so every occurrence of the word is now a hit in all three formats. This is the common cause in a finance master list.
+  - **`model`** - spaCy guessed. Only possible in Excel and Word; the PDF flow runs no model. Often an ALL-CAPS label (`SALARIES`) that the recasing pass turns into a name-shaped `Salaries` (see "ALL-CAPS names and acronym false positives" below).
+  - **`custom word`** - it came from the "Additional words/phrases to redact" box. Clear it; the box is not saved between sessions.
+- **Fix it for this document:** untick the word in **Check what was detected**. The file is rebuilt immediately without it, and everything else stays redacted. This works in all three formats and is the only lever PDF has.
+- **Fix it for good (the `master list` case):** edit `data/Names List - Organized.xlsx` - delete the row, or make the name distinctive (`Salaries Account`, `Salaries Ltd`). A multi-word name no longer matches the bare word, because the matcher keys on the whole string. Save, close, then click **🔄 Refresh master list**. Do this rather than unticking every time: an unticked word is per-document and you would repeat it forever.
+- **Fix it for good (the `model` case):** raise the **Confidence threshold** in Advanced settings, in Excel or Word. Do **not** push it past **0.90** - curated master-list matches score exactly 0.90, so anything above that stops matching **every** name in the workbook at once, which is a far worse problem than the one you started with.
+- **Note on unticking:** it is a deliberate decision to leave text un-redacted, so the word appears in the downloaded file exactly as in the original. The app warns above the download button and lists what it left alone. Re-tick to undo.
 
 ### A typed word gets a flagged code instead of a curated Internal ID
 

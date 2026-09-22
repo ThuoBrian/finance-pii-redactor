@@ -20,6 +20,7 @@ from finance_redactor.domain.pseudonyms import (
     MasterEntry,
     Pseudonymizer,
     apply_replacements,
+    normalize,
 )
 
 
@@ -90,11 +91,23 @@ class RedactExcelService:
         df: pd.DataFrame,
         scan_result: ExcelScanResult,
         columns: list[str],
+        exclude: frozenset[str] = frozenset(),
     ) -> tuple[pd.DataFrame, list[Assignment]]:
         """Return a pseudonymized copy of ``df`` plus the name->pseudonym crosswalk.
 
         A single :class:`Pseudonymizer` spans the whole sheet so a name appearing
         in many cells maps to one consistent pseudonym.
+
+        ``exclude`` is a set of already-normalized terms (see
+        ``domain/pseudonyms.normalize``) the operator ticked off in the review
+        table as false positives. Matching detections are dropped before
+        replacement, so they are neither replaced in the output nor recorded in
+        the crosswalk.
+
+        This is the reason ``scan`` and ``redact`` are separate: re-applying
+        with a different ``exclude`` set is a pure pass over an existing
+        :class:`ExcelScanResult` and never re-runs detection, so changing a
+        tick box costs nothing and never reloads the spaCy model.
         """
         pseudonymizer = Pseudonymizer(
             self._master_map, self._auto_prefixes, fuzzy_threshold=self._fuzzy_threshold
@@ -103,9 +116,14 @@ class RedactExcelService:
         for cell in scan_result.findings:
             if cell.column not in columns:
                 continue
+            detections = [
+                d for d in cell.detections if normalize(d.text) not in exclude
+            ]
+            if not detections:
+                continue
             redacted.at[cell.row, cell.column] = apply_replacements(
                 str(df.at[cell.row, cell.column]),
-                cell.detections,
+                detections,
                 lambda d: pseudonymizer.assign(d.entity_type, d.text).pseudonym,
             )
         return redacted, pseudonymizer.crosswalk()
