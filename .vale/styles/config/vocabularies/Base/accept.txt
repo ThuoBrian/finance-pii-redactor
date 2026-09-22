@@ -78,4 +78,3 @@ EML-AUTO-[A-F0-9]+
 
 # The deselect control's own verb: you untick a detection to reject it.
 [Uu]ntick(s|ed|ing)?
-[Tt]ickbox(es)?
