@@ -15,22 +15,37 @@ threshold, and no master-list status panel - none of that applies here.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import streamlit as st
 
 from finance_redactor.application.redact_pdf import RedactionStyle, RedactPdfService
 from finance_redactor.domain.errors import EncryptedPdfError
-from finance_redactor.presentation.crosswalk_view import render_crosswalk_section
+from finance_redactor.presentation.crosswalk_view import render_pdf_mapping_section
 from finance_redactor.presentation.presenters import findings_dataframe
 from finance_redactor.presentation.session import (
     reset_on_new_upload,
     sanitize_base_name,
 )
 
+# A typed word that is itself a label, e.g. "[001]". Redacting it would mean
+# redacting this tool's own output on a second pass.
+_LABEL_SHAPED = re.compile(r"^\[\d+\]$")
 
-def run_pdf_flow(uploaded: Any, *, pdf_service: RedactPdfService) -> None:
-    """Render the PDF pseudonymization flow in Streamlit."""
+
+def run_pdf_flow(
+    uploaded: Any,
+    *,
+    pdf_service: RedactPdfService,
+    master_list_fingerprint: str = "",
+) -> None:
+    """Render the PDF pseudonymization flow in Streamlit.
+
+    ``master_list_fingerprint`` identifies which master list the mapping
+    decodes against, and is stamped into the downloaded CSV. See
+    ``presenters.pdf_mapping_dataframe``.
+    """
     reset_on_new_upload(
         uploaded,
         "pdf",
@@ -43,6 +58,7 @@ def run_pdf_flow(uploaded: Any, *, pdf_service: RedactPdfService) -> None:
             "pdf_findings",
             "pdf_pages",
             "pdf_crosswalk",
+            "pdf_bracketed",
         ),
     )
 
@@ -57,9 +73,10 @@ def run_pdf_flow(uploaded: Any, *, pdf_service: RedactPdfService) -> None:
                 else "Black out (cover with black boxes)"
             ),
             help=(
-                "Pseudonymize replaces matched text with stable IDs like "
-                "CST-AUTO-3F9A1. Black out covers matched text and images "
-                "with a black shade."
+                "Pseudonymize replaces matched text with a short label like "
+                "[001], and gives you a separate file saying which Internal ID "
+                "each label stands for. Black out covers matched text and "
+                "images with a black shade instead, with nothing to decode."
             ),
             key="pdf_style",
         )
@@ -86,6 +103,13 @@ def run_pdf_flow(uploaded: Any, *, pdf_service: RedactPdfService) -> None:
         )
 
     custom_words = [w.strip() for w in custom_words_input.splitlines() if w.strip()]
+    if any(_LABEL_SHAPED.match(w) for w in custom_words):
+        st.warning(
+            "One of your words to redact looks like a redaction label (e.g. "
+            "`[001]`). That is the shape this tool writes into the PDF, so "
+            "redacting it would redact the tool's own output. Remove it unless "
+            "the document genuinely contains that text for another reason."
+        )
 
     button_label = (
         "Black out PDF" if style == RedactionStyle.BLACKOUT else "Pseudonymize PDF"
@@ -111,6 +135,7 @@ def run_pdf_flow(uploaded: Any, *, pdf_service: RedactPdfService) -> None:
         st.session_state.pdf_findings = result.findings
         st.session_state.pdf_pages = result.page_count
         st.session_state.pdf_crosswalk = result.crosswalk
+        st.session_state.pdf_bracketed = result.source_bracketed_numbers
         # The radio widget already stores pdf_style in session_state; do not
         # overwrite it after the widget has been instantiated.
 
@@ -147,9 +172,22 @@ def run_pdf_flow(uploaded: Any, *, pdf_service: RedactPdfService) -> None:
         st.success(f"Found {n_entities} match(es) across {total_pages} page(s).")
 
     base_name = sanitize_base_name(uploaded.name)
-    render_crosswalk_section(
-        st.session_state.pdf_crosswalk, base_name, key_prefix="pdf"
-    )
+    if style_value != RedactionStyle.BLACKOUT.value:
+        bracketed = st.session_state.get("pdf_bracketed", 0)
+        if bracketed:
+            st.warning(
+                f"This document already contained {bracketed} bracketed "
+                "number(s) of its own, such as footnote markers or line-item "
+                "numbers. Redaction labels look the same ([001]), so a reader "
+                "of the output may not be able to tell which brackets are "
+                "redactions. The label mapping below lists every label this "
+                "tool actually inserted."
+            )
+        render_pdf_mapping_section(
+            st.session_state.pdf_crosswalk,
+            base_name,
+            master_list_fingerprint=master_list_fingerprint,
+        )
 
     with st.expander(f"Detection details ({n_entities} finding(s))"):
         st.dataframe(
@@ -168,8 +206,9 @@ def run_pdf_flow(uploaded: Any, *, pdf_service: RedactPdfService) -> None:
         label = "Download pseudonymized PDF"
         file_name = f"{base_name}_pseudonymized.pdf"
         caption = (
-            "Matched words/phrases are replaced with their pseudonyms "
-            "(e.g. CST-AUTO-3F9A1) directly in the PDF text layer."
+            "Matched words/phrases are replaced with a short label (e.g. "
+            "[001]) directly in the PDF text layer. The label means nothing "
+            "on its own - keep the label mapping above to decode it."
         )
     st.download_button(
         label=label,

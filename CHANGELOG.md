@@ -6,6 +6,54 @@ the `version` field in `pyproject.toml`.
 
 ## [Unreleased]
 
+### Changed
+
+- **PDF redaction now writes a per-document label (`[001]`) instead of a
+  pseudonym.** A pseudonym is literally `<prefix>-<Internal ID>`, so the
+  redacted PDF used to carry the master list's own join key: anyone holding
+  the master list could re-identify the file with no mapping at all. A label
+  means nothing outside the document it came from. Decoding takes two hops —
+  the mapping says `[001] = 17728`, the master list says what 17728 is — which
+  splits re-identification between two sets of hands.
+- **The PDF mapping download contains no names**, only label, Internal ID,
+  category, entity type, a flag, and which master list it was made from. It is
+  therefore *Internal* rather than *Confidential* and can be kept with the
+  redacted PDF. Names are still shown in the on-screen review table.
+  Filename changed from `*_crosswalk.csv` to `*_mapping.csv`.
+- Labels restart at `[001]` in every document. Cross-document linkage is now
+  recovered by joining two mapping files on the Internal ID, not by reading the
+  documents. Old and new redacted PDFs cannot be cross-referenced by eye.
+- **Excel and Word are unchanged**: still `STF-10010`-style pseudonyms, still a
+  names-bearing crosswalk, same classification as before. One entity therefore
+  looks different in a PDF than in an Excel export of the same data.
+
+### Added
+
+- PDF typed words are now resolved against the master list, so a word on the
+  list carries its curated `Internal ID` into the mapping. This adds no
+  automatic name detection to PDFs — it only resolves matches the user asked
+  for. A word that is not on the list, or that matches several rows with
+  conflicting IDs, is still redacted but flagged with no Internal ID rather
+  than being given a guessed one.
+- Unresolved entities get a deterministic `AUTO-` placeholder in the mapping's
+  Internal ID column rather than a blank, so they stay visibly unresolved and
+  still link across documents. It is a hash of the name, not the name.
+- PDF mappings are stamped with the master list's filename, modification time,
+  and row count, so a decode against a since-edited list is detectable.
+- A warning when a PDF already contains its own bracketed numbers (footnote
+  markers, line items), since those are indistinguishable from labels, and
+  when a typed word is itself label-shaped.
+
+### Fixed
+
+- Accent folding was applied when matching typed words but not when resolving
+  them, so a typed `Jose Garcia` could match `José García` in a document and
+  then silently fail to resolve against a `Jose Garcia` master-list row. Both
+  paths now share one implementation.
+- PDF label numbering follows position on the page. `dedupe_overlapping` sorts
+  by detection source before position, which would otherwise have numbered a
+  match late in the document before one near the top.
+
 ### Security
 
 - Replaced real staff names, a real vendor/country pairing, and their real

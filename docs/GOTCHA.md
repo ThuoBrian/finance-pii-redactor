@@ -16,7 +16,8 @@ This file records known errors, edge cases, and their solutions when developing 
   - [Presidio `AnalysisExplanation` keyword arguments changed across versions](#presidio-analysisexplanation-keyword-arguments-changed-across-versions)
   - [`app.py` cannot import from `finance_redactor`](#apppy-cannot-import-from-finance_redactor)
   - [A name gets a flagged `*-AUTO-*` code instead of my curated ID](#a-name-gets-a-flagged--auto--code-instead-of-my-curated-id)
-  - [A custom word always gets a `CST-AUTO-*` code, never a curated one](#a-custom-word-always-gets-a-cst-auto--code-never-a-curated-one)
+  - [A typed word gets a flagged code instead of a curated Internal ID](#a-typed-word-gets-a-flagged-code-instead-of-a-curated-internal-id)
+  - [A redacted PDF shows `[001]` instead of an ID code](#a-redacted-pdf-shows-001-instead-of-an-id-code)
   - [PDF has no automatic name/organization detection - only emails, websites, images, and typed words](#pdf-has-no-automatic-nameorganization-detection---only-emails-websites-images-and-typed-words)
   - [Long multi-word names are not matched](#long-multi-word-names-are-not-matched)
   - [A name followed by a bare hyphen resolves to a flagged auto-id](#a-name-followed-by-a-bare-hyphen-resolves-to-a-flagged-auto-id)
@@ -114,10 +115,26 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Cause:** The name was detected but is **not in the master list with a curated `Internal ID`** — either it is missing, the `Internal ID` column is blank, or the spelling/spacing in the master list does not match the document text. Matching is case-insensitive and whitespace-normalized, and **alias-aware**: organization suffix equivalents (`Ltd`=`Limited`, `Inc`=`Incorporated`, `Corp`=`Corporation`, `Co`=`Company`; `LLC`/`PLC` period-tolerant) and `&`↔`and` swaps are matched automatically, so `Acme Ltd` in the list covers `Acme Limited` in a document. Spelling, word order, and middle initials are **not** matched.
 - **Solution:** Add the name to `data/Names List - Organized.xlsx` with the correct sheet/category and a non-blank `Internal ID`, using the exact text as it appears in the data, then refresh the app in the browser. Edits to the master list take effect on the next Streamlit rerun (the Excel workbook is reloaded each time; only the heavy spaCy model is cached). Auto-codes are deterministic (the same unknown name always yields the same code, even across files), so existing outputs stay consistent until you re-run. Check the crosswalk's **Possible match** column first — if the flagged name is a near-miss typo of a curated name (e.g. document `Micheal Sample` vs. master-list `Michael Sample`), it already names the likely intended match as a reviewer hint (`finance_redactor/domain/fuzzy.py`); this is advisory only and is never auto-applied, so you still need to fix the name (in your data or the master list) and re-run.
 
-### A custom word always gets a `CST-AUTO-*` code, never a curated one
+### A typed word gets a flagged code instead of a curated Internal ID
 
-- **Symptom:** A term typed into PDF's "Words/phrases to redact" box, or Word's "Additional words/phrases to redact" box, always shows up in the crosswalk as `CST-AUTO-<hash>` with **Flagged = yes**, even after re-running several times.
-- **Cause:** This is expected, not a bug. Ad-hoc custom words (`finance_redactor/domain/custom_words.py`) are deliberately never looked up in the master list — they're a per-run, typed-in-the-box list, not curated data, so there's no `Internal ID` for them to resolve to. The code is still deterministic (the same word always hashes to the same `CST-AUTO-*` id, even across different files and sessions), and it still beats an overlapping generic model guess in `dedupe_overlapping` - it just never becomes curated. For PDF specifically, this box is a *supplement* to the automatic email/URL/image detection (see the "PDF has no automatic name/organization detection" entry below), the same role it plays in Word.
+- **Applies to:** PDF. In **Word**, typed words are still never looked up in the master list, so they always get a flagged `CST-AUTO-<hash>` code - that part is expected there, not a bug.
+- **Symptom:** In a PDF, a word typed into "Additional words/phrases to redact" shows up in the label mapping with an `AUTO-` placeholder in the **Internal ID** column and a reason under **Flagged**, instead of a real `Internal ID`.
+- **Cause:** PDF typed words *are* resolved against the master list, so a flagged row means the lookup genuinely found nothing usable. **Flagged** says which of two things happened:
+  - `not in master list` - no row matches that name. Matching is exact on the name (accent- and case-insensitive, plus the usual organization-suffix aliases), so a typo or a reworded form will miss. Check the **Possible match** column in the review table: if it names a near-miss, that is the row you probably meant.
+  - `ambiguous - matched several master-list rows` - two or more rows matched with **different** `Internal ID`s, so the tool refused to pick one. Writing a coin-flip ID into a mapping that carries no names would be undetectable later, so it declines instead. Fix the duplicate rows (the master-list data-quality panel in **Advanced settings** already flags them) and re-run.
+- **Either way the word is still fully redacted.** The only thing missing is the ability to decode that label back to a name later. If you need that, add the name to the master list with an `Internal ID` and run again.
+- The `AUTO-` placeholder is a hash of the name, not the name, so the mapping file stays free of names. Because it is derived from the name it is also stable: the same unresolved word gets the same placeholder in every document, so two mappings can still be joined on it.
+
+### A redacted PDF shows `[001]` instead of an ID code
+
+- **Applies to:** PDF only. Word and Excel still write `STF-10010`-style pseudonyms directly into the document.
+- **Symptom:** A redacted PDF contains `[001]`, `[002]` and so on rather than codes like `VND-17728`, and the numbers start over at `[001]` in the next PDF you redact.
+- **Cause:** Expected. A pseudonym is literally `<prefix>-<Internal ID>`, so putting it in the document hands any holder of the master list everything needed to re-identify the file on its own. The label means nothing outside the one document it came from. Decoding takes two steps: the downloaded mapping says `[001] = 17728`, and the master list says what `17728` is. Those two things sit with different people on purpose.
+- **Consequences worth knowing:**
+  - **Keep the mapping.** Without it the labels cannot be decoded at all, by anyone.
+  - **Numbers are per-document.** `[001]` in two different PDFs is almost certainly two different entities. To track one vendor across several PDFs, join their mapping files on the **Internal ID** column - not on the label.
+  - **PDF and Excel outputs of the same data will not match by eye**, since Excel still uses `VND-17728`. Cross-reference through the Internal ID.
+  - **The mapping file contains no names**, so it is *Internal* rather than *Confidential* and can travel with the redacted PDF. The master list is what stays access-controlled.
 - **Solution:** If a term needs a stable, curated ID going forward (not just a flagged one for this run), add it to `data/Names List - Organized.xlsx` as a normal master-list row instead of typing it into the custom-words box (this only helps Excel/Word, since PDF never consults the master list). The box is also not saved anywhere between sessions - you'll need to retype it (or the same text) next time, though it does survive uploading a second file in the *same* browser session without retyping.
 
 ### PDF has no automatic name/organization detection - only emails, websites, images, and typed words

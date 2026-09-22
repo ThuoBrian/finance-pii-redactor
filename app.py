@@ -98,6 +98,7 @@ def _main() -> None:
             repo.master_map(),
             repo.counts_by_category(),
             repo.quality_report(),
+            repo.fingerprint(),
         )
 
     try:
@@ -105,9 +106,13 @@ def _main() -> None:
     except OSError:
         master_list_mtime = None
 
-    engine, master_map, name_counts, quality_issues = _get_master_list_bundle(
-        str(settings.master_list_file), master_list_mtime
-    )
+    (
+        engine,
+        master_map,
+        name_counts,
+        quality_issues,
+        master_list_fingerprint,
+    ) = _get_master_list_bundle(str(settings.master_list_file), master_list_mtime)
 
     # A brand-new install (or one whose FPR_MASTER_LIST_DIR/persisted setting
     # is missing, wrong, or not yet synced) loads 0 names - offer the in-app
@@ -123,8 +128,10 @@ def _main() -> None:
     st.title("Finance PII Redactor")
     st.caption(
         "Upload an Excel, PDF, or Word file, choose what to pseudonymize, and "
-        "download a copy with names replaced by stable IDs (e.g. STF-10010). "
-        "All processing happens locally — no data leaves your laptop."
+        "download a copy with the names replaced. Excel and Word use stable ID "
+        "codes (e.g. STF-10010); PDF uses short labels (e.g. [001]) plus a "
+        "separate mapping file. All processing happens locally — no data "
+        "leaves your laptop."
     )
 
     uploaded = st.file_uploader(
@@ -155,21 +162,24 @@ def _main() -> None:
             on_refresh_master_list=_get_master_list_bundle.clear,
         )
     elif extension == "pdf":
-        # PDF has no spaCy-/master-list-based name detection - pass an
-        # explicit empty master_map rather than the loaded one, so it's clear
-        # at this call site that PDF never resolves against it. It does get
-        # automatic email/URL detection (pattern_detector, no spaCy involved)
-        # plus the user's own words/phrases.
+        # PDF still has no spaCy-/master-list-based name detection - that
+        # stays a deliberate decision (unreliable guessing on scanned financial
+        # PDFs). It does get automatic email/URL detection (pattern_detector,
+        # no spaCy involved) plus the user's own words/phrases, and the real
+        # master_map is passed so a typed word resolves to its curated Internal
+        # ID for the mapping file. Passing the map does not add name detection;
+        # it only resolves matches the user asked for by name.
         run_pdf_flow(
             uploaded,
             pdf_service=RedactPdfService(
                 PyMuPdfDocument.open,
-                {},
+                master_map,
                 settings.auto_prefixes,
                 _get_pattern_detector(),
                 settings.fuzzy_match_threshold,
                 settings.custom_words_score,
             ),
+            master_list_fingerprint=master_list_fingerprint,
         )
     elif extension == "docx":
         run_docx_flow(

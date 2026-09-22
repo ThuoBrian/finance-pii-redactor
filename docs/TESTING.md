@@ -90,8 +90,27 @@ what happened instead — then file it.
   [GOTCHA.md](GOTCHA.md#pdf-has-no-automatic-nameorganization-detection---only-emails-websites-images-and-typed-words)),
   not a bug to report.
 - [ ] Typing a name into that box redacts every occurrence, case-insensitive.
+- [ ] Redacted text is replaced by a numbered label (`[001]`, `[002]`, and so on),
+  **not** an ID code, and the same name gets the same label everywhere in
+  that one PDF.
+- [ ] Redact a **second** PDF: its labels start over at `[001]`. Expected -
+  labels are per-document by design.
+- [ ] A name that **is** in your test master list shows a real `Internal ID`
+  in the mapping's **Internal ID** column.
+- [ ] A name that is **not** in the master list still redacts, and its
+  mapping row shows an `AUTO-` placeholder plus a reason under **Flagged**.
+  A warning about it appears *above* the mapping panel, not buried inside it.
+- [ ] **Download the label mapping (CSV) and confirm it contains no names.**
+  This is the most important check on this page: the file is only safe to
+  keep with the redacted PDF because it cannot identify anyone alone.
+- [ ] The mapping's **Master list** column names the workbook it was made
+  from, with a timestamp and row count.
+- [ ] Redact a PDF that already contains bracketed numbers of its own (e.g.
+  a footnote marker `[4]`) — a warning says labels may be ambiguous in the
+  output.
 - [ ] Switching **Pseudonymize** vs **Black out** changes the output as
-  described in each option's help text.
+  described in each option's help text. Blackout produces no mapping, since
+  there is nothing to decode.
 - [ ] With "Also black out images/logos" checked (default), an embedded
   image on the page is covered by a black box.
 - [ ] A scanned/image-only PDF (no selectable text) is left untouched aside
@@ -118,6 +137,13 @@ what happened instead — then file it.
   rows with the same name in different categories, or two names sharing one
   `Internal ID`) — a warning banner appears under **Advanced settings** the
   next time you load a file.
+- [ ] Put the **same name in two categories with different `Internal ID`s**,
+  then type it into a PDF's words box. It should still redact, but its
+  mapping row should say `ambiguous` and carry no `Internal ID` — the tool
+  refuses to guess between the two rather than recording a wrong ID.
+- [ ] Redact the **same data** as both an Excel file and a PDF. The outputs
+  deliberately look different (`STF-10010` vs `[001]`); they can only be
+  cross-referenced through the `Internal ID`, not by eye.
 
 ## Reporting results
 

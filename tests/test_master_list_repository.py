@@ -279,3 +279,47 @@ def test_alias_does_not_clobber_other_row_canonical(tmp_path):
 
     assert mapping[("ORGANIZATION", normalize("Acme Ltd"))].pseudonym == "VND-1"
     assert mapping[("ORGANIZATION", normalize("Acme Limited"))].pseudonym == "VND-2"
+
+
+def test_internal_id_is_carried_separately_from_the_pseudonym(tmp_path):
+    """The raw Internal ID must survive, not just the concatenated pseudonym.
+
+    The PDF mapping file needs the bare ID, and recovering it by splitting
+    "STF-10010" is unsafe: an auto-id like "PSN-AUTO-1A2B3" has the same shape.
+    """
+    rows = _repo(tmp_path, _CATEGORY_SHEETS).rows()
+    by_name = {r.name: r for r in rows}
+
+    assert by_name["Jane Doe"].internal_id == "10010"
+    assert by_name["Jane Doe"].pseudonym == "STF-10010"
+    # A blank Internal ID leaves both fields empty together.
+    assert by_name["No Id Person"].internal_id is None
+    assert by_name["No Id Person"].pseudonym is None
+
+
+def test_master_map_carries_the_internal_id_including_via_aliases(tmp_path):
+    """Both the canonical pass and the alias pass must populate internal_id."""
+    mapping = _repo(tmp_path, _CATEGORY_SHEETS).master_map()
+
+    canonical = mapping[("ORGANIZATION", normalize("Northwind Supplies LTD"))]
+    assert canonical.internal_id == "10011"
+    # "Ltd" -> "Limited" is an alias variant of the same row.
+    alias = mapping[("ORGANIZATION", normalize("Northwind Supplies Limited"))]
+    assert alias.internal_id == "10011"
+
+
+def test_fingerprint_identifies_the_file_and_row_count(tmp_path):
+    """Stamped into the PDF mapping so a stale decode is detectable."""
+    repo = _repo(tmp_path, _CATEGORY_SHEETS)
+
+    fingerprint = repo.fingerprint()
+
+    assert fingerprint.startswith("master_list.xlsx@")
+    assert fingerprint.endswith(f"/{len(repo.rows())}")
+    assert "Z" in fingerprint
+
+
+def test_fingerprint_is_empty_when_the_file_is_missing(tmp_path):
+    repo = MasterListRepository(tmp_path / "absent.xlsx", _CATEGORIES)
+
+    assert repo.fingerprint() == ""

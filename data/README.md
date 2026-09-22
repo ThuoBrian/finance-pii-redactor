@@ -107,9 +107,13 @@ The workbook has one sheet per category:
 Each sheet must have these columns:
 
 - **Category** — `Staff`, `Vendor`, or `Funder`.
-- **Internal ID** — the number you assign. The app builds the code as
-  `<prefix>-<Internal ID>` (Staff `10010` → `STF-10010`). Leave blank to still
-  detect the name but give it a flagged auto-code for now.
+- **Internal ID** — the number you assign. In **Excel and Word** the app
+  writes the code `<prefix>-<Internal ID>` into the document (Staff `10010` →
+  `STF-10010`). In **PDF** it writes a short per-document label (`[001]`)
+  instead and records `label → Internal ID` in a separate mapping file, so the
+  ID never appears in the PDF itself. Either way this column is what makes a
+  name decodable, so leave it blank only if you're happy for that name to get
+  a flagged auto-code that nothing can resolve later.
 - **Name** — the name as it appears in your files. You only need **one row per
   entity**: matching is alias-aware, so equivalent surface forms resolve to the
   same curated ID. Specifically:

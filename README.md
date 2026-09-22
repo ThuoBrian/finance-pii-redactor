@@ -8,14 +8,17 @@
 
 [![CI](https://github.com/ThuoBrian/finance-pii-redactor/actions/workflows/ci.yml/badge.svg)](https://github.com/ThuoBrian/finance-pii-redactor/actions/workflows/ci.yml)
 
-This tool takes the real names out of your finance files and puts a short
-code in their place, so you can share the file without showing who anyone
-is. It handles Excel, PDF, and Word files.
+This tool takes the real names out of your finance files and puts something
+short and meaningless in their place, so you can share the file without
+showing who anyone is. It handles Excel, PDF, and Word files.
 
-"Jane Doe" becomes `STF-10010`. "Acme Ltd" becomes `VND-10011`. The same name
-always gets the same code, in this file and in every file you redact later,
-so you can still spot patterns (one vendor showing up across many payments,
-for example) when you're checking for errors or reviewing for fraud.
+In Excel and Word that replacement is a code like `STF-10010`. In PDFs it is
+a numbered label like `[001]`, with a separate file saying what each label
+stands for. The next section shows both, and explains why they differ.
+
+Either way you can still spot patterns, like one vendor showing up across
+many payments, without ever seeing who the vendor is. That is the point: the
+data stays useful for error-checking and fraud review.
 
 Everything happens on your own computer. Nothing is uploaded anywhere.
 
@@ -24,12 +27,40 @@ anything else that points back to a real person or organization.*
 
 ## What it looks like
 
-| In your file                     | After redaction              |
-| -------------------------------- | ---------------------------- |
-| Paid to **Jane Doe**             | Paid to **STF-10010**        |
-| Vendor: **Acme Ltd**             | Vendor: **VND-10011**         |
-| Funder: **Global Aid Partners**  | Funder: **FND-10012**         |
-| Memo: approved by **Jane Doe**   | Memo: approved by **STF-10010** |
+**Excel and Word** put a stable code straight into the file. The same name
+gets the same code in this file and in every file you redact later.
+
+| In your file                    | After redaction                 |
+| ------------------------------- | ------------------------------- |
+| Paid to **Jane Doe**            | Paid to **STF-10010**           |
+| Vendor: **Acme Ltd**            | Vendor: **VND-10011**           |
+| Memo: approved by **Jane Doe**  | Memo: approved by **STF-10010** |
+
+**PDF** puts a short numbered label in instead, and tells you separately what
+each label stands for.
+
+| In your file                    | After redaction      |
+| ------------------------------- | -------------------- |
+| Paid to **Jane Doe**            | Paid to **[001]**    |
+| Vendor: **Acme Ltd**            | Vendor: **[002]**    |
+| Memo: approved by **Jane Doe**  | Memo: approved by **[001]** |
+
+The reason for the difference: a code like `STF-10010` has the master list's
+own ID number inside it. Anyone who has the master list can decode a redacted
+file on their own, without the mapping. `[001]` means nothing outside the one
+PDF it came from, so decoding it takes two separate steps held by two
+different people:
+
+```
+the PDF        [001]
+the mapping    [001]  =  10010
+the master list        10010  =  Jane Doe
+```
+
+Two consequences worth knowing. **Keep the PDF's mapping file** or the labels
+cannot be decoded by anyone, including you. And **labels restart at `[001]` in
+every PDF**, so to follow one vendor across several PDFs you join their
+mapping files on the ID number, not on the label.
 
 ## What gets redacted
 
@@ -99,10 +130,15 @@ is always safe.
 In Excel, every cell the tool changed is highlighted in yellow, so you can
 see at a glance what was touched.
 
-Alongside the redacted file you get a **name mapping**: the list of which
-name became which code. For Excel it's included in the workbook as a second
-sheet named "Crosswalk". For PDF and Word it's a separate CSV you can
-download if you want it.
+Alongside the redacted file you get a **mapping**: what each code or label
+stands for.
+
+- **Excel:** included in the workbook as a second sheet named "Crosswalk". It
+  lists the real names.
+- **Word:** a separate CSV you can download. It lists the real names.
+- **PDF:** a separate CSV that contains **no names at all**, only
+  `[001] = 10010` rows. You need the master list as well to get from there to
+  a person or organization.
 
 To change which names get which codes, edit the master list
 (`Names List - Organized.xlsx`) and click **🔄 Refresh master list** in
@@ -113,16 +149,22 @@ To change which names get which codes, edit the master list
 A redacted file on its own is approved for **Internal** data. Not
 Confidential, not Highly Confidential.
 
-The name mapping is a different matter. Anyone holding it can turn the codes
-back into real names, so **the mapping is Confidential**, and that changes
-what you can do with each file:
+The mapping is where it gets more careful, and the three formats differ:
 
-- **Excel:** the mapping is always included in the workbook as a second
-  sheet, so the file you download is Confidential as a whole, not Internal.
-  Delete the "Crosswalk" sheet before sharing if the recipient shouldn't
-  have it.
-- **PDF and Word:** the mapping is always a separate CSV. Keep it somewhere
-  else, stored securely, and don't send it with the redacted file.
+- **PDF:** the mapping has no names in it, so it cannot identify anyone on
+  its own. It is **Internal**, and you can keep it with the redacted PDF.
+  What has to stay locked down is the master list, which is the only thing
+  that turns an ID number back into a name.
+- **Word:** the mapping is a separate CSV listing real names, so it is
+  **Confidential**. Store it somewhere else, securely, and don't send it with
+  the redacted file.
+- **Excel:** the mapping is inside the workbook as a second sheet, so the file
+  you download is **Confidential as a whole**, not Internal. Delete the
+  "Crosswalk" sheet before sharing if the recipient shouldn't have it.
+
+The safest thing to hand someone is therefore a redacted PDF, with or without
+its mapping. A redacted Excel workbook needs a look at the Crosswalk sheet
+first.
 
 ## If something goes wrong
 

@@ -23,6 +23,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -44,12 +45,23 @@ _LEGACY_SUFFIX = re.compile(r"\s+-\s+.*$")
 
 @dataclass(frozen=True)
 class MasterRow:
-    """A parsed, validated master-list row mapped to its entity type."""
+    """A parsed, validated master-list row mapped to its entity type.
+
+    ``internal_id`` is the raw ``Internal ID`` cell (``"17728"``) and
+    ``pseudonym`` is the display form built from it (``"VND-17728"``). Both are
+    None together when the row has no curated id. They are kept as two fields
+    rather than one derived from the other because the quality checks and the
+    UI key off ``pseudonym`` while the PDF mapping file needs the bare id;
+    recovering the id by splitting the pseudonym is unsafe, since
+    ``"VND-17728"`` and ``"ORG-AUTO-3F9A1"`` have the same shape. Change them
+    together.
+    """
 
     category: str
     name: str
     entity_type: str
     pseudonym: str | None  # None when the row has no curated id
+    internal_id: str | None = None  # the raw Internal ID cell behind it
 
 
 class MasterListRepository:
@@ -82,6 +94,31 @@ class MasterListRepository:
             self._rows = self._parse()
             self._cached_mtime = mtime
         return self._rows
+
+    def fingerprint(self) -> str:
+        """Identify which version of the master list this is, for the PDF mapping.
+
+        The PDF mapping file carries Internal IDs and no names, so there is
+        nothing in it to notice a stale decode against: if a row is edited or
+        an ID reused, an old mapping quietly resolves to the wrong name. This
+        is not a new risk - ``STF-10010`` already depended on the list's
+        current contents the same way - but removing the name removed the
+        informal cross-check, so record which list a mapping was made from.
+
+        Format: ``<filename>@<mtime, ISO 8601 UTC>/<row count>``. Empty string
+        when the file is missing. It makes a stale decode *detectable*, not
+        impossible; whoever decodes has to compare it against the list they hold.
+        """
+        mtime = self._file_mtime()
+        if mtime is None:
+            return ""
+        stamp = (
+            datetime.fromtimestamp(mtime, tz=UTC)
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+        return f"{self._path.name}@{stamp}/{len(self.rows())}"
 
     def names_by_entity(self) -> dict[str, list[str]]:
         """Return detection name lists grouped by entity type.
@@ -119,7 +156,10 @@ class MasterListRepository:
             assert row.pseudonym is not None
             key = (row.entity_type, normalize(row.name))
             entry = MasterEntry(
-                pseudonym=row.pseudonym, category=row.category, display_name=row.name
+                pseudonym=row.pseudonym,
+                category=row.category,
+                display_name=row.name,
+                internal_id=row.internal_id,
             )
             existing = mapping.get(key)
             if existing is None or existing.pseudonym == entry.pseudonym:
@@ -128,7 +168,10 @@ class MasterListRepository:
         for row in curated:
             assert row.pseudonym is not None
             entry = MasterEntry(
-                pseudonym=row.pseudonym, category=row.category, display_name=row.name
+                pseudonym=row.pseudonym,
+                category=row.category,
+                display_name=row.name,
+                internal_id=row.internal_id,
             )
             for alias in aliases(row.name):
                 key = (row.entity_type, normalize(alias))
@@ -369,7 +412,9 @@ class MasterListRepository:
                 # Allow the row only if its Category cell matches the sheet.
                 continue
             pseudonym = f"{prefix}-{id_value}" if id_value else None
-            rows.append(MasterRow(category, name, entity_type, pseudonym))
+            rows.append(
+                MasterRow(category, name, entity_type, pseudonym, internal_id=id_value)
+            )
         return rows
 
     @staticmethod

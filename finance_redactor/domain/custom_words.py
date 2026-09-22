@@ -15,39 +15,17 @@ standalone regex-based path merged in at the application layer (see
 from __future__ import annotations
 
 import re
-import unicodedata
 from collections.abc import Iterable
 
-from finance_redactor.domain.entities import DetectionSource, PiiDetection, Span
-
-_CUSTOM_ENTITY_TYPE = "CUSTOM"
-
-
-def _fold_diacritics(text: str) -> str:
-    """Strip combining accent marks (``José`` -> ``Jose``), one output char per input char.
-
-    Each character is Unicode-decomposed (NFKD) on its own and reduced to its
-    first non-combining component, falling back to the original character if
-    decomposition yields none. This keeps the result the **same length** as
-    ``text`` (mirroring :func:`recasing.recase_uppercase`'s length-preserving
-    approach) so offsets found on a folded copy map back exactly onto the
-    original - needed because many Latin American (and other) names carry
-    accents (``José``, ``Muñoz``, ``André``) that a US/ASCII keyboard can't
-    easily type, so a user typing the unaccented form into the "words to
-    redact" box should still match the accented form in the document, and
-    vice versa (e.g. an OCR pass that dropped accents).
-    """
-    return "".join(
-        next(
-            (
-                c
-                for c in unicodedata.normalize("NFKD", ch)
-                if not unicodedata.combining(c)
-            ),
-            ch,
-        )
-        for ch in text
-    )
+from finance_redactor.domain.entities import (
+    CUSTOM_ENTITY_TYPE as _CUSTOM_ENTITY_TYPE,
+)
+from finance_redactor.domain.entities import (
+    DetectionSource,
+    PiiDetection,
+    Span,
+)
+from finance_redactor.domain.pseudonyms import fold_diacritics as _fold_diacritics
 
 
 def find_custom_words(

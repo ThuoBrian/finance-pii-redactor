@@ -65,5 +65,13 @@ automaton
 [Dd]ependabot
 mypy
 
-# The PII guard test stores forbidden values as hashes, never as this.
+# Two-hop PDF label scheme (2026-09): a label points at an Internal ID, which
+# the master list turns into a name. These are the words that scheme needs.
+[Dd]ecodable
+[Uu]ncurated
+[Cc]odename(s)?
 [Pp]laintext
+[Mm]apping's
+CST
+CST-AUTO-[A-F0-9]+
+EML-AUTO-[A-F0-9]+
