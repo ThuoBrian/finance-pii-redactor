@@ -127,7 +127,12 @@ is always safe.
 2. Choose what you want redacted, then look over what the tool found. If
    there's something specific you want covered that it wouldn't know about,
    like a codename or a case number, type it into **Advanced settings**.
-3. Download the redacted copy.
+3. Look over **Check what was detected** and untick anything that isn't
+   really a name. Ordinary words sometimes get caught, usually because
+   someone added one to the master list as a payee. The **Source** column
+   says why it matched. Unticking rebuilds the file without that word and
+   leaves everything else redacted.
+4. Download the redacted copy.
 
 In Excel, every cell the tool changed is highlighted in yellow, so you can
 see at a glance what was touched.

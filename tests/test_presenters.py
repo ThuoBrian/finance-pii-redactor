@@ -4,14 +4,23 @@ from __future__ import annotations
 
 import pandas as pd
 
-from finance_redactor.domain.entities import DetectionSource, Finding
+from finance_redactor.application.results import CellFinding, ExcelScanResult
+from finance_redactor.domain.entities import (
+    DetectionSource,
+    Finding,
+    PiiDetection,
+    Span,
+)
 from finance_redactor.domain.pseudonyms import Assignment
 from finance_redactor.presentation.presenters import (
     crosswalk_dataframe,
+    detection_editor_dataframe,
+    excluded_terms,
     findings_dataframe,
     highlighted_html,
     pdf_mapping_dataframe,
     pdf_review_dataframe,
+    scan_result_findings,
 )
 
 
@@ -188,3 +197,112 @@ def test_excel_and_word_crosswalk_still_carries_names() -> None:
     assert "Original name" in df.columns
     assert df.loc[0, "Original name"] == _DISTINCTIVE
     assert df.loc[0, "Pseudonym"] == "VND-17728"
+
+
+# --- The deselect editor -----------------------------------------------------
+#
+# Added after the ordinary word "salaries" came back redacted from a PDF and
+# there was no way in the tool to say "not that one".
+
+
+def _finding(
+    text: str, page: int = 0, source: DetectionSource | None = None
+) -> Finding:
+    return Finding(
+        page=page,
+        detected_text=text,
+        entity_type="ORGANIZATION",
+        score=0.9,
+        source=source or DetectionSource.MASTER_LIST,
+    )
+
+
+def test_editor_collapses_repeats_of_the_same_term_to_one_row() -> None:
+    """A word appearing forty times is one decision, not forty tick boxes."""
+    findings = [_finding("Salaries"), _finding("Salaries", 1), _finding("Salaries", 2)]
+
+    table = detection_editor_dataframe(findings)
+
+    assert len(table) == 1
+    assert table.loc[0, "Occurrences"] == 3
+    assert table.loc[0, "Detected text"] == "Salaries"
+
+
+def test_editor_groups_across_casing_and_spacing() -> None:
+    """Grouping uses the same normalization the services compare with.
+
+    Otherwise unticking "Salaries" would leave "SALARIES" still redacted.
+    """
+    findings = [_finding("Salaries"), _finding("salaries"), _finding("  SALARIES  ")]
+
+    table = detection_editor_dataframe(findings)
+
+    assert len(table) == 1
+    assert table.loc[0, "Occurrences"] == 3
+
+
+def test_editor_reports_the_source_so_the_user_knows_which_fix_applies() -> None:
+    """Master list -> edit the workbook; model -> raise the threshold."""
+    findings = [
+        _finding("Salaries"),
+        _finding("someone@example.org", source=DetectionSource.PATTERN),
+    ]
+
+    table = detection_editor_dataframe(findings)
+
+    assert set(table["Source"]) == {"master list", "pattern match"}
+
+
+def test_editor_defaults_to_redacting_everything() -> None:
+    """The safe default: nothing is excluded until someone unticks it."""
+    table = detection_editor_dataframe([_finding("Salaries")])
+
+    assert bool(table.loc[0, "Redact?"]) is True
+
+
+def test_unticking_round_trips_through_excluded_terms() -> None:
+    """The editor and its inverse have to agree, or a tick would not stick."""
+    findings = [_finding("Salaries"), _finding("Care Organisation")]
+    table = detection_editor_dataframe(findings)
+    table.loc[table["Detected text"] == "Salaries", "Redact?"] = False
+
+    excluded = excluded_terms(table)
+
+    assert excluded == frozenset({"salaries"})
+    # Seeding a fresh table with that set leaves the same row unticked.
+    reseeded = detection_editor_dataframe(findings, excluded)
+    assert bool(reseeded.loc[0, "Redact?"]) is False
+    assert bool(reseeded.loc[1, "Redact?"]) is True
+
+
+def test_empty_inputs_exclude_nothing() -> None:
+    """Losing the widget state must fail towards redacting, not away from it."""
+    assert excluded_terms(pd.DataFrame()) == frozenset()
+    assert detection_editor_dataframe([]).empty
+    assert list(detection_editor_dataframe([]).columns) == [
+        "Redact?",
+        "Detected text",
+        "Entity type",
+        "Source",
+        "Occurrences",
+    ]
+
+
+def test_scan_result_findings_flattens_excel_cells() -> None:
+    """Excel shares the editor, so its cell findings become Findings."""
+    detection = PiiDetection(
+        entity_type="PERSON",
+        span=Span(0, 8),
+        score=0.9,
+        text="Jane Doe",
+        source=DetectionSource.MASTER_LIST,
+    )
+    scan = ExcelScanResult(
+        findings=[CellFinding(row=4, column="notes", detections=[detection])]
+    )
+
+    flattened = scan_result_findings(scan)
+
+    assert len(flattened) == 1
+    assert flattened[0].detected_text == "Jane Doe"
+    assert flattened[0].page == 4

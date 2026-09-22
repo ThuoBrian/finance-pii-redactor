@@ -17,11 +17,16 @@ from finance_redactor.application.redact_excel import RedactExcelService
 from finance_redactor.config import Settings
 from finance_redactor.domain.quality import QualityIssue
 from finance_redactor.presentation.crosswalk_view import render_crosswalk_section
+from finance_redactor.presentation.exclusion_view import (
+    render_deselect_editor,
+    render_exclusion_warning,
+)
 from finance_redactor.presentation.master_list_view import render_master_list_status
 from finance_redactor.presentation.presenters import (
     crosswalk_dataframe,
     excel_findings_dataframe,
     highlighted_html,
+    scan_result_findings,
 )
 from finance_redactor.presentation.session import (
     reset_on_new_upload,
@@ -51,6 +56,7 @@ def run_excel_flow(
             "pdf_findings",
             "pdf_pages",
             "pdf_crosswalk",
+            "excel_excluded_applied",
         ),
         force="df" not in st.session_state,
     )
@@ -113,6 +119,7 @@ def run_excel_flow(
         st.session_state.findings = scan_result
         st.session_state.redacted_df = redacted_df
         st.session_state.crosswalk = crosswalk
+        st.session_state.excel_excluded_applied = frozenset()
 
     if "findings" not in st.session_state:
         st.stop()
@@ -142,6 +149,24 @@ def run_excel_flow(
         crosswalk, base_name, key_prefix="excel", download_separately=False
     )
 
+    excluded = render_deselect_editor(
+        scan_result_findings(scan_result),
+        key_prefix="excel",
+        excluded=st.session_state.get("excel_excluded_applied", frozenset()),
+    )
+    if excluded != st.session_state.get("excel_excluded_applied", frozenset()):
+        # Cheap by construction: scan and redact are separate, so re-applying
+        # is a pure pass over the ScanResult already in session state. No
+        # re-detection, and the spaCy model is never touched.
+        with st.spinner("Reapplying pseudonyms without those terms..."):
+            redacted_df, crosswalk = excel_service.redact(
+                df, scan_result, selected_cols, exclude=excluded
+            )
+        st.session_state.redacted_df = redacted_df
+        st.session_state.crosswalk = crosswalk
+        st.session_state.excel_excluded_applied = excluded
+        st.rerun()
+
     with st.expander(f"Detection details ({n_entities} finding(s))"):
         if n_entities == 0:
             st.write("No PII detected.")
@@ -153,6 +178,9 @@ def run_excel_flow(
             )
 
     st.subheader("Download")
+    render_exclusion_warning(
+        st.session_state.get("excel_excluded_applied", frozenset())
+    )
     if n_entities == 0:
         st.info("No PII was detected. The file is already clean.")
     else:

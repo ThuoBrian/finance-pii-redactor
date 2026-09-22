@@ -385,3 +385,63 @@ def test_person_and_organization_are_requested_from_the_detector() -> None:
     assert "PERSON" in detector.requested_entities
     assert "ORGANIZATION" in detector.requested_entities
     assert "EMAIL_ADDRESS" in detector.requested_entities
+
+
+def test_excluded_term_is_not_redacted_and_not_in_the_crosswalk() -> None:
+    """Unticking a false positive drops it from the output entirely.
+
+    Reproduces the reported bug: an ordinary word on the master list was
+    redacted everywhere with no way to refuse it.
+    """
+    doc = FakePdfDocument(["Total salaries paid to John"])
+
+    result = _service().execute(
+        doc, ["salaries", "John"], exclude=frozenset({"salaries"})
+    )
+
+    redacted_terms = [candidate for candidate, _ in doc.redactions_by_page[0]]
+    assert "John" in redacted_terms
+    assert "salaries" not in redacted_terms
+    assert [a.original_name for a in result.crosswalk] == ["John"]
+
+
+def test_excluding_one_term_leaves_the_others_redacted() -> None:
+    """The failure to rule out: one deselection suppressing everything."""
+    doc = FakePdfDocument(["salaries, John, Mary"])
+
+    result = _service().execute(
+        doc, ["salaries", "John", "Mary"], exclude=frozenset({"salaries"})
+    )
+
+    assert result.entity_count == 2
+    assert {a.original_name for a in result.crosswalk} == {"John", "Mary"}
+
+
+def test_labels_stay_contiguous_when_a_term_is_excluded() -> None:
+    """Excluded before assign, so no ordinal is claimed and no label is skipped."""
+    doc = FakePdfDocument(["salaries, John, Mary"])
+
+    result = _service().execute(
+        doc, ["salaries", "John", "Mary"], exclude=frozenset({"salaries"})
+    )
+
+    assert [a.label for a in result.crosswalk] == ["[001]", "[002]"]
+
+
+def test_exclusion_is_case_and_whitespace_insensitive() -> None:
+    """The set holds normalized terms, so every casing of the word is covered."""
+    doc = FakePdfDocument(["SALARIES and Salaries and salaries"])
+
+    result = _service().execute(doc, ["salaries"], exclude=frozenset({"salaries"}))
+
+    assert result.crosswalk == []
+    assert 0 not in doc.redactions_by_page
+
+
+def test_no_exclusions_redacts_everything_as_before() -> None:
+    """The default must not change existing behaviour."""
+    doc = FakePdfDocument(["Total salaries paid to John"])
+
+    result = _service().execute(doc, ["salaries", "John"])
+
+    assert result.entity_count == 2

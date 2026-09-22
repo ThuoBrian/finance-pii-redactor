@@ -65,7 +65,11 @@ from finance_redactor.application.ports import PdfDocumentFactory, PiiDetector
 from finance_redactor.application.results import PdfRedactionResult
 from finance_redactor.domain.custom_words import find_custom_words
 from finance_redactor.domain.entities import IMAGE_REDACTION_SENTINEL, Finding
-from finance_redactor.domain.pseudonyms import MasterEntry, Pseudonymizer
+from finance_redactor.domain.pseudonyms import (
+    MasterEntry,
+    Pseudonymizer,
+    normalize,
+)
 from finance_redactor.domain.rules import dedupe_overlapping
 from finance_redactor.infrastructure.detection.pdf_text_normalizer import (
     NormalizedText,
@@ -131,6 +135,7 @@ class RedactPdfService:
         *,
         style: RedactionStyle = RedactionStyle.PSEUDONYMIZE,
         redact_images: bool = False,
+        exclude: frozenset[str] = frozenset(),
     ) -> PdfRedactionResult:
         """Redact ``source`` and return new bytes, findings, page count, crosswalk.
 
@@ -140,6 +145,13 @@ class RedactPdfService:
         ``domain/custom_words.find_custom_words``). An empty ``custom_words``
         list just means there's nothing extra to add on top of the automatic
         email/URL/image detection - this method runs cleanly either way.
+
+        ``exclude`` is a set of already-normalized terms (see
+        ``domain/pseudonyms.normalize``) the operator ticked off in the review
+        table as false positives. A matching detection is dropped before it
+        reaches the pseudonymizer, so it is neither replaced in the output nor
+        recorded in the crosswalk. Per-run only: nothing about it persists, and
+        the caller re-supplies it on every call.
         """
         document = self._open_document(source)
         pseudonymizer = Pseudonymizer(
@@ -183,6 +195,12 @@ class RedactPdfService:
                 )
                 redactions: list[tuple[str | list[str], str]] = []
                 for detection in kept:
+                    # Dropped before ``assign``, so an excluded term claims no
+                    # ordinal and the labels that do get written stay
+                    # contiguous. It also never reaches the crosswalk, which is
+                    # what keeps it out of the names-free mapping file.
+                    if normalize(detection.text) in exclude:
+                        continue
                     # The document gets the document-local label, never the
                     # pseudonym: the pseudonym embeds the master-list Internal
                     # ID, and keeping that out of the output is the whole point
