@@ -261,16 +261,22 @@ def findings_dataframe(findings: list[Finding], page_label: str) -> pd.DataFrame
 
 # The deselect editor. One row per distinct detected term, because a word
 # appearing forty times is one decision, not forty.
+#
+# ``REDACT_COLUMN`` is public because ``exclusion_view`` needs the same name
+# to configure the checkbox column and to mark every other column read-only.
+# A second copy of the string over there would drift silently: its
+# ``disabled`` filter would stop excluding the real column, the tick boxes
+# would render read-only, and nothing would raise.
+REDACT_COLUMN = "Redact?"
+_TERM_COLUMN = "Detected text"
+
 _EDITOR_COLUMNS = [
-    "Redact?",
-    "Detected text",
+    REDACT_COLUMN,
+    _TERM_COLUMN,
     "Entity type",
     "Source",
     "Occurrences",
 ]
-
-_REDACT_COLUMN = "Redact?"
-_TERM_COLUMN = "Detected text"
 
 
 def detection_editor_dataframe(
@@ -305,7 +311,7 @@ def detection_editor_dataframe(
 
     rows = [
         {
-            _REDACT_COLUMN: key not in excluded,
+            REDACT_COLUMN: key not in excluded,
             _TERM_COLUMN: finding.detected_text,
             "Entity type": finding.entity_type,
             "Source": finding.source.value,
@@ -325,7 +331,7 @@ def excluded_terms(edited: pd.DataFrame) -> frozenset[str]:
     A missing or empty frame yields an empty set, which means "redact
     everything" - the safe direction if the widget state is ever lost.
     """
-    if edited is None or edited.empty or _REDACT_COLUMN not in edited.columns:
+    if edited is None or edited.empty or REDACT_COLUMN not in edited.columns:
         return frozenset()
-    unticked = edited.loc[~edited[_REDACT_COLUMN].fillna(True).astype(bool)]
+    unticked = edited.loc[~edited[REDACT_COLUMN].fillna(True).astype(bool)]
     return frozenset(normalize(str(term)) for term in unticked[_TERM_COLUMN])

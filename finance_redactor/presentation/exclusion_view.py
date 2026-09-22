@@ -29,16 +29,10 @@ import streamlit as st
 
 from finance_redactor.domain.entities import Finding
 from finance_redactor.presentation.presenters import (
+    REDACT_COLUMN,
     detection_editor_dataframe,
     excluded_terms,
 )
-
-# The only editable widget in this codebase. Everything else is st.dataframe,
-# deliberately: the review tables are read-only records. This one has to be
-# editable, because the whole point is letting the operator overrule a
-# detection, and a tick box next to the offending row is where they will look
-# for it.
-_REDACT_COLUMN = "Redact?"
 
 
 def render_deselect_editor(
@@ -69,19 +63,24 @@ def render_deselect_editor(
             "this word, so unticking it patches this one document while "
             "editing the workbook fixes every future one."
         )
+        # The only editable widget in this codebase. Everything else is
+        # st.dataframe, deliberately: those tables are read-only records.
+        # This one has to be editable, because the whole point is letting the
+        # operator overrule a detection, and a tick box beside the offending
+        # row is where they will look for it.
         edited = st.data_editor(
             table,
             width="stretch",
             hide_index=True,
             key=f"{key_prefix}_deselect_editor",
             column_config={
-                _REDACT_COLUMN: st.column_config.CheckboxColumn(
-                    _REDACT_COLUMN,
+                REDACT_COLUMN: st.column_config.CheckboxColumn(
+                    REDACT_COLUMN,
                     help="Untick to leave this term un-redacted in this document.",
                     default=True,
                 )
             },
-            disabled=[c for c in table.columns if c != _REDACT_COLUMN],
+            disabled=[c for c in table.columns if c != REDACT_COLUMN],
         )
 
     return excluded_terms(edited)
