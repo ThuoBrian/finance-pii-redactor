@@ -8,115 +8,148 @@
 
 [![CI](https://github.com/ThuoBrian/finance-pii-redactor/actions/workflows/ci.yml/badge.svg)](https://github.com/ThuoBrian/finance-pii-redactor/actions/workflows/ci.yml)
 
-A desktop tool that replaces people's and organizations' names in Excel,
-PDF, and Word files with stable ID codes (e.g. `STF-91345`) — so patterns in
-the data (like one vendor across many payments) stay visible for
-error-checking and fraud monitoring, without ever exposing a real identity.
-Runs entirely on your own computer; nothing is uploaded anywhere.
+This tool takes the real names out of your finance files and puts a short
+code in their place, so you can share the file without showing who anyone
+is. It handles Excel, PDF, and Word files.
 
-## Example
+"Jane Doe" becomes `STF-91345`. "Acme Ltd" becomes `VND-1045`. The same name
+always gets the same code, in this file and in every file you redact later,
+so you can still spot patterns (one vendor showing up across many payments,
+for example) when you're checking for errors or reviewing for fraud.
 
-|In your file|After redaction|
-|-|-|
-|Paid to **Jane Doe**|Paid to **STF-91345**|
-|Vendor: **Acme Ltd**|Vendor: **VND-1045**|
-|Funder: **Global Aid Partners**|Funder: **FND-7745**|
-|Memo: approved by **Jane Doe**|Memo: approved by **STF-91345**|
+Everything happens on your own computer. Nothing is uploaded anywhere.
 
-The same name always gets the same code — in this file and every future
-one — so a repeat pattern stays visible without ever showing the name.
+*PII means personally identifiable information: names, email addresses, and
+anything else that points back to a real person or organization.*
 
-## What it does
+## What it looks like
 
-- **Excel and Word:** automatically redacts people, organizations, emails,
-  and websites, using codes from a master list you control (see
-  **[data/README.md](data/README.md)**). Anyone not on the list still gets
-  a consistent, flagged code — nothing slips through un-redacted.
-- **PDF:** emails, websites, and images/logos are redacted automatically;
-  names and organizations aren't guessed at, so type or paste the exact
-  words/phrases you want covered instead.
-- Same identity → same code, every time, across every file.
-- Works offline after first-time setup.
+| In your file                     | After redaction              |
+| -------------------------------- | ---------------------------- |
+| Paid to **Jane Doe**             | Paid to **STF-91345**        |
+| Vendor: **Acme Ltd**             | Vendor: **VND-1045**         |
+| Funder: **Global Aid Partners**  | Funder: **FND-7745**         |
+| Memo: approved by **Jane Doe**   | Memo: approved by **STF-91345** |
 
-## Quick start
+## What gets redacted
 
-**Windows** — open PowerShell and paste:
+Where the codes come from: a spreadsheet called the **master list**, which
+your team controls. It says which name gets which code. If a name turns up
+that isn't on the list, the tool still gives it a code and marks it so you
+can see it wasn't one of yours. Nothing is left showing.
+See **[data/README.md](data/README.md)** for what goes in that file.
+
+**Excel and Word files:** the tool finds people, organizations, email
+addresses, and website links on its own.
+
+**PDF files:** email addresses, website links, and images or logos are
+found automatically. Names and organizations are not, because in a PDF the
+tool can't reliably tell a name from any other text and we'd rather it
+didn't guess. So for PDFs you type or paste the exact words you want
+covered.
+
+## Installing it
+
+You only do this once. Copy the line below, paste it into a terminal
+window, and press Enter. It downloads the tool, asks you where you'd like
+it saved, and starts it up.
+
+**Windows** (open PowerShell):
 
 ```powershell
 irm https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/install.ps1 | iex
 ```
 
-**macOS / Linux** — open a terminal and paste:
+**macOS / Linux** (open Terminal):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/install.sh | bash
 ```
 
-The installer asks where to install, sets everything up (~400 MB, a few
-minutes, needs internet once), and launches the app — after that it works
-offline. Run the same command again anytime to update; it preserves your
-local master list automatically.
+Setup downloads about 400 MB and takes a few minutes, so you need internet
+for this part. After that the tool works offline.
 
-Already installed? Double-click **`run.bat`** (Windows) or run
-**`./run.sh`** (macOS/Linux). If your team keeps the master list in a shared
-Box folder, see **[docs/BOX_SETUP.md](docs/BOX_SETUP.md)** for a quick
-one-time setup guide (or
-**[data/README.md](data/README.md#sharing-one-master-list-across-a-team)**
-for the full reference) — the installer above doesn't touch that shared
-folder either way, so it's safe to re-run anytime.
+A few things that surprise people the first time:
 
-## How it works
+- The tool opens in your **web browser**, like a website would. It isn't
+  online though; it's only running on your machine. If the browser doesn't
+  open by itself, go to http://127.0.0.1:8501.
+- A black window opens too. **Leave it open** while you're working. Closing
+  it stops the tool.
 
-1. Upload an Excel, PDF, or Word file — it's processed entirely on your
-   computer.
-2. **Excel and Word:** choose what to detect and review the results.
-   **PDF:** emails, websites, and images are caught automatically either
-   way. You can also type/paste extra words or phrases into **Advanced
-   settings** for anything one-off (a codename, a case number).
-3. Download the redacted file. Excel embeds the name-to-code mapping
-   (**crosswalk**) as a second sheet; PDF and Word offer it as a separate,
-   optional download instead.
+**Opening it again later:** double-click **`run.bat`** (Windows) or run
+**`./run.sh`** (macOS/Linux) in the folder you installed into.
 
-The master list (`Names List - Organized.xlsx`) controls which names get
-which codes — see **[data/README.md](data/README.md)** for the file format
-and how to point the app at a shared copy. To update it, edit it in place
-and click **🔄 Refresh master list** in **Advanced settings**.
+**Updating:** paste the same install command again. Your master list is kept
+as it is.
 
-## Handling sensitive data
+If your team shares one master list from a Box folder, there's a one-time
+setup for that in **[docs/BOX_SETUP.md](docs/BOX_SETUP.md)**. Installing or
+updating never touches that shared folder, so re-running the command above
+is always safe.
 
-Approved for **Internal** data only — not Confidential or Highly
-Confidential.
+## Using it
 
-The **crosswalk** (name-to-code mapping) re-identifies people, so it's
-**Confidential** on its own, even though the redacted file itself stays
-Internal:
+1. Upload your Excel, PDF, or Word file.
+2. Choose what you want redacted, then look over what the tool found. If
+   there's something specific you want covered that it wouldn't know about,
+   like a codename or a case number, type it into **Advanced settings**.
+3. Download the redacted copy.
 
-- **Excel:** the crosswalk is embedded in the workbook by default, so the
-  whole downloaded file is Confidential, not just Internal.
-- **PDF and Word:** the crosswalk is only ever a separate CSV — keep it
-  apart from the redacted file and store it securely.
+In Excel, every cell the tool changed is highlighted in yellow, so you can
+see at a glance what was touched.
+
+Alongside the redacted file you get a **name mapping**: the list of which
+name became which code. For Excel it's included in the workbook as a second
+sheet named "Crosswalk". For PDF and Word it's a separate CSV you can
+download if you want it.
+
+To change which names get which codes, edit the master list
+(`Names List - Organized.xlsx`) and click **🔄 Refresh master list** in
+**Advanced settings**.
+
+## Which file is safe to share
+
+A redacted file on its own is approved for **Internal** data. Not
+Confidential, not Highly Confidential.
+
+The name mapping is a different matter. Anyone holding it can turn the codes
+back into real names, so **the mapping is Confidential**, and that changes
+what you can do with each file:
+
+- **Excel:** the mapping is always included in the workbook as a second
+  sheet, so the file you download is Confidential as a whole, not Internal.
+  Delete the "Crosswalk" sheet before sharing if the recipient shouldn't
+  have it.
+- **PDF and Word:** the mapping is always a separate CSV. Keep it somewhere
+  else, stored securely, and don't send it with the redacted file.
+
+## If something goes wrong
+
+**[docs/GOTCHA.md](docs/GOTCHA.md)** lists the problems people run into
+most and how to fix them. If it isn't covered there, email the maintainer
+below.
 
 ## Testing with users
 
-Running a user-acceptance round? **[docs/TESTING.md](docs/TESTING.md)** is a
-checklist testers can follow: install, build a small synthetic test master
-list, and work through the scenarios (Excel/PDF/Word, plus known edge cases)
-before reporting results.
+Running a round of testing before rollout?
+**[docs/TESTING.md](docs/TESTING.md)** walks testers through it: installing,
+building a small made-up master list to practise on (never real names), and
+working through Excel, PDF, and Word along with the known rough edges.
 
 ## For developers
 
 This README covers day-to-day use. **[CONTRIBUTING.md](CONTRIBUTING.md)**
 covers local setup and the checks to run before opening a PR,
-**[docs/GOTCHA.md](docs/GOTCHA.md)** covers known issues and
-troubleshooting, **[data/README.md](data/README.md)** covers the
-master-list file format, and **[CHANGELOG.md](CHANGELOG.md)** tracks
-notable changes. Architecture and internal file structure are documented in
-a local, non-public `CLAUDE.md` kept out of this repository — contact the
-maintainer if you need it for development.
+**[docs/GOTCHA.md](docs/GOTCHA.md)** covers known issues,
+**[data/README.md](data/README.md)** covers the master-list file format, and
+**[CHANGELOG.md](CHANGELOG.md)** tracks notable changes. Architecture and
+internal file structure live in a local, non-public `CLAUDE.md` kept out of
+this repository. Contact the maintainer if you need it for development.
 
 ## Maintainer
 
-Brian Thuo, Systems Engineer — bthuo@poverty-action.org
+Brian Thuo, Systems Engineer, bthuo@poverty-action.org
 
 ## License
 
