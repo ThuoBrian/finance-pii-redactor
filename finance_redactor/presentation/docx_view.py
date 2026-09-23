@@ -27,6 +27,7 @@ from finance_redactor.presentation.session import (
     reset_on_new_upload,
     sanitize_base_name,
 )
+from finance_redactor.presentation.steps import show_step
 
 
 def run_docx_flow(
@@ -37,6 +38,7 @@ def run_docx_flow(
     name_counts: Mapping[str, int],
     quality_issues: Sequence[QualityIssue] | None = None,
     on_refresh_master_list: Callable[[], None] | None = None,
+    steps: Any,
 ) -> None:
     """Render the Word (.docx) pseudonymization flow in Streamlit."""
     reset_on_new_upload(
@@ -56,7 +58,8 @@ def run_docx_flow(
         ),
     )
 
-    st.subheader("Configuration")
+    show_step(steps, 2)
+    st.subheader("2. Set options")
     with st.expander("Advanced settings", expanded=True):
         threshold = st.slider(
             "Confidence threshold",
@@ -107,10 +110,16 @@ def run_docx_flow(
         st.session_state.docx_excluded_applied = frozenset()
 
     if "docx_buffer" not in st.session_state or st.session_state.docx_buffer is None:
+        st.caption(
+            "Click the button above to run it. Your results and download will "
+            "appear here."
+        )
         st.stop()
 
     docx_findings = st.session_state.docx_findings
     n_entities = len(docx_findings)
+    show_step(steps, 3)
+    st.subheader("3. Review the results")
 
     if n_entities == 0:
         st.info("No PII was detected in this document. The file is already clean.")
@@ -154,7 +163,8 @@ def run_docx_flow(
             hide_index=True,
         )
 
-    st.subheader("Download")
+    show_step(steps, 4)
+    st.subheader("4. Download")
     render_exclusion_warning(st.session_state.get("docx_excluded_applied", frozenset()))
     st.download_button(
         label="Download pseudonymized Word document",

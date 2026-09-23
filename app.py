@@ -10,6 +10,8 @@ workbook's modification time so edits still take effect on the next refresh.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import streamlit as st
 
 from finance_redactor.application.redact_docx import RedactDocxService
@@ -35,6 +37,10 @@ from finance_redactor.presentation.master_list_setup import (
     render_master_list_setup_dialog,
 )
 from finance_redactor.presentation.pdf_view import run_pdf_flow
+from finance_redactor.presentation.steps import show_step
+
+# Resolved from this file, not the CWD - run.bat launches from anywhere.
+_LOGO = Path(__file__).parent / "image" / "data-privacy-ai-dark-nobg.svg"
 
 
 def _main() -> None:
@@ -133,7 +139,10 @@ def _main() -> None:
     ):
         render_master_list_setup_dialog(settings.names_dir)
 
-    st.title("Finance PII Redactor")
+    # Middle of three columns centers the logo and caps its width on wide layouts.
+    _, logo_col, _ = st.columns([1, 1, 1])
+    logo_col.image(str(_LOGO))
+    st.title("Finance PII Redactor", text_alignment="center")
     st.caption(
         "Upload an Excel, PDF, or Word file, choose what to pseudonymize, and "
         "download a copy with the names replaced. Excel and Word use stable ID "
@@ -141,7 +150,10 @@ def _main() -> None:
         "separate mapping file. All processing happens locally — no data "
         "leaves your laptop."
     )
+    steps = st.empty()
+    show_step(steps, 1)
 
+    st.subheader("1. Upload your file")
     uploaded = st.file_uploader(
         "Upload a file (.xlsx, .xls, .pdf, or .docx)",
         type=["xlsx", "xls", "pdf", "docx"],
@@ -168,6 +180,7 @@ def _main() -> None:
             name_counts=name_counts,
             quality_issues=quality_issues,
             on_refresh_master_list=_get_master_list_bundle.clear,
+            steps=steps,
         )
     elif extension == "pdf":
         # PDF still has no spaCy-based name detection - that stays a deliberate
@@ -195,6 +208,7 @@ def _main() -> None:
             quality_issues=quality_issues,
             on_refresh_master_list=_get_master_list_bundle.clear,
             master_list_fingerprint=master_list_fingerprint,
+            steps=steps,
         )
     elif extension == "docx":
         run_docx_flow(
@@ -211,6 +225,7 @@ def _main() -> None:
             name_counts=name_counts,
             quality_issues=quality_issues,
             on_refresh_master_list=_get_master_list_bundle.clear,
+            steps=steps,
         )
     else:
         st.error("Unsupported file type. Please upload an Excel, PDF, or Word file.")

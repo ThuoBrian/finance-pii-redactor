@@ -41,6 +41,7 @@ from finance_redactor.presentation.session import (
     reset_on_new_upload,
     sanitize_base_name,
 )
+from finance_redactor.presentation.steps import show_step
 
 # A typed word that is itself a label, e.g. "[001]". Redacting it would mean
 # redacting this tool's own output on a second pass.
@@ -56,6 +57,7 @@ def run_pdf_flow(
     quality_issues: Sequence[QualityIssue] | None = None,
     on_refresh_master_list: Callable[[], None] | None = None,
     master_list_fingerprint: str = "",
+    steps: Any,
 ) -> None:
     """Render the PDF pseudonymization flow in Streamlit.
 
@@ -81,7 +83,8 @@ def run_pdf_flow(
         ),
     )
 
-    st.subheader("Configuration")
+    show_step(steps, 2)
+    st.subheader("2. Set options")
     with st.expander("Advanced settings", expanded=True):
         style = st.radio(
             "Redaction style",
@@ -172,11 +175,17 @@ def run_pdf_flow(
         # overwrite it after the widget has been instantiated.
 
     if "pdf_buffer" not in st.session_state or st.session_state.pdf_buffer is None:
+        st.caption(
+            "Click the button above to run it. Your results and download will "
+            "appear here."
+        )
         st.stop()
 
     pdf_findings = st.session_state.pdf_findings
     n_entities = len(pdf_findings)
     total_pages = st.session_state.pdf_pages
+    show_step(steps, 3)
+    st.subheader("3. Review the results")
 
     images_requested = st.session_state.get("pdf_redact_images", True)
     if n_entities == 0 and not images_requested:
@@ -250,7 +259,8 @@ def run_pdf_flow(
             findings_dataframe(pdf_findings, "Page"), width="stretch", hide_index=True
         )
 
-    st.subheader("Download")
+    show_step(steps, 4)
+    st.subheader("4. Download")
     render_exclusion_warning(st.session_state.get("pdf_excluded_applied", frozenset()))
     if style_value == RedactionStyle.BLACKOUT.value:
         label = "Download blacked-out PDF"

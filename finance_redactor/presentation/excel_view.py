@@ -32,6 +32,7 @@ from finance_redactor.presentation.session import (
     reset_on_new_upload,
     sanitize_base_name,
 )
+from finance_redactor.presentation.steps import show_step
 
 
 def run_excel_flow(
@@ -43,6 +44,7 @@ def run_excel_flow(
     name_counts: Mapping[str, int],
     quality_issues: Sequence[QualityIssue] | None = None,
     on_refresh_master_list: Callable[[], None] | None = None,
+    steps: Any,
 ) -> None:
     """Render the Excel pseudonymization flow in Streamlit."""
     is_new = reset_on_new_upload(
@@ -66,7 +68,8 @@ def run_excel_flow(
     df = st.session_state.df
     text_cols = excel_gateway.text_columns(df)
 
-    st.subheader("Configuration")
+    show_step(steps, 2)
+    st.subheader("2. Set options")
     selected_cols = st.multiselect(
         "Columns to scan for PII",
         options=list(df.columns),
@@ -122,6 +125,10 @@ def run_excel_flow(
         st.session_state.excel_excluded_applied = frozenset()
 
     if "findings" not in st.session_state:
+        st.caption(
+            "Click the button above to run it. Your results and download will "
+            "appear here."
+        )
         st.stop()
 
     scan_result = st.session_state.findings
@@ -129,9 +136,11 @@ def run_excel_flow(
     crosswalk = st.session_state.crosswalk
     n_cells = scan_result.cell_count
     n_entities = scan_result.entity_count
+    show_step(steps, 3)
+    st.subheader("3. Review the results")
     st.success(f"Found {n_entities} PII instance(s) across {n_cells} cell(s).")
 
-    st.subheader("Comparison")
+    st.markdown("**Comparison**")
     cell_keys = scan_result.cell_keys()
     col_orig, col_redacted = st.columns(2)
     with col_orig:
@@ -177,7 +186,8 @@ def run_excel_flow(
                 hide_index=True,
             )
 
-    st.subheader("Download")
+    show_step(steps, 4)
+    st.subheader("4. Download")
     render_exclusion_warning(
         st.session_state.get("excel_excluded_applied", frozenset())
     )
