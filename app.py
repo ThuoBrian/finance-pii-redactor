@@ -144,11 +144,9 @@ def _main() -> None:
     logo_col.image(str(_LOGO))
     st.title("Finance PII Redactor", text_alignment="center")
     st.caption(
-        "Upload an Excel, PDF, or Word file, choose what to pseudonymize, and "
-        "download a copy with the names replaced. Excel and Word use stable ID "
-        "codes (e.g. STF-10010); PDF uses short labels (e.g. [001]) plus a "
-        "separate mapping file. All processing happens locally — no data "
-        "leaves your laptop."
+        "Upload an Excel, PDF, or Word file. Pick what you want pseudonymized,"
+        "and instantly download a clean copy with names replaced by stable ID codes."
+        "Everything runs locally on your laptop, no data ever leaves your device.", text_alignment="center"
     )
     steps = st.empty()
     show_step(steps, 1)
