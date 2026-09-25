@@ -147,9 +147,7 @@ class PatternDetector:
         # Checksum-validated, so they clear the threshold without context words.
         registry.add_recognizer(CreditCardRecognizer(supported_language=language))
         registry.add_recognizer(IbanRecognizer(supported_language=language))
-        for recognizer in build_financial_recognizers():
-            registry.add_recognizer(recognizer)
-        for recognizer in master_list_recognizers:
+        for recognizer in [*build_financial_recognizers(), *master_list_recognizers]:
             registry.add_recognizer(recognizer)
         self._analyzer = AnalyzerEngine(
             registry=registry,

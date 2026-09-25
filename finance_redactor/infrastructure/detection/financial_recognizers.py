@@ -77,7 +77,7 @@ class LabelledNumberRecognizer(EntityRecognizer):
                 end=match.end("value"),
                 score=_SCORE,
                 analysis_explanation=AnalysisExplanation(
-                    recognizer=self.name,
+                    recognizer=self.__class__.__name__,
                     original_score=_SCORE,
                     pattern_name=entity,
                     pattern=self._pattern.pattern,
