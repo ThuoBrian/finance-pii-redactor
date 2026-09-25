@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from finance_redactor.application.redact_docx import RedactDocxService
+from finance_redactor.config import DEFAULT_SETTINGS
 from finance_redactor.domain.entities import DetectionSource, PiiDetection, Span
 from finance_redactor.domain.pseudonyms import MasterEntry
 
@@ -91,6 +92,7 @@ def _service(detector: _NameDetector | None = None) -> RedactDocxService:
         open_document=_document_factory,
         master_map={},
         auto_prefixes={"PERSON": "PSN"},
+        fixed_masks=DEFAULT_SETTINGS.fixed_masks,
     )
 
 
@@ -153,6 +155,7 @@ def test_custom_words_are_pseudonymized_and_survive_across_blocks() -> None:
         open_document=_document_factory,
         master_map={},
         auto_prefixes={"PERSON": "PSN", "CUSTOM": "CST"},
+        fixed_masks=DEFAULT_SETTINGS.fixed_masks,
     )
 
     result = service.execute(
@@ -204,6 +207,7 @@ def test_custom_words_do_not_override_an_overlapping_master_list_hit() -> None:
             ("PERSON", "jane doe"): MasterEntry(pseudonym="STF-10010", category="Staff")
         },
         auto_prefixes={"PERSON": "PSN", "CUSTOM": "CST"},
+        fixed_masks=DEFAULT_SETTINGS.fixed_masks,
     )
 
     result = service.execute(doc, ["PERSON"], 0.35, custom_words=["Jane Doe"])
@@ -262,3 +266,44 @@ def test_excluding_one_term_leaves_others_replaced_in_word() -> None:
     )
 
     assert [a.original_name for a in result.crosswalk] == ["John"]
+
+
+class _CardDetector:
+    """Fake detector: flags a synthetic test card number as CREDIT_CARD."""
+
+    card = "4111 1111 1111 1111"
+
+    def analyze(
+        self, text: str, entities: list[str], threshold: float
+    ) -> list[PiiDetection]:
+        """Return a CREDIT_CARD hit wherever the test card appears."""
+        idx = text.find(self.card)
+        if idx == -1:
+            return []
+        return [
+            PiiDetection(
+                entity_type="CREDIT_CARD",
+                span=Span(idx, idx + len(self.card)),
+                score=1.0,
+                text=self.card,
+                source=DetectionSource.PATTERN,
+            )
+        ]
+
+
+def test_card_number_is_masked_and_never_reaches_the_crosswalk() -> None:
+    doc = FakeWordDocument([f"Charged to card {_CardDetector.card} today"])
+    service = RedactDocxService(
+        detector=_CardDetector(),
+        open_document=_document_factory,
+        master_map={},
+        auto_prefixes={"PERSON": "PSN"},
+        fixed_masks=DEFAULT_SETTINGS.fixed_masks,
+    )
+
+    result = service.execute(doc, ["CREDIT_CARD"], 0.35)
+
+    assert b"Charged to card [CARD] today" in result.data
+    assert _CardDetector.card.encode() not in result.data
+    assert result.crosswalk == []
+    assert [f.entity_type for f in result.findings] == ["CREDIT_CARD"]

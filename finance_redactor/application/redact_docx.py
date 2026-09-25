@@ -40,6 +40,8 @@ class RedactDocxService:
         auto_prefixes: Mapping[str, str],
         fuzzy_threshold: float = 0.84,
         custom_words_score: float = 1.0,
+        *,
+        fixed_masks: Mapping[str, str],
     ) -> None:
         """Wire the detector, a docx-opening factory, and pseudonym vocabulary.
 
@@ -48,7 +50,9 @@ class RedactDocxService:
         callers (e.g. tests) that don't care about the fuzzy-suggestion feature.
         ``custom_words_score`` should normally be ``Settings.custom_words_score``;
         it's the confidence recorded for an ad-hoc "words to redact" match (see
-        ``execute``'s ``custom_words`` param).
+        ``execute``'s ``custom_words`` param). ``fixed_masks`` is
+        ``Settings.fixed_masks``: bank/payment types get that mask and never
+        reach the pseudonymizer, so the raw number stays out of the crosswalk.
         """
         self._detector = detector
         self._open_document = open_document
@@ -56,6 +60,7 @@ class RedactDocxService:
         self._auto_prefixes = auto_prefixes
         self._fuzzy_threshold = fuzzy_threshold
         self._custom_words_score = custom_words_score
+        self._fixed_masks = fixed_masks
 
     def execute(
         self,
@@ -108,9 +113,12 @@ class RedactDocxService:
 
                 replacements = []
                 for detection in kept:
-                    pseudonym = pseudonymizer.assign(
-                        detection.entity_type, detection.text
-                    ).pseudonym
+                    pseudonym = (
+                        self._fixed_masks.get(detection.entity_type)
+                        or pseudonymizer.assign(
+                            detection.entity_type, detection.text
+                        ).pseudonym
+                    )
                     findings.append(
                         Finding(
                             page=block_index,

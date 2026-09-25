@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from finance_redactor.config import (
@@ -119,3 +120,18 @@ def test_current_settings_reflects_a_persisted_change_without_reimport(tmp_path)
     assert after.names_dir == tmp_path / "newly-configured"
     # DEFAULT_SETTINGS itself is frozen at import time and must not change.
     assert DEFAULT_SETTINGS.names_dir == before.names_dir
+
+
+def test_masked_financial_types_are_detected_but_never_pseudonymized():
+    # A masked type in auto_prefixes would mean it could reach the
+    # pseudonymizer, which writes the raw value into the crosswalk.
+    for entity in DEFAULT_SETTINGS.fixed_masks:
+        assert entity in DEFAULT_SETTINGS.supported_entities
+        assert entity not in DEFAULT_SETTINGS.auto_prefixes
+
+
+def test_no_mask_looks_like_a_pdf_label():
+    # [001]-style labels are decoded via the mapping file; a mask must never be
+    # mistaken for one.
+    for mask in DEFAULT_SETTINGS.fixed_masks.values():
+        assert not re.fullmatch(r"\[\d+\]", mask)

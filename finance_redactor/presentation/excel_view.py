@@ -74,7 +74,10 @@ def run_excel_flow(
         "Columns to scan for PII",
         options=list(df.columns),
         default=text_cols,
-        help="Numeric and date columns are excluded by default.",
+        help=(
+            "Numeric and date columns are excluded by default. Add a numeric "
+            "column here if it holds account or M-Pesa numbers."
+        ),
     )
 
     with st.expander("Advanced settings"):
@@ -194,12 +197,13 @@ def run_excel_flow(
     if n_entities == 0:
         st.info("No PII was detected. The file is already clean.")
     else:
-        st.warning(
-            "This workbook includes a **Crosswalk** sheet mapping names to "
-            "pseudonyms. The downloaded file is therefore **Confidential** as "
-            "a whole under IPA's data classification policy - not just "
-            "Internal - so store and share it accordingly."
-        )
+        if crosswalk:
+            st.warning(
+                "This workbook includes a **Crosswalk** sheet mapping names to "
+                "pseudonyms. The downloaded file is therefore **Confidential** as "
+                "a whole under IPA's data classification policy - not just "
+                "Internal - so store and share it accordingly."
+            )
         excel_bytes = excel_gateway.write(
             redacted_df, cell_keys, crosswalk_dataframe(crosswalk)
         )
@@ -214,5 +218,7 @@ def run_excel_flow(
         st.caption(
             "Yellow-highlighted cells indicate where a name was replaced with "
             'its pseudonym; the workbook\'s second sheet, "Crosswalk", lists '
-            "the full name-to-pseudonym mapping."
+            "the full name-to-pseudonym mapping. Bank and payment details "
+            "show as a fixed mask such as [ACCOUNT] or [CARD], with nothing "
+            "to decode."
         )

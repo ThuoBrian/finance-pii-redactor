@@ -120,9 +120,11 @@ _DEFAULT_CATEGORIES: Mapping[str, tuple[str, str]] = MappingProxyType(
 #
 # Only add entity types here that identify a person/organization, or - like
 # "CUSTOM" - a deliberate ad-hoc redaction target the user typed into the
-# PDF/Word flows' "words to redact" box (see domain/custom_words.py). Do NOT
-# add non-name entity types (e.g. Presidio's "DATE_TIME") to this map or to
-# `supported_entities` below: dates/times aren't the PII this tool exists to
+# PDF/Word flows' "words to redact" box (see domain/custom_words.py). Bank and
+# payment details never belong here: they are masked via `_DEFAULT_FIXED_MASKS`
+# below and must never get a pseudonym, because a pseudonym puts the raw value
+# into the crosswalk. Do NOT add other non-name entity types (e.g. Presidio's
+# "DATE_TIME") to this map or to `supported_entities` below: dates/times aren't the PII this tool exists to
 # protect, and pseudonymizing them (e.g. turning "Jan-26" into a fake ID) is
 # noise, not redaction. Adding one carelessly is also a silent risk - any
 # entity type missing from this map falls back to `entity_type[:3].upper()` in
@@ -137,6 +139,21 @@ _DEFAULT_AUTO_PREFIXES: Mapping[str, str] = MappingProxyType(
         "EMAIL_ADDRESS": "EML",
         "URL": "URL",
         "CUSTOM": "CST",
+    }
+)
+
+# Bank and payment details are replaced with a fixed mask, not a pseudonym:
+# there is nothing to decode, and they never enter the crosswalk or the PDF
+# mapping file. Kept short because the PDF gateway draws the replacement
+# inside the original text's box. Detection lives in Presidio's card/IBAN
+# recognizers and in infrastructure/detection/financial_recognizers.py.
+_DEFAULT_FIXED_MASKS: Mapping[str, str] = MappingProxyType(
+    {
+        "CREDIT_CARD": "[CARD]",
+        "IBAN_CODE": "[IBAN]",
+        "KE_BANK_ACCOUNT": "[ACCOUNT]",
+        "MPESA_NUMBER": "[MPESA]",
+        "SWIFT_CODE": "[SWIFT]",
     }
 )
 
@@ -160,18 +177,20 @@ class Settings:
 
     language: str = "en"
     spacy_model: str = "en_core_web_lg"
-    # Name/organization/email/website entity types only - see the note on
-    # `_DEFAULT_AUTO_PREFIXES` above for why non-name types (e.g. DATE_TIME)
-    # must never be added here.
+    # Names, organizations, emails and websites, plus the masked bank/payment
+    # types in `fixed_masks` - see the note on `_DEFAULT_AUTO_PREFIXES` above
+    # for why other non-name types (e.g. DATE_TIME) must never be added here.
     supported_entities: tuple[str, ...] = (
         "PERSON",
         "ORGANIZATION",
         "EMAIL_ADDRESS",
         "URL",
+        *_DEFAULT_FIXED_MASKS,
     )
     categories: Mapping[str, tuple[str, str]] = _DEFAULT_CATEGORIES
     category_sheets: Mapping[str, str] = _DEFAULT_CATEGORY_SHEETS
     auto_prefixes: Mapping[str, str] = _DEFAULT_AUTO_PREFIXES
+    fixed_masks: Mapping[str, str] = _DEFAULT_FIXED_MASKS
     custom_match_score: float = 0.9
     default_threshold: float = 0.35
     fuzzy_match_threshold: float = 0.84

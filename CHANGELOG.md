@@ -8,6 +8,20 @@ the `version` field in `pyproject.toml`.
 
 ### Added
 
+- **Bank and payment details are detected and masked.** Card numbers and
+  IBANs (Presidio's checksum-validated recognizers), plus Kenyan bank account
+  numbers, M-Pesa till/paybill numbers and SWIFT/BIC codes
+  (`infrastructure/detection/financial_recognizers.py`, matched only when
+  their label is right in front of them). They are replaced with a fixed mask
+  from `Settings.fixed_masks` (`[CARD]`, `[IBAN]`, `[ACCOUNT]`, `[MPESA]`,
+  `[SWIFT]`) and never enter the crosswalk or the PDF mapping, so no PDF
+  label number is used up. Works in all three formats, including the
+  spaCy-free PDF detector. Untick PERSON/ORGANIZATION to scan for bank
+  details alone in Excel and Word.
+- The three redaction services take a required `fixed_masks` argument.
+  Required on purpose: a masked type falling through to the pseudonymizer
+  would write the raw number into the downloaded crosswalk.
+
 - **A way to reject a false positive.** Every detection now appears in a
   **Check what was detected** table with a `Redact?` tick box; unticking a term
   rebuilds the output without it, for that document only. Nothing persists.
@@ -74,6 +88,14 @@ the `version` field in `pyproject.toml`.
   when a typed word is itself label-shaped.
 
 ### Fixed
+
+- Clearing the entity-type list in Excel or Word made Presidio run *every*
+  recognizer it has (dates, phone numbers, US bank numbers), because it reads
+  an empty list as "all". It now detects nothing.
+- Excel: a whole-number float cell (how pandas reads an integer column with a
+  blank) is scanned as `1234567890`, not `1234567890.0`, and blank cells are no
+  longer scanned as the text `nan`. Writing a replacement into a numeric
+  column no longer raises on pandas 3.
 
 - **PDFs now redact names that are on the master list, without them being
   typed in.** Previously a PDF full of curated names came back with only its
