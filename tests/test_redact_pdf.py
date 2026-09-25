@@ -13,6 +13,7 @@ from __future__ import annotations
 import pytest
 
 from finance_redactor.application.redact_pdf import RedactionStyle, RedactPdfService
+from finance_redactor.config import DEFAULT_SETTINGS
 from finance_redactor.domain.entities import DetectionSource, PiiDetection, Span
 from finance_redactor.domain.pseudonyms import MasterEntry, normalize
 
@@ -130,6 +131,7 @@ def _service(
         master_map=master_map or {},
         auto_prefixes={"CUSTOM": "CST", "EMAIL_ADDRESS": "EML", "URL": "URL"},
         pattern_detector=pattern_detector or FakePatternDetector(),
+        fixed_masks=DEFAULT_SETTINGS.fixed_masks,
     )
 
 
@@ -445,3 +447,31 @@ def test_no_exclusions_redacts_everything_as_before() -> None:
     result = _service().execute(doc, ["salaries", "John"])
 
     assert result.entity_count == 2
+
+
+def test_bank_detail_is_masked_without_claiming_a_label() -> None:
+    """A mask takes no ordinal, so name labels stay [001], [002]."""
+    text = "John paid A/C 0123456789 then Mary"
+    account = PiiDetection(
+        entity_type="KE_BANK_ACCOUNT",
+        span=Span(text.index("0123"), text.index("0123") + 10),
+        score=0.85,
+        text="0123456789",
+        source=DetectionSource.PATTERN,
+    )
+    doc = FakePdfDocument([text])
+
+    result = _service(FakePatternDetector([account])).execute(doc, ["John", "Mary"])
+
+    assert ("0123456789", "[ACCOUNT]") in doc.redactions_by_page[0]
+    assert [(a.original_name, a.label) for a in result.crosswalk] == [
+        ("John", "[001]"),
+        ("Mary", "[002]"),
+    ]
+
+
+def test_financial_types_are_requested_from_the_detector() -> None:
+    detector = FakePatternDetector()
+    _service(detector).execute(FakePdfDocument(["anything"]), [])
+
+    assert set(DEFAULT_SETTINGS.fixed_masks) <= set(detector.requested_entities)

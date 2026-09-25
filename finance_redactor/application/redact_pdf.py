@@ -108,6 +108,8 @@ class RedactPdfService:
         pattern_detector: PiiDetector,
         fuzzy_threshold: float = 0.84,
         custom_words_score: float = 1.0,
+        *,
+        fixed_masks: Mapping[str, str],
     ) -> None:
         """Wire a PDF-opening factory, the pseudonym vocabulary, and a detector.
 
@@ -119,7 +121,10 @@ class RedactPdfService:
         callers (e.g. tests) that don't care about the fuzzy-suggestion feature.
         ``custom_words_score`` should normally be ``Settings.custom_words_score``;
         it's the confidence recorded for every custom-word match (see
-        ``execute``'s ``custom_words`` param).
+        ``execute``'s ``custom_words`` param). ``fixed_masks`` is
+        ``Settings.fixed_masks``: those bank/payment types are also requested
+        from the detector, and are written as their mask with no label and no
+        mapping row.
         """
         self._open_document = open_document
         self._master_map = master_map
@@ -127,6 +132,7 @@ class RedactPdfService:
         self._pattern_detector = pattern_detector
         self._fuzzy_threshold = fuzzy_threshold
         self._custom_words_score = custom_words_score
+        self._fixed_masks = fixed_masks
 
     def execute(
         self,
@@ -171,7 +177,9 @@ class RedactPdfService:
                 detections = (
                     [
                         *self._pattern_detector.analyze(
-                            normalized.text, _PATTERN_ENTITIES, _PATTERN_THRESHOLD
+                            normalized.text,
+                            [*_PATTERN_ENTITIES, *self._fixed_masks],
+                            _PATTERN_THRESHOLD,
                         ),
                         *find_custom_words(
                             normalized.text, custom_words, self._custom_words_score
@@ -205,9 +213,14 @@ class RedactPdfService:
                     # pseudonym: the pseudonym embeds the master-list Internal
                     # ID, and keeping that out of the output is the whole point
                     # of the two-hop scheme (see domain/pseudonyms.py).
-                    label = pseudonymizer.assign(
-                        detection.entity_type, detection.text
-                    ).label
+                    # A bank/payment mask skips ``assign`` too, for the same
+                    # two reasons: no ordinal, and no mapping row.
+                    label = (
+                        self._fixed_masks.get(detection.entity_type)
+                        or pseudonymizer.assign(
+                            detection.entity_type, detection.text
+                        ).label
+                    )
                     findings.append(
                         Finding(
                             page=page_index,

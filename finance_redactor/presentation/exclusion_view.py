@@ -56,7 +56,8 @@ def render_deselect_editor(
 
     with st.expander(f"Check what was detected ({n_terms} distinct term(s))"):
         st.caption(
-            "Untick anything that is not really a name. It will be left as-is "
+            "Untick anything that is not really a name or a bank/payment detail. "
+            "It will be left as-is "
             "in the file you download, and the file is rebuilt as soon as you "
             "change a tick. **Source** tells you why it matched, and what the "
             "lasting fix is: *master list* means a row in the workbook matches "

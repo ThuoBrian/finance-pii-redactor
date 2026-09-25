@@ -47,12 +47,20 @@ from collections.abc import Iterable, Iterator
 
 from presidio_analyzer import AnalyzerEngine, RecognizerRegistry, RecognizerResult
 from presidio_analyzer.nlp_engine import NlpArtifacts, NlpEngine
-from presidio_analyzer.predefined_recognizers import EmailRecognizer, UrlRecognizer
+from presidio_analyzer.predefined_recognizers import (
+    CreditCardRecognizer,
+    EmailRecognizer,
+    IbanRecognizer,
+    UrlRecognizer,
+)
 
 from finance_redactor.domain.entities import DetectionSource, PiiDetection, Span
 from finance_redactor.domain.rules import dedupe_overlapping
 from finance_redactor.infrastructure.detection.custom_recognizer import (
     CustomNameRecognizer,
+)
+from finance_redactor.infrastructure.detection.financial_recognizers import (
+    build_financial_recognizers,
 )
 
 # Entity types only the master-list recognizer can supply here, so a hit on one
@@ -119,7 +127,7 @@ class _NullNlpEngine(NlpEngine):
 
 
 class PatternDetector:
-    """Detects emails, URLs, and curated master-list names, with no NLP model."""
+    """Detects emails, URLs, bank/payment details and curated names, with no NLP model."""
 
     def __init__(
         self,
@@ -136,6 +144,11 @@ class PatternDetector:
         registry = RecognizerRegistry()
         registry.add_recognizer(EmailRecognizer(supported_language=language))
         registry.add_recognizer(UrlRecognizer(supported_language=language))
+        # Checksum-validated, so they clear the threshold without context words.
+        registry.add_recognizer(CreditCardRecognizer(supported_language=language))
+        registry.add_recognizer(IbanRecognizer(supported_language=language))
+        for recognizer in build_financial_recognizers():
+            registry.add_recognizer(recognizer)
         for recognizer in master_list_recognizers:
             registry.add_recognizer(recognizer)
         self._analyzer = AnalyzerEngine(

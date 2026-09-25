@@ -15,10 +15,13 @@ from presidio_analyzer import AnalyzerEngine, RecognizerResult
 from presidio_analyzer.nlp_engine import NlpEngine, NlpEngineProvider
 
 from finance_redactor.config import Settings
-from finance_redactor.domain.entities import PiiDetection, Span
+from finance_redactor.domain.entities import DetectionSource, PiiDetection, Span
 from finance_redactor.domain.rules import classify_source, dedupe_overlapping
 from finance_redactor.infrastructure.detection.custom_recognizer import (
     CustomNameRecognizer,
+)
+from finance_redactor.infrastructure.detection.financial_recognizers import (
+    build_financial_recognizers,
 )
 from finance_redactor.infrastructure.detection.recasing import recase_uppercase
 
@@ -45,7 +48,9 @@ class PresidioEngine:
             nlp_engine=nlp_engine,
             supported_languages=[settings.language],
         )
-        for recognizer in recognizers:
+        # Card numbers and IBANs are already in Presidio's default registry;
+        # only the labelled Kenyan formats need adding.
+        for recognizer in [*recognizers, *build_financial_recognizers()]:
             self._analyzer.registry.add_recognizer(recognizer)
 
     @staticmethod
@@ -76,7 +81,10 @@ class PresidioEngine:
         preserves length), so they are unioned and de-duplicated; the higher-score
         detection wins exact-span ties.
         """
-        if not isinstance(text, str) or not text.strip():
+        # Presidio reads an empty list as "every entity it knows" (dates,
+        # phone numbers, US bank numbers...), which is never what a user who
+        # unticked everything meant.
+        if not entities or not isinstance(text, str) or not text.strip():
             return []
         results = list(
             self._analyzer.analyze(
@@ -117,5 +125,12 @@ class PresidioEngine:
             span=Span(result.start, result.end),
             score=result.score,
             text=text[result.start : result.end],
-            source=classify_source(result.score, self._settings.custom_match_score),
+            # Masked types are pattern matches by definition. Their validated
+            # score (1.0 for a Luhn-valid card) would otherwise classify them as
+            # a spaCy guess, or as a master-list hit.
+            source=(
+                DetectionSource.PATTERN
+                if result.entity_type in self._settings.fixed_masks
+                else classify_source(result.score, self._settings.custom_match_score)
+            ),
         )

@@ -176,5 +176,7 @@ def run_docx_flow(
     )
     st.caption(
         "Detected names and organizations are replaced with their pseudonyms "
-        "(e.g. STF-10010) directly in the document text."
+        "(e.g. STF-10010) directly in the document text. Bank and payment "
+        "details show as a fixed mask such as [ACCOUNT] or [CARD], with "
+        "nothing to decode."
     )

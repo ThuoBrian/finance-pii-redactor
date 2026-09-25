@@ -146,7 +146,8 @@ def _main() -> None:
     st.caption(
         "Upload an Excel, PDF, or Word file. Pick what you want pseudonymized,"
         "and instantly download a clean copy with names replaced by stable ID codes."
-        "Everything runs locally on your laptop, no data ever leaves your device.", text_alignment="center"
+        "Everything runs locally on your laptop, no data ever leaves your device.",
+        text_alignment="center",
     )
     steps = st.empty()
     show_step(steps, 1)
@@ -172,6 +173,7 @@ def _main() -> None:
                 master_map,
                 settings.auto_prefixes,
                 settings.fuzzy_match_threshold,
+                fixed_masks=settings.fixed_masks,
             ),
             excel_gateway=OpenpyxlExcelGateway(),
             settings=settings,
@@ -200,6 +202,7 @@ def _main() -> None:
                 ),
                 settings.fuzzy_match_threshold,
                 settings.custom_words_score,
+                fixed_masks=settings.fixed_masks,
             ),
             settings=settings,
             name_counts=name_counts,
@@ -218,6 +221,7 @@ def _main() -> None:
                 settings.auto_prefixes,
                 settings.fuzzy_match_threshold,
                 settings.custom_words_score,
+                fixed_masks=settings.fixed_masks,
             ),
             settings=settings,
             name_counts=name_counts,

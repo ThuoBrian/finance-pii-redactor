@@ -138,3 +138,22 @@ def test_model_score_is_classified_as_model(engine: PresidioEngine) -> None:
 
     assert len(detections) == 1
     assert detections[0].source == DetectionSource.MODEL
+
+
+def test_empty_entity_list_detects_nothing(engine: PresidioEngine) -> None:
+    """Presidio reads [] as "every entity"; the adapter must not pass it on."""
+    assert engine.analyze("Mary Smith, 4111 1111 1111 1111", [], 0.35) == []
+    engine._analyzer.analyze.assert_not_called()
+
+
+def test_masked_type_is_a_pattern_match_whatever_its_score(
+    engine: PresidioEngine,
+) -> None:
+    """A Luhn-valid card scores 1.0, which would otherwise read as a model guess."""
+    engine._analyzer.analyze.return_value = [
+        _result(entity_type="CREDIT_CARD", start=0, end=19, score=1.0)
+    ]
+
+    detections = engine.analyze("4111 1111 1111 1111", ["CREDIT_CARD"], 0.35)
+
+    assert [d.source for d in detections] == [DetectionSource.PATTERN]

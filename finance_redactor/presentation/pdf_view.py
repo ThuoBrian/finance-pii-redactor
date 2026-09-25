@@ -274,8 +274,16 @@ def run_pdf_flow(
         file_name = f"{base_name}_pseudonymized.pdf"
         caption = (
             "Matched words/phrases are replaced with a short label (e.g. "
-            "[001]) directly in the PDF text layer. The label means nothing "
-            "on its own - keep the label mapping above to decode it."
+            "[001]) directly in the PDF text layer."
+        )
+        if st.session_state.pdf_crosswalk:
+            caption += (
+                " The label means nothing on its own - keep the label mapping "
+                "above to decode it."
+            )
+        caption += (
+            " Bank and payment details show as a fixed mask such as [ACCOUNT] "
+            "or [CARD], with nothing to decode."
         )
     st.download_button(
         label=label,

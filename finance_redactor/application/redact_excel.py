@@ -2,7 +2,8 @@
 
 Orchestrates: scan selected columns with a :class:`PiiDetector`, then rebuild a
 pseudonymized DataFrame by replacing each detected name with its stable
-pseudonym (curated from the master list, or a flagged auto-id). Pure
+pseudonym (curated from the master list, or a flagged auto-id). Bank and
+payment details get a fixed mask instead and stay out of the crosswalk. Pure
 orchestration - no pandas I/O (that lives in the Excel gateway) and no Streamlit.
 """
 
@@ -33,8 +34,15 @@ class RedactExcelService:
         master_map: Mapping[tuple[str, str], MasterEntry],
         auto_prefixes: Mapping[str, str],
         fuzzy_threshold: float = 0.84,
+        *,
+        fixed_masks: Mapping[str, str],
     ) -> None:
         """Wire the detector and the master map / auto-id prefixes.
+
+        ``fixed_masks`` (``Settings.fixed_masks``) maps bank/payment entity
+        types to their mask. Required, not defaulted: a masked type that fell
+        through to the pseudonymizer would write the raw number into the
+        crosswalk.
 
         ``fuzzy_threshold`` should normally be ``Settings.fuzzy_match_threshold``,
         passed explicitly by the composition root; the default here only covers
@@ -44,6 +52,7 @@ class RedactExcelService:
         self._master_map = master_map
         self._auto_prefixes = auto_prefixes
         self._fuzzy_threshold = fuzzy_threshold
+        self._fixed_masks = fixed_masks
 
     def scan(
         self,
@@ -69,7 +78,7 @@ class RedactExcelService:
             if col not in df.columns:
                 continue
             for row_idx, value in enumerate(df[col]):
-                cells.append((row_idx, col, str(value) if value is not None else ""))
+                cells.append((row_idx, col, _cell_text(value)))
 
         unique_texts = list(dict.fromkeys(text for _, _, text in cells))
         total = len(unique_texts)
@@ -113,6 +122,11 @@ class RedactExcelService:
             self._master_map, self._auto_prefixes, fuzzy_threshold=self._fuzzy_threshold
         )
         redacted = df.copy()
+        # A mask is a string, and pandas refuses to write one into an int or
+        # float column (an account-number column read as numbers).
+        for col in {cell.column for cell in scan_result.findings} & set(columns):
+            if redacted[col].dtype != object:
+                redacted[col] = redacted[col].astype(object)
         for cell in scan_result.findings:
             if cell.column not in columns:
                 continue
@@ -122,8 +136,25 @@ class RedactExcelService:
             if not detections:
                 continue
             redacted.at[cell.row, cell.column] = apply_replacements(
-                str(df.at[cell.row, cell.column]),
+                _cell_text(df.at[cell.row, cell.column]),
                 detections,
-                lambda d: pseudonymizer.assign(d.entity_type, d.text).pseudonym,
+                lambda d: (
+                    self._fixed_masks.get(d.entity_type)
+                    or pseudonymizer.assign(d.entity_type, d.text).pseudonym
+                ),
             )
         return redacted, pseudonymizer.crosswalk()
+
+
+def _cell_text(value: object) -> str:
+    """Text of a cell as detection sees it; ``scan`` and ``redact`` must agree.
+
+    Empty cells become "" rather than "nan", and a whole-number float (how
+    pandas reads an integer column that has a blank cell) drops its ".0", so
+    an account number isn't masked as "[ACCOUNT].0".
+    """
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)

@@ -9,6 +9,7 @@ from __future__ import annotations
 import pandas as pd
 
 from finance_redactor.application.redact_excel import RedactExcelService
+from finance_redactor.config import DEFAULT_SETTINGS
 from finance_redactor.domain.entities import DetectionSource, PiiDetection, Span
 
 
@@ -39,7 +40,12 @@ class CountingDetector:
 
 
 def _service(detector: CountingDetector) -> RedactExcelService:
-    return RedactExcelService(detector, master_map={}, auto_prefixes={"PERSON": "PSN"})
+    return RedactExcelService(
+        detector,
+        master_map={},
+        auto_prefixes={"PERSON": "PSN"},
+        fixed_masks=DEFAULT_SETTINGS.fixed_masks,
+    )
 
 
 def test_scan_analyzes_each_unique_value_once():
@@ -130,3 +136,57 @@ def test_reapplying_with_a_different_exclusion_never_rescans():
     service.redact(df, scan, ["notes"], exclude=frozenset({"john"}))
 
     assert detector.calls == calls_after_scan
+
+
+class _AccountDetector:
+    """Fake detector: flags any all-digit cell as a Kenyan bank account."""
+
+    def analyze(
+        self, text: str, entities: list[str], threshold: float
+    ) -> list[PiiDetection]:
+        """Return one KE_BANK_ACCOUNT hit spanning an all-digit ``text``."""
+        if not text.isdigit():
+            return []
+        return [
+            PiiDetection(
+                entity_type="KE_BANK_ACCOUNT",
+                span=Span(0, len(text)),
+                score=0.85,
+                text=text,
+                source=DetectionSource.PATTERN,
+            )
+        ]
+
+
+def test_bank_detail_is_masked_and_kept_out_of_the_crosswalk() -> None:
+    df = pd.DataFrame({"Account": ["0123456789"]})
+    service = _service(_AccountDetector())
+    scan = service.scan(df, ["Account"], ["KE_BANK_ACCOUNT"], 0.35)
+
+    redacted, crosswalk = service.redact(df, scan, ["Account"])
+
+    assert redacted.at[0, "Account"] == "[ACCOUNT]"
+    assert crosswalk == []
+
+
+def test_mask_can_be_written_into_an_integer_column() -> None:
+    # pandas refuses a string in an int64 column; redact must widen it first.
+    df = pd.DataFrame({"Account": [123456789012, 987654321098]})
+    service = _service(_AccountDetector())
+    scan = service.scan(df, ["Account"], ["KE_BANK_ACCOUNT"], 0.35)
+
+    redacted, _ = service.redact(df, scan, ["Account"])
+
+    assert list(redacted["Account"]) == ["[ACCOUNT]", "[ACCOUNT]"]
+
+
+def test_float_column_with_a_blank_is_scanned_without_a_trailing_dot_zero() -> None:
+    # A blank cell makes pandas read the whole column as float: 1234567890.0.
+    df = pd.DataFrame({"Account": [1234567890, None]})
+    service = _service(_AccountDetector())
+    scan = service.scan(df, ["Account"], ["KE_BANK_ACCOUNT"], 0.35)
+
+    redacted, _ = service.redact(df, scan, ["Account"])
+
+    assert redacted.at[0, "Account"] == "[ACCOUNT]"
+    assert scan.cell_count == 1  # the blank is not scanned as "nan"

@@ -81,6 +81,16 @@ scanned financial PDFs, so it's switched off there. For a name that isn't on
 the master list yet, either add it to the list or type it into the box for
 that one run.
 
+**Bank and payment details, in all three formats:** card numbers, IBANs,
+Kenyan bank account numbers, M-Pesa till/paybill numbers, and SWIFT/BIC
+codes. They're replaced with a fixed mask such as `[ACCOUNT]` or `[CARD]`,
+with nothing to decode and no entry in the crosswalk or mapping file. Card
+numbers and IBANs are checked against their checksum. The other three are
+only caught when their label is right in front of them ("A/C No:",
+"Paybill", "SWIFT"). A bare number could be an invoice number or a staff ID,
+so it's left alone, and so is a bare number in an Excel column headed
+"Account No". Type it into the words box, or check the column yourself.
+
 ## Installing it
 
 You only do this once. Copy the line below, paste it into a terminal
