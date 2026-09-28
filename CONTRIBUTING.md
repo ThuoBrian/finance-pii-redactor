@@ -15,19 +15,28 @@ uv sync --python 3.12
 ```
 
 This installs runtime and dev dependencies (`ruff`, `mypy`, `pytest`,
-`codespell`, plus type stubs) from `uv.lock`, including the pinned
-`en_core_web_lg` spaCy model.
+`codespell`, [`just`](https://just.systems/), plus type stubs) from
+`uv.lock`, including the pinned `en_core_web_lg` spaCy model.
+
+Common commands live in the `justfile`. Run `uv run just` to list them.
 
 Run the app locally with:
 
 ```bash
-uv run streamlit run app.py
+uv run just run
 ```
 
 ## Before opening a PR
 
 Run the same checks CI runs, in the same order it runs them
 (`.github/workflows/ci.yml`):
+
+```bash
+uv run just check
+```
+
+`uv run just fmt` fixes formatting in place. If you'd rather not use
+`just`, these are the underlying commands:
 
 ```bash
 uv run ruff check app.py finance_redactor/ tests/ scripts/
@@ -46,7 +55,7 @@ If you changed prose in `README.md`, `docs/`, or `data/README.md`, also run
 [Vale](https://vale.sh/) (config in `.vale.ini`):
 
 ```bash
-vale README.md docs/ data/README.md
+uv run just docs
 ```
 
 ## Pull requests
