@@ -14,6 +14,8 @@ setup:
     uv sync --python 3.12
 
 # Start the app on localhost
+# Ctrl+C makes Streamlit exit non-zero; don't report that as a recipe failure.
+[no-exit-message]
 run:
     uv run streamlit run app.py --server.address=127.0.0.1
 
