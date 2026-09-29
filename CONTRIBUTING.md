@@ -89,8 +89,8 @@ comment.** Use synthetic test data (see
   (`tests/domain/`, `tests/application/`, …). Cross-cutting tests
   (`test_config.py`, the PII guard) and `conftest.py` sit at the top.
 
-If you need more architectural detail than this, ask the maintainer for
-`CLAUDE.md` (kept local, not tracked in this repo).
+For the layer rules, composition root and caching, see
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Maintainer
 

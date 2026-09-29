@@ -201,10 +201,9 @@ working through Excel, PDF, and Word along with the known rough edges.
 This README covers day-to-day use. **[CONTRIBUTING.md](CONTRIBUTING.md)**
 covers local setup and the checks to run before opening a PR,
 **[docs/troubleshooting.md](docs/troubleshooting.md)** covers known issues,
-**[data/README.md](data/README.md)** covers the master-list file format, and
-**[CHANGELOG.md](CHANGELOG.md)** tracks notable changes. Architecture and
-internal file structure live in a local, non-public `CLAUDE.md` kept out of
-this repository. Contact the maintainer if you need it for development.
+**[data/README.md](data/README.md)** covers the master-list file format,
+**[CHANGELOG.md](CHANGELOG.md)** tracks notable changes, and
+**[ARCHITECTURE.md](ARCHITECTURE.md)** explains how the code is laid out.
 
 ## Maintainer
 
