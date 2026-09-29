@@ -18,10 +18,10 @@ as a security issue, not just a bug.
 Describe the problem with made-up data, or send a file that reproduces it with
 invented content.
 
-Email the maintainer at bthuo@poverty-action.org. If you work at
+Email the maintainer at `bthuo@poverty-action.org`. If you work at
 IPA and the report involves real data being exposed, also contact
-support@poverty-action.org.
+`support@poverty-action.org`.
 
 ## Supported versions
 
-Only the latest commit on `main` is supported. Fixes are not backported.
+Only the latest commit on `main` is supported. Older versions don't get fixes.

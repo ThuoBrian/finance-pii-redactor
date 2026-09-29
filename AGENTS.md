@@ -31,7 +31,7 @@ Run `uv run just check` before calling a change done.
 - **Never read or commit anything under `data/`** other than
   `data/README.md`, and never commit `.xlsx`, `.pdf`, `.docx` or
   `*_crosswalk.csv` files. They are gitignored for a reason.
-- **Keep the layers.** `domain/` imports only the stdlib, `application/`
+- **Keep the layers.** `domain/` imports only the standard library, `application/`
   imports only `domain/`, and only `app.py` wires in `infrastructure/`.
   `tests/test_layers.py` enforces this. Read
   [ARCHITECTURE.md](ARCHITECTURE.md) before moving code between layers.
