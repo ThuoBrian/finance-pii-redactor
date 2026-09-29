@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="image/data-privacy-ai-dark-nobg.svg"
+  <img src="assets/data-privacy-ai-dark-nobg.svg"
        alt="A shield enclosing a neural network, over rows of partly redacted data"
        width="640">
 </p>
@@ -127,7 +127,7 @@ A few things that surprise people the first time:
 as it is.
 
 If your team shares one master list from a Box folder, there's a one-time
-setup for that in **[docs/BOX_SETUP.md](docs/BOX_SETUP.md)**. Installing or
+setup for that in **[docs/box-setup.md](docs/box-setup.md)**. Installing or
 updating never touches that shared folder, so re-running the command above
 is always safe.
 
@@ -185,14 +185,14 @@ first.
 
 ## If something goes wrong
 
-**[docs/GOTCHA.md](docs/GOTCHA.md)** lists the problems people run into
+**[docs/troubleshooting.md](docs/troubleshooting.md)** lists the problems people run into
 most and how to fix them. If it isn't covered there, email the maintainer
 below.
 
 ## Testing with users
 
 Running a round of testing before rollout?
-**[docs/TESTING.md](docs/TESTING.md)** walks testers through it: installing,
+**[docs/user-testing.md](docs/user-testing.md)** walks testers through it: installing,
 building a small made-up master list to practise on (never real names), and
 working through Excel, PDF, and Word along with the known rough edges.
 
@@ -200,11 +200,10 @@ working through Excel, PDF, and Word along with the known rough edges.
 
 This README covers day-to-day use. **[CONTRIBUTING.md](CONTRIBUTING.md)**
 covers local setup and the checks to run before opening a PR,
-**[docs/GOTCHA.md](docs/GOTCHA.md)** covers known issues,
-**[data/README.md](data/README.md)** covers the master-list file format, and
-**[CHANGELOG.md](CHANGELOG.md)** tracks notable changes. Architecture and
-internal file structure live in a local, non-public `CLAUDE.md` kept out of
-this repository. Contact the maintainer if you need it for development.
+**[docs/troubleshooting.md](docs/troubleshooting.md)** covers known issues,
+**[data/README.md](data/README.md)** covers the master-list file format,
+**[CHANGELOG.md](CHANGELOG.md)** tracks notable changes, and
+**[ARCHITECTURE.md](ARCHITECTURE.md)** explains how the code is laid out.
 
 ## Maintainer
 

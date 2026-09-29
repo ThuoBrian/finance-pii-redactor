@@ -69,6 +69,18 @@ the `version` field in `pyproject.toml`.
 - **Excel and Word are unchanged**: still `STF-10010`-style pseudonyms, still a
   names-bearing crosswalk, same classification as before. One entity therefore
   looks different in a PDF than in an Excel export of the same data.
+- **Repository layout.** Docs renamed to lowercase-dash names:
+  `docs/GOTCHA.md` is now `docs/troubleshooting.md`, `docs/TESTING.md` is now
+  `docs/user-testing.md`, and `docs/BOX_SETUP.md` is now `docs/box-setup.md`.
+  `image/` is now `assets/`. `tests/` is split into folders that mirror the
+  package layers. `pdf_text_normalizer` moved from `infrastructure/detection/`
+  to `domain/`, so the application layer no longer imports infrastructure.
+- Added public `ARCHITECTURE.md`, `AGENTS.md` and `.github/SECURITY.md`.
+  Public docs no longer point at the untracked `CLAUDE.md`.
+- `tests/test_layers.py` fails if a module imports across layers the wrong
+  way, or if `domain/` imports anything outside the standard library.
+- CI now runs `uv run just check` instead of repeating each command, so the
+  justfile is the one list of checks.
 
 ### Added
 

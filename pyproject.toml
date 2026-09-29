@@ -88,7 +88,7 @@ addopts = "--cov=finance_redactor --cov-report=term-missing --cov-fail-under=80"
 [tool.coverage.run]
 # app.py (the Streamlit composition root) and finance_redactor/presentation/
 # (Streamlit widgets/session state) are deliberately not unit-tested - see
-# CLAUDE.md's "Tooling configuration" section - so they're excluded from the
+# ARCHITECTURE.md's "Tests" section - so they're excluded from the
 # measured/enforced total below rather than dragging it down with a number
 # nothing can move (there's no unit-testable behavior to add tests for
 # there; that would need Streamlit's own testing harness, a separate effort).

@@ -2,7 +2,7 @@
 
 This covers the local dev loop for `finance_redactor`. For how to *use* the
 app, see [README.md](README.md); for known issues, see
-[docs/GOTCHA.md](docs/GOTCHA.md).
+[docs/troubleshooting.md](docs/troubleshooting.md).
 
 ## Setup
 
@@ -28,8 +28,8 @@ uv run just run
 
 ## Before opening a PR
 
-Run the same checks CI runs, in the same order it runs them
-(`.github/workflows/ci.yml`):
+CI runs exactly this command (`.github/workflows/ci.yml` calls the
+justfile's `check` recipe), so run it locally first:
 
 ```bash
 uv run just check
@@ -70,7 +70,7 @@ match the existing style in `git log`.
 **Never include real names, real master-list content, or any other
 Confidential/Highly Confidential data in a commit, PR description, or
 comment.** Use synthetic test data (see
-[docs/TESTING.md](docs/TESTING.md#test-data)).
+[docs/user-testing.md](docs/user-testing.md#test-data)).
 
 ## Where things live
 
@@ -85,10 +85,13 @@ comment.** Use synthetic test data (see
 - `finance_redactor/presentation/` — Streamlit widgets and session state.
   Deliberately excluded from the coverage gate (see above); test it manually.
 - `app.py` — the Streamlit composition root.
-- `tests/` — one test file per module under `finance_redactor/`.
+- `tests/` — one test file per module, in folders that mirror the layers
+  (`tests/domain/`, `tests/application/`, …). Cross-cutting tests
+  (`test_config.py`, the layer guard, the PII guard) and `conftest.py` sit
+  at the top.
 
-If you need more architectural detail than this, ask the maintainer for
-`CLAUDE.md` (kept local, not tracked in this repo).
+For the layer rules, composition root and caching, see
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Maintainer
 

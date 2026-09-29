@@ -24,7 +24,7 @@
 - [ ] Master list / data handling (`data/`, `FPR_MASTER_LIST_DIR` / in-app setup dialog)
 - [ ] Launcher/installer scripts (`run.bat`, `run.sh`, `install.ps1`, `install.sh`)
 - [ ] Tests (`tests/`)
-- [ ] Documentation (`README.md`, `CLAUDE.md`, `docs/GOTCHA.md`, `data/README.md`)
+- [ ] Documentation (`README.md`, `ARCHITECTURE.md`, `AGENTS.md`, `docs/troubleshooting.md`, `data/README.md`)
 - [ ] CI / tooling (`.github/workflows/`, `pyproject.toml`)
 - [ ] None of the above
 
@@ -37,12 +37,10 @@
 
 ## Checklist
 
-- [ ] `uv run pytest` passes
-- [ ] `uv run ruff check app.py finance_redactor/ tests/` and `ruff format --check` are clean
-- [ ] `uv run codespell` is clean
-- [ ] If docs changed: `vale README.md CLAUDE.md docs/ data/README.md` shows no new errors
+- [ ] `uv run just check` passes (lint, format, mypy, tests, codespell - what CI runs)
+- [ ] If docs changed: `uv run just docs` shows no new errors
 - [ ] Tested manually end-to-end if this touches the UI or a file-format flow
-- [ ] Docs updated (`CLAUDE.md`/`README.md`/`docs/GOTCHA.md`) if behavior changed
+- [ ] Docs updated (`README.md`/`ARCHITECTURE.md`/`docs/troubleshooting.md`) if behavior changed
 - [ ] No Confidential/Highly Confidential data (real names, real master-list content) appears anywhere in this PR's diff, description, or comments
 
 ## Links

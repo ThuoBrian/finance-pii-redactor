@@ -1,4 +1,4 @@
-# GOTCHA.md
+# Troubleshooting
 
 This file records known errors, edge cases, and their solutions when developing or running the Finance PII Redactor.
 
@@ -182,7 +182,7 @@ This file records known errors, edge cases, and their solutions when developing 
 ### Editing the master list (or fixing its location) doesn't show up until I do *something*
 
 - **Symptom:** You edit and save `Names List - Organized.xlsx` (or fix a wrong `FPR_MASTER_LIST_DIR`/in-app path), but the app keeps showing the old row counts, IDs, or "0 names" - nothing changes while it just sits open.
-- **Cause:** The parsed master list is cached process-wide behind `@st.cache_resource`, keyed on the workbook's path and modification time (see "Master-list caching" in `CLAUDE.md`). Streamlit only re-checks that key on a *rerun* - a widget interaction or a full page reload - never on a timer, so an edit made while the page is just sitting there has no visible effect until something triggers one.
+- **Cause:** The parsed master list is cached process-wide behind `@st.cache_resource`, keyed on the workbook's path and modification time (see "Caching" in [ARCHITECTURE.md](../ARCHITECTURE.md#caching)). Streamlit only re-checks that key on a *rerun* - a widget interaction or a full page reload - never on a timer, so an edit made while the page is just sitting there has no visible effect until something triggers one.
 - **Solution:** Click the **🔄 Refresh master list** button in **Advanced settings** (added to `master_list_view.py`, present in all three flows) - it force-clears the cache and reruns immediately, so you don't need to know to reload the whole browser page. This also covers the one case a plain page reload can silently miss: if the workbook's modification time hasn't actually changed yet (e.g. a Box Drive sync still copying the new version down), a reload alone reuses the stale cache since the cache key looks unchanged, while the button's explicit clear forces a fresh read regardless. Reloading the page still works too, and remains the only option for anything the button doesn't cover (e.g. code changes during local development).
 - **Worth knowing if two people test against the same running server:** this cache is shared across every browser session hitting that one `streamlit run` process, not per-tab - one person's refresh benefits everyone connected to it, but it also means there's no per-user "my view is different" isolation for this particular cache.
 

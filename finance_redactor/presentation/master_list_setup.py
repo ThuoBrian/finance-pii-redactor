@@ -4,7 +4,7 @@ Allows a user to point the app at a shared Box (or similar) folder containing
 ``Names List - Organized.xlsx`` directly from the UI, instead of the OS
 environment variable route (``FPR_MASTER_LIST_DIR``, documented in
 ``data/README.md``) - which needs a fresh terminal/process to take effect
-(see ``docs/GOTCHA.md``'s "0 names" entry). The chosen folder is persisted
+(see ``docs/troubleshooting.md``'s "0 names" entry). The chosen folder is persisted
 via ``finance_redactor.config.save_master_list_dir`` and takes effect on the
 very next Streamlit rerun, with no app restart.
 

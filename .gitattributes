@@ -2,7 +2,7 @@
 * text=auto
 
 # Launcher scripts must keep LF endings on every platform. run.sh breaks with
-# CRLF, and both launchers are validated as pure-ASCII/LF (see CLAUDE.md).
+# CRLF, and both launchers are validated as pure-ASCII/LF (see docs/troubleshooting.md).
 *.sh text eol=lf
 *.bat text eol=lf
 
