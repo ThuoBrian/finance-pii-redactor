@@ -37,9 +37,7 @@
 
 ## Checklist
 
-- [ ] `uv run pytest` passes
-- [ ] `uv run ruff check app.py finance_redactor/ tests/` and `ruff format --check` are clean
-- [ ] `uv run codespell` is clean
+- [ ] `uv run just check` passes (lint, format, mypy, tests, codespell - what CI runs)
 - [ ] If docs changed: `uv run just docs` shows no new errors
 - [ ] Tested manually end-to-end if this touches the UI or a file-format flow
 - [ ] Docs updated (`README.md`/`ARCHITECTURE.md`/`docs/troubleshooting.md`) if behavior changed

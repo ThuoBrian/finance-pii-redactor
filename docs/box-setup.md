@@ -8,8 +8,8 @@ IT/scripted setup) see **[data/README.md](../data/README.md)**.
 
 ## Before you start
 
-- **Get the app installed first** — see the [Quick start in the main
-  README](../README.md#quick-start) if you haven't yet.
+- **Get the app installed first** — see [Installing it in the main
+  README](../README.md#installing-it) if you haven't yet.
 - **Ask your list owner for the Box folder** that holds
   `Names List - Organized.xlsx`. It must be a folder you already have access
   to in Box Drive — never a public or generally-shared one.

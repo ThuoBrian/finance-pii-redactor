@@ -19,9 +19,9 @@ app.py  wires concrete infrastructure into the application services
 | Layer | Path | Holds | May import |
 | --- | --- | --- | --- |
 | Domain | `finance_redactor/domain/` | Pure logic: entities, pseudonymization, name variants, fuzzy suggestions, overlap rules, PDF text normalization, master-list quality findings | stdlib only |
-| Application | `finance_redactor/application/` | One use case per format (`redact_excel.py`, `redact_pdf.py`, `redact_docx.py`), the `Protocol` ports they depend on (`ports.py`), and result DTOs (`results.py`) | domain |
+| Application | `finance_redactor/application/` | One use case per format (`redact_excel.py`, `redact_pdf.py`, `redact_docx.py`), the `Protocol` ports they depend on (`ports.py`), and result DTOs (`results.py`) | domain, pandas |
 | Infrastructure | `finance_redactor/infrastructure/` | Adapters: `detection/` (Presidio, spaCy, pattern matching), `documents/` (openpyxl, PyMuPDF, python-docx), `names/` (master-list workbook reader) | domain, `config`, third-party libraries |
-| Presentation | `finance_redactor/presentation/` | Streamlit flows per format, shared widgets, session state, presenters that turn results into UI-ready tables and files | application, domain, `config` |
+| Presentation | `finance_redactor/presentation/` | Streamlit flows per format, shared widgets, session state, presenters that turn results into UI-ready tables and files | application, domain, `config`, Streamlit, pandas |
 
 `finance_redactor/config.py` holds `Settings`, the single source of tunable
 values (thresholds, entity types, masks, master-list location). Presentation,
@@ -31,6 +31,8 @@ they need as constructor arguments instead.
 Infrastructure never imports application: adapters satisfy the ports in
 `application/ports.py` by shape, not inheritance. Keep it that way; a use case
 that needs a new capability gets a new port, not a direct import.
+`tests/test_layers.py` enforces the "May import" column above and fails on
+any import that points the wrong way.
 
 ## Composition root
 
@@ -72,8 +74,9 @@ name, so it and every real input document stay out of git (`data/*`,
 
 `tests/` mirrors the layers (`tests/domain/`, `tests/application/`,
 `tests/infrastructure/`, `tests/presentation/`). Cross-cutting tests sit at
-the top: `test_config.py`, and `test_no_real_pii_in_repo.py`, which fails if
-a known real name or ID reappears in any tracked file.
+the top: `test_config.py`; `test_layers.py`, which enforces the layer rules;
+and `test_no_real_pii_in_repo.py`, which fails if a known real name or ID
+reappears in any tracked file.
 
 Coverage is enforced at 80% over domain, application and infrastructure.
 `finance_redactor/presentation/` is excluded from the measured total

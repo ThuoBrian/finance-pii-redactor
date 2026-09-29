@@ -3,7 +3,7 @@
 
 set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 
-# Keep in sync with .github/workflows/ci.yml.
+# Paths the lint and format recipes cover.
 src := "app.py finance_redactor/ tests/ scripts/"
 
 default:
@@ -43,5 +43,5 @@ spell:
 docs:
     vale README.md docs/ data/README.md
 
-# Everything CI runs, in CI order
+# Everything CI runs (.github/workflows/ci.yml calls this recipe)
 check: lint fmt-check typecheck test spell

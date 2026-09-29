@@ -28,8 +28,8 @@ uv run just run
 
 ## Before opening a PR
 
-Run the same checks CI runs, in the same order it runs them
-(`.github/workflows/ci.yml`):
+CI runs exactly this command (`.github/workflows/ci.yml` calls the
+justfile's `check` recipe), so run it locally first:
 
 ```bash
 uv run just check
@@ -87,7 +87,8 @@ comment.** Use synthetic test data (see
 - `app.py` — the Streamlit composition root.
 - `tests/` — one test file per module, in folders that mirror the layers
   (`tests/domain/`, `tests/application/`, …). Cross-cutting tests
-  (`test_config.py`, the PII guard) and `conftest.py` sit at the top.
+  (`test_config.py`, the layer guard, the PII guard) and `conftest.py` sit
+  at the top.
 
 For the layer rules, composition root and caching, see
 [ARCHITECTURE.md](ARCHITECTURE.md).

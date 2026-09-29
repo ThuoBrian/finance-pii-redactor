@@ -32,7 +32,8 @@ Run `uv run just check` before calling a change done.
   `data/README.md`, and never commit `.xlsx`, `.pdf`, `.docx` or
   `*_crosswalk.csv` files. They are gitignored for a reason.
 - **Keep the layers.** `domain/` imports only the stdlib, `application/`
-  imports only `domain/`, and only `app.py` wires in `infrastructure/`. Read
+  imports only `domain/`, and only `app.py` wires in `infrastructure/`.
+  `tests/test_layers.py` enforces this. Read
   [ARCHITECTURE.md](ARCHITECTURE.md) before moving code between layers.
 - **Lean toward over-redaction.** A missed name is a data leak; a false
   positive is an inconvenience. Don't loosen detection to fix a false

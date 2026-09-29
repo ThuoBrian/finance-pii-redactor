@@ -77,6 +77,10 @@ the `version` field in `pyproject.toml`.
   to `domain/`, so the application layer no longer imports infrastructure.
 - Added public `ARCHITECTURE.md`, `AGENTS.md` and `.github/SECURITY.md`.
   Public docs no longer point at the untracked `CLAUDE.md`.
+- `tests/test_layers.py` fails if a module imports across layers the wrong
+  way, or if `domain/` imports anything outside the standard library.
+- CI now runs `uv run just check` instead of repeating each command, so the
+  justfile is the one list of checks.
 
 ### Added
 

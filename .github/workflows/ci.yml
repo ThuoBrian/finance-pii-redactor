@@ -28,17 +28,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --python 3.12
 
-      - name: Ruff check
-        run: uv run ruff check app.py finance_redactor/ tests/ scripts/
-
-      - name: Ruff format check
-        run: uv run ruff format --check app.py finance_redactor/ tests/ scripts/
-
-      - name: Mypy
-        run: uv run mypy app.py finance_redactor/
-
-      - name: Run tests (with coverage gate)
-        run: uv run pytest
-
-      - name: Codespell
-        run: uv run codespell
+      # Lint, format check, mypy, tests with the coverage gate, codespell.
+      # The justfile's `check` recipe is the single list of what CI runs.
+      - name: Run checks
+        run: uv run just check
