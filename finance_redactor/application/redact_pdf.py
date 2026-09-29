@@ -65,16 +65,16 @@ from finance_redactor.application.ports import PdfDocumentFactory, PiiDetector
 from finance_redactor.application.results import PdfRedactionResult
 from finance_redactor.domain.custom_words import find_custom_words
 from finance_redactor.domain.entities import IMAGE_REDACTION_SENTINEL, Finding
+from finance_redactor.domain.pdf_text_normalizer import (
+    NormalizedText,
+    normalize_pdf_text,
+)
 from finance_redactor.domain.pseudonyms import (
     MasterEntry,
     Pseudonymizer,
     normalize,
 )
 from finance_redactor.domain.rules import dedupe_overlapping
-from finance_redactor.infrastructure.detection.pdf_text_normalizer import (
-    NormalizedText,
-    normalize_pdf_text,
-)
 
 # Fixed, low threshold for the always-on email/URL pass - not user-tunable
 # (there's no UI control for it, matching the "just works" ask). Presidio's

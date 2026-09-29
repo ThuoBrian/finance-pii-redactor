@@ -26,7 +26,7 @@ def _local_settings_file() -> Path:
     finance_redactor/presentation/master_list_setup.py), which exists
     specifically so a shared Box folder location can be picked from the UI
     instead of an OS environment variable that needs a fresh terminal/process
-    to take effect (see docs/GOTCHA.md's "0 names" entry). Resolved fresh on
+    to take effect (see docs/troubleshooting.md's "0 names" entry). Resolved fresh on
     every call (not cached at import time) so tests can monkeypatch
     ``Path.home``.
     """
@@ -84,7 +84,7 @@ def _resolve_data_dir() -> Path:
        point every teammate's install at one shared, access-controlled
        location (e.g. a permissioned SharePoint/network-drive folder) instead
        of each person maintaining an independent local copy - see
-       ``data/README.md`` and ``docs/GOTCHA.md``.
+       ``data/README.md`` and ``docs/troubleshooting.md``.
     3. The local ``data/`` folder next to the package.
 
     The master list is Confidential (real names), so a shared location from

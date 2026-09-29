@@ -40,7 +40,7 @@ from finance_redactor.presentation.pdf_view import run_pdf_flow
 from finance_redactor.presentation.steps import show_step
 
 # Resolved from this file, not the CWD - run.bat launches from anywhere.
-_LOGO = Path(__file__).parent / "image" / "data-privacy-ai-dark-nobg.svg"
+_LOGO = Path(__file__).parent / "assets" / "data-privacy-ai-dark-nobg.svg"
 
 
 def _main() -> None:

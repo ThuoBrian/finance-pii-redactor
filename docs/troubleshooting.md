@@ -1,4 +1,4 @@
-# GOTCHA.md
+# Troubleshooting
 
 This file records known errors, edge cases, and their solutions when developing or running the Finance PII Redactor.
 

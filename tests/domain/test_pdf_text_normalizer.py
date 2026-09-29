@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from finance_redactor.domain.entities import Span
-from finance_redactor.infrastructure.detection.pdf_text_normalizer import (
+from finance_redactor.domain.pdf_text_normalizer import (
     normalize_pdf_text,
 )
 

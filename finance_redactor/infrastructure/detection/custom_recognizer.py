@@ -25,7 +25,7 @@ from presidio_analyzer import (
 
 from finance_redactor.domain.aliases import aliases
 from finance_redactor.domain.entities import Span
-from finance_redactor.infrastructure.detection.pdf_text_normalizer import (
+from finance_redactor.domain.pdf_text_normalizer import (
     normalize_pdf_text,
 )
 

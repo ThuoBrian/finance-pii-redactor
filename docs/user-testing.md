@@ -2,7 +2,7 @@
 
 A checklist for testers to work through before a release goes to everyone.
 Pairs with **[README.md](../README.md)** (how the tool works) and
-**[docs/GOTCHA.md](GOTCHA.md)** (known issues) — this file turns known edge
+**[docs/troubleshooting.md](troubleshooting.md)** (known issues) — this file turns known edge
 cases into things to actually click through and confirm.
 
 ## Before you start
@@ -42,8 +42,8 @@ Pick a folder when asked, then wait — first run downloads ~400 MB (the
 language model) and needs internet once. The app opens in your browser when
 it's ready.
 
-If something goes wrong here, check **[GOTCHA.md's "Environment and
-setup"](GOTCHA.md#environment-and-setup)** section before reporting it.
+If something goes wrong here, check **[troubleshooting.md's "Environment and
+setup"](troubleshooting.md#environment-and-setup)** section before reporting it.
 
 ## Test data
 
@@ -89,7 +89,7 @@ what happened instead — then file it.
   nothing typed into "Additional words/phrases to redact".
 - [ ] A name that is **not** on the master list does **not** redact unless
   typed into that box — expected (see
-  [GOTCHA.md](GOTCHA.md#pdf-only-auto-detects-what-can-be-matched-exactly---no-spacy-guessing)),
+  [troubleshooting.md](troubleshooting.md#pdf-only-auto-detects-what-can-be-matched-exactly---no-spacy-guessing)),
   not a bug to report.
 - [ ] The master-list summary appears in PDF's **Advanced settings**, showing
   the same row counts as Excel and Word. If it shows 0 names, curated names
@@ -126,7 +126,7 @@ what happened instead — then file it.
 - [ ] A test name in the document body, a table cell, and a header/footer
   are all redacted.
 - [ ] A name in a text box or SmartArt is **not** redacted — expected (see
-  [GOTCHA.md](GOTCHA.md#a-name-inside-a-word-text-box-smartart-or-embedded-object-is-not-detected)).
+  [troubleshooting.md](troubleshooting.md#a-name-inside-a-word-text-box-smartart-or-embedded-object-is-not-detected)).
 - [ ] Downloaded document keeps original formatting (bold, tables, etc.)
   around the redacted text.
 
@@ -177,6 +177,6 @@ issue](https://github.com/ThuoBrian/finance-pii-redactor/issues/new) with:
   details** table and/or crosswalk helps a lot.
 - Whether it's reproducible on a second try.
 
-Check **[GOTCHA.md](GOTCHA.md)** first — several things that look like bugs
+Check **[troubleshooting.md](troubleshooting.md)** first — several things that look like bugs
 (no PDF name detection, text boxes not scanned, scanned PDFs untouched) are
 documented, deliberate limits, not something to file.

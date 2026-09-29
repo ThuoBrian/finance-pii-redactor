@@ -9,7 +9,7 @@ what it guards against. The trade-off is that a failure reports *where* a
 match was found, not *what* it was - look at the reported file and line.
 
 If this fails: replace the offending value with synthetic test data, per the
-policy in docs/TESTING.md.
+policy in docs/user-testing.md.
 """
 
 from __future__ import annotations
@@ -100,5 +100,5 @@ def test_no_real_names_or_ids_in_tracked_files():
     assert not hits, (
         "Real (non-synthetic) names, organizations, or internal IDs found at: "
         + ", ".join(hits)
-        + ". Replace them with synthetic test data; see docs/TESTING.md."
+        + ". Replace them with synthetic test data; see docs/user-testing.md."
     )
