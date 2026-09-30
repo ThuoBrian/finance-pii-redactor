@@ -17,9 +17,10 @@ from finance_redactor.domain.pseudonyms import MasterEntry
 class FakeWordDocument:
     """In-memory Word document double for testing RedactDocxService."""
 
-    def __init__(self, blocks: list[str]) -> None:
+    def __init__(self, blocks: list[str], links: int = 0) -> None:
         """Create a fake document with the given block (paragraph) texts."""
         self._blocks = blocks
+        self._links = links
         self.replacements_by_block: dict[int, list[tuple[Span, str]]] = {}
         self.closed = False
 
@@ -43,6 +44,10 @@ class FakeWordDocument:
         ):
             text = text[: span.start] + pseudonym + text[span.end :]
         self._blocks[block_index] = text
+
+    def remove_external_links(self) -> int:
+        """Report the canned link count."""
+        return self._links
 
     def to_bytes(self) -> bytes:
         """Render the document to bytes (here, the joined block texts)."""
@@ -307,3 +312,11 @@ def test_card_number_is_masked_and_never_reaches_the_crosswalk() -> None:
     assert _CardDetector.card.encode() not in result.data
     assert result.crosswalk == []
     assert [f.entity_type for f in result.findings] == ["CREDIT_CARD"]
+
+
+def test_link_targets_removed_on_open_are_reported() -> None:
+    result = _service().execute(
+        FakeWordDocument(["No name"], links=3), ["PERSON"], 0.35
+    )
+
+    assert result.removed_links == 3

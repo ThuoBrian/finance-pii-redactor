@@ -70,16 +70,19 @@ that isn't on the list, the tool still gives it a code and marks it so you
 can see it wasn't one of yours. Nothing is left showing.
 See **[data/README.md](data/README.md)** for what goes in that file.
 
-**Excel and Word files:** the tool finds people, organizations, email
-addresses, and website links on its own.
+**All three formats:** the tool finds people, organizations, email
+addresses, and website links on its own, whether or not the name is on the
+master list. PDF also blacks out images and logos. Spotting a name that
+isn't on the list is a guess, so check the review table and untick anything
+that isn't really a name.
 
-**PDF files:** email addresses, website links, images or logos, and any name
-or organization **that is on the master list** are found automatically. What
-the tool won't do in a PDF is guess at a name it doesn't already know: the
-statistical name-spotting it uses for Excel and Word is unreliable on
-scanned financial PDFs, so it's switched off there. For a name that isn't on
-the master list yet, either add it to the list or type it into the box for
-that one run.
+**Addresses, in all three formats:** P.O. boxes, plot, house and L.R.
+numbers, and street addresses such as `14 Maple Road` become `[ADDRESS]`.
+A town or country name on its own is left alone.
+
+**Links, in Word and PDF:** the destination behind a link (the web address
+or `mailto:` behind "click here") is removed. The visible text stays and is
+checked like any other text. Excel output never keeps links.
 
 **Bank and payment details, in all three formats:** card numbers, IBANs,
 Kenyan bank account numbers, M-Pesa till/paybill numbers, and SWIFT/BIC

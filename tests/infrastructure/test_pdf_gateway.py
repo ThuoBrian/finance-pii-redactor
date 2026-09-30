@@ -185,3 +185,35 @@ def test_open_accepts_an_owner_password_only_pdf():
     # The redacted copy is what gets downloaded, so the address must be gone
     # from the raw bytes too, not merely covered in the rendered page.
     assert b"jane.test@example.org" not in redacted_bytes
+
+
+def test_remove_external_links_keeps_internal_page_jumps():
+    doc = fitz.open()
+    doc.new_page()
+    doc.new_page()
+    first = doc[0]
+    first.insert_text((72, 100), "Contact Jane Doe")
+    first.insert_link(
+        {
+            "kind": fitz.LINK_URI,
+            "from": fitz.Rect(72, 90, 200, 105),
+            "uri": "mailto:jane.doe@example.org",
+        }
+    )
+    first.insert_link(
+        {"kind": fitz.LINK_GOTO, "from": fitz.Rect(72, 120, 200, 135), "page": 1}
+    )
+    data = doc.tobytes()
+    doc.close()
+
+    document = PyMuPdfDocument.open(data)
+    assert document.remove_external_links() == 1
+    output = document.to_bytes()
+    document.close()
+
+    reopened = fitz.open(stream=output, filetype="pdf")
+    assert [link["kind"] for link in reopened[0].get_links()] == [fitz.LINK_GOTO]
+    assert b"mailto:" not in output
+    # The visible text is untouched; detection decides what happens to it.
+    assert "Jane Doe" in reopened[0].get_text()
+    reopened.close()

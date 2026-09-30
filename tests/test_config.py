@@ -53,9 +53,8 @@ def test_date_time_is_never_a_supported_entity():
 
 
 def test_url_is_a_supported_entity_with_an_auto_prefix():
-    # Websites are detected in Word/Excel via Presidio's built-in UrlRecognizer
-    # (already loaded by default) and in PDF via the spaCy-free
-    # PatternDetector - both need "URL" present in both collections.
+    # Websites are detected in every format via Presidio's built-in
+    # UrlRecognizer (loaded by default), which needs "URL" in both collections.
     assert "URL" in DEFAULT_SETTINGS.supported_entities
     assert DEFAULT_SETTINGS.auto_prefixes["URL"] == "URL"
 
@@ -128,6 +127,14 @@ def test_masked_financial_types_are_detected_but_never_pseudonymized():
     for entity in DEFAULT_SETTINGS.fixed_masks:
         assert entity in DEFAULT_SETTINGS.supported_entities
         assert entity not in DEFAULT_SETTINGS.auto_prefixes
+
+
+def test_addresses_are_masked_not_pseudonymized():
+    # A pseudonym would put the raw address into the crosswalk.
+    assert DEFAULT_SETTINGS.fixed_masks["ADDRESS"] == "[ADDRESS]"
+    assert "ADDRESS" not in DEFAULT_SETTINGS.auto_prefixes
+    # Plain place names are deliberately out of scope (see troubleshooting.md).
+    assert "LOCATION" not in DEFAULT_SETTINGS.supported_entities
 
 
 def test_no_mask_looks_like_a_pdf_label():

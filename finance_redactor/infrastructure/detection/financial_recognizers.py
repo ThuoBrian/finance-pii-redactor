@@ -6,9 +6,8 @@ The three formats below have no checksum, and a bare 10-digit number looks
 exactly like an invoice number or a staff ID. So each one only matches when
 its label is right in front of it ("A/C No:", "Paybill", "SWIFT"), and the
 label is part of the regex itself rather than a Presidio context word.
-Context words only boost a score when real NLP tokens exist, and the PDF
-detector has none (see ``pattern_detector.py``), so a context-word design
-would quietly never fire on PDFs.
+A context word only nudges a score, so an unlabelled number could still
+clear the threshold; a required label cannot be skipped.
 
 The returned span covers the value only, never the label, so "A/C No:
 0123456789" becomes "A/C No: [ACCOUNT]".

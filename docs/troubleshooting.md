@@ -19,7 +19,7 @@ This file records known errors, edge cases, and their solutions when developing 
   - [An ordinary word is being redacted](#an-ordinary-word-is-being-redacted)
   - [A typed word gets a flagged code instead of a curated Internal ID](#a-typed-word-gets-a-flagged-code-instead-of-a-curated-internal-id)
   - [A redacted PDF shows `[001]` instead of an ID code](#a-redacted-pdf-shows-001-instead-of-an-id-code)
-  - [PDF only auto-detects what can be matched exactly - no spaCy guessing](#pdf-only-auto-detects-what-can-be-matched-exactly---no-spacy-guessing)
+  - [PDF detects names the same way Excel and Word do](#pdf-detects-names-the-same-way-excel-and-word-do)
   - [Long multi-word names are not matched](#long-multi-word-names-are-not-matched)
   - [A name followed by a bare hyphen resolves to a flagged auto-id](#a-name-followed-by-a-bare-hyphen-resolves-to-a-flagged-auto-id)
   - [The Advanced settings panel shows master-list data-quality warnings](#the-advanced-settings-panel-shows-master-list-data-quality-warnings)
@@ -32,6 +32,8 @@ This file records known errors, edge cases, and their solutions when developing 
   - [Redacting a name in a PDF also blacks out/deletes part of the line above it](#redacting-a-name-in-a-pdf-also-blacks-outdeletes-part-of-the-line-above-it)
   - [A name inside a Word text box, SmartArt, or embedded object is not detected](#a-name-inside-a-word-text-box-smartart-or-embedded-object-is-not-detected)
   - [Why doesn't the tool touch dates/times?](#why-doesnt-the-tool-touch-datestimes)
+  - [A town or country name is not redacted](#a-town-or-country-name-is-not-redacted)
+  - [A link no longer works in the redacted file](#a-link-no-longer-works-in-the-redacted-file)
 - [Testing and linting](#testing-and-linting)
   - [`ruff` flags `E402` for the Streamlit context guard import](#ruff-flags-e402-for-the-streamlit-context-guard-import)
   - [`codespell` flags HTML variable names like `thead` or `ws`](#codespell-flags-html-variable-names-like-thead-or-ws)
@@ -121,7 +123,7 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Symptom:** An everyday word is replaced in the output - `salaries`, `rent`, `transport`, `bank`. It happens on every occurrence, in every document.
 - **First, find out why it matched.** Open **Check what was detected** and read the **Source** column for that word. It tells you which of three different problems you have:
   - **`master list`** - the workbook has a row whose `Name` is that word. Someone added a payee or account called `Salaries`, and the tool matches master-list names exactly, so every occurrence of the word is now a hit in all three formats. This is the common cause in a finance master list.
-  - **`model`** - spaCy guessed. Only possible in Excel and Word; the PDF flow runs no model. Often an ALL-CAPS label (`SALARIES`) that the recasing pass turns into a name-shaped `Salaries` (see "ALL-CAPS names and acronym false positives" below).
+  - **`model`** - spaCy guessed. Possible in all three formats. Often an ALL-CAPS label (`SALARIES`) that the recasing pass turns into a name-shaped `Salaries` (see "ALL-CAPS names and acronym false positives" below).
   - **`custom word`** - it came from the "Additional words/phrases to redact" box. Clear it; the box is not saved between sessions.
 - **Fix it for this document:** untick the word in **Check what was detected**. The file is rebuilt immediately without it, and everything else stays redacted. This works in all three formats and is the only lever PDF has.
 - **Fix it for good (the `master list` case):** edit `data/Names List - Organized.xlsx` - delete the row, or make the name distinctive (`Salaries Account`, `Salaries Ltd`). A multi-word name no longer matches the bare word, because the matcher keys on the whole string. Save, close, then click **🔄 Refresh master list**. Do this rather than unticking every time: an unticked word is per-document and you would repeat it forever.
@@ -150,13 +152,12 @@ This file records known errors, edge cases, and their solutions when developing 
   - **The mapping file contains no names**, so it is *Internal* rather than *Confidential* and can travel with the redacted PDF. The master list is what stays access-controlled.
 - **Solution:** If a term needs a stable, curated ID going forward (not just a flagged one for this run), add it to `data/Names List - Organized.xlsx` as a normal master-list row instead of typing it into the custom-words box. This now helps all three formats: a curated name is detected automatically in PDF too, and only a curated name gets a decodable `Internal ID` in the PDF label mapping. The box is also not saved anywhere between sessions - you'll need to retype it (or the same text) next time, though it does survive uploading a second file in the *same* browser session without retyping.
 
-### PDF only auto-detects what can be matched exactly - no spaCy guessing
+### PDF detects names the same way Excel and Word do
 
-- **Symptom:** A name in a PDF isn't redacted, even though an email address in the same PDF was caught with nothing typed in. The entity-selection and confidence-threshold widgets that Excel/Word have are also absent from PDF's Advanced settings.
-- **What PDF catches automatically:** email addresses and websites (regex), **names and organizations that are on the master list** (exact match against the workbook), and every embedded image ("Also black out images / logos", on by default, works in both redaction styles). None of these needs anything typed in.
-- **What it does not catch:** a name that is *not* on the master list. PDF never runs spaCy NER, which is the statistical part - it guesses badly on scanned financial PDFs, which is why it was removed. Exact matching is not guessing, so the master-list recognizer (`infrastructure/detection/custom_recognizer.py`, an Aho-Corasick automaton) runs in the PDF flow just as the email regex does.
-- **Solution:** For an uncurated name, either add it to the master list (which also gives it a decodable `Internal ID`) or type it into the "Additional words/phrases to redact" box for this run. The box remains the way to cover project codenames, case numbers, and anyone not yet in the workbook.
-- **History:** PDF originally detected emails and URLs only, which meant a PDF full of curated names came back with just its email addresses redacted. That was an over-correction: excluding spaCy was never meant to exclude exact master-list matching. Unlike before, the "0 names loaded" and "master-list edit doesn't show up" entries above now **do** apply to PDF, since the PDF flow reads the master list.
+- **What PDF catches automatically:** names and organizations (on the master list or not), email addresses, websites, bank and payment details, postal and street addresses, and every embedded image ("Also black out images / logos", on by default). It uses the same `PresidioEngine` as Excel and Word, so nothing needs typing in.
+- **A name that isn't on the master list** is redacted with a label like any other, and its mapping row is flagged with an `AUTO-` placeholder instead of an `Internal ID`. The placeholder is a hash, so the mapping still holds no names. To make it decodable, add the name to the master list and run again.
+- **False positives:** the model guesses, and ALL-CAPS headings in PDFs (`TOTAL AMOUNT`) can come out as organizations. Untick them in **Check what was detected**. PDF has no confidence-threshold widget; it runs at a fixed 0.4.
+- **History:** PDF's spaCy pass was once removed, on the grounds that it guessed badly on scanned financial PDFs. A scanned page has no text layer for the model to read, though, so the only effect was that unlisted names were left in the output. For a while after that, PDF caught only emails and URLs, then curated names were added back. Full detection returned on 2026-09-30.
 - **Known limits:** only *embedded raster images* count as a "logo" for the image checkbox - a logo drawn as vector art (lines/shapes, not a picture) is not caught. Image scanning is PDF-only today; Word has no equivalent checkbox or behavior yet.
 
 ### Long multi-word names are not matched
@@ -167,7 +168,7 @@ This file records known errors, edge cases, and their solutions when developing 
 
 ### A name followed by a bare hyphen resolves to a flagged auto-id
 
-- **Applies to:** Word and Excel only. PDF does exact master-list matching but never runs spaCy (see "PDF only auto-detects what can be matched exactly" above), and the fusion below is a spaCy behaviour, so it cannot occur there - even though it was originally found and fixed in the PDF flow.
+- **Applies to:** all three formats. It was first found in the PDF flow.
 - **Symptom (fixed):** A memo like `Field advance to Jane Doe - Springfield project supervision` redacted to `Field advance to PSN-AUTO-0BA3D project supervision` instead of the curated `STF-<id>` — and the trailing location (`Springfield`) disappeared from the output along with the name.
 - **Cause:** spaCy's NER model sometimes tags a hyphen-joined trailing phrase as part of the same PERSON entity (`"Jane Doe - Springfield"` as one span), which overlaps and outspans the exact master-list match on the name alone (`"Jane Doe"`). The old dedupe rule was pure leftmost/longest with no regard for detection source, so the longer model guess won even though the shorter span was an exact curated match — and the longer string doesn't exist in the master list, so it fell through to a flagged auto-id.
 - **Solution:** `dedupe_overlapping` (`finance_redactor/domain/rules.py`) now breaks overlaps by source first: a master-list-sourced detection always wins over an overlapping model-sourced one, regardless of which span is longer. Same-source overlaps still use leftmost/longest as before.
@@ -216,7 +217,7 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Symptom:** A word/phrase typed into PDF's "Words/phrases to redact" box (or, for Word, a name/organization) is matched but not replaced, or isn't matched at all even though it's visibly present on the page.
 - **Cause 1:** The PDF page is a scanned image and contains no selectable text layer.
 - **Solution 1:** The tool only processes selectable PDF text. Scanned PDFs require OCR first.
-- **Cause 2:** The same span was detected by both the spaCy model and the master list, or a name appears under two categories. The spaCy half cannot happen in PDF, which runs no model; a name under two categories can, and in PDF it surfaces as an `ambiguous` row in the label mapping rather than a wrong ID.
+- **Cause 2:** The same span was detected by both the spaCy model and the master list, or a name appears under two categories. In PDF a name under two categories surfaces as an `ambiguous` row in the label mapping rather than a wrong ID.
 - **Solution 2:** The code deduplicates overlapping spans (master-list source wins over an overlapping model source regardless of length; leftmost/longest breaks ties within the same source — see the entry above on a name followed by a bare hyphen), but a name listed under two categories (e.g. Vendor *and* Funder) can still conflict. Keep each name in a single category.
 - **Cause 3:** PyMuPDF extracts text with artifacts that break exact matching — typographic ligatures (`ﬁ` instead of `fi`), line-break hyphenation (`Acme Sup-\nplies`), and irregular whitespace. Whatever is doing the matching (PDF's `find_custom_words`, or Word/Excel's master-list recognizer and spaCy) sees a different string than the one being searched for.
 - **Solution 3:** The PDF flow normalizes extracted text before matching: ligatures are expanded, soft line-break hyphens are removed, and whitespace is collapsed - this applies to a typed custom word/phrase exactly the same way it applies to a detected name. Match spans are mapped back to the original extracted text, and `page.search_for()` tries a small set of fallback variants (whitespace-collapsed, punctuation-stripped, `&`/`and` swapped, common suffix stripped) when the exact text is not found. The occurrence is still reported in the detection details and crosswalk even if it cannot be written.
@@ -238,6 +239,20 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Symptom:** A memo date like `Jan-26` is left as plain text instead of being pseudonymized, even though Presidio can detect a `DATE_TIME` entity type.
 - **Cause:** This is deliberate, not a gap. `Settings.auto_prefixes` (`finance_redactor/config.py`) intentionally lists only name/organization/email/website entity types, and `Settings.supported_entities` adds only those plus the bank/payment types in `Settings.fixed_masks`. The masked types are the one exception to "names only": they're replaced with a fixed mask like `[ACCOUNT]` and never reach the pseudonymizer, because a pseudonym would put the raw number in the crosswalk (`tests/test_config.py::test_masked_financial_types_are_detected_but_never_pseudonymized`). Dates and times aren't the PII this tool exists to protect, and turning them into fake IDs would be noise, not redaction. Adding one carelessly is also a silent risk: any entity type missing from `auto_prefixes` falls back to `entity_type[:3].upper()` in `Pseudonymizer._auto_pseudonym` (`domain/pseudonyms.py`) instead of raising an error — so a `DATE_TIME` entity would quietly mint junk ids like `DAT-AUTO-4D8F3` rather than failing loudly.
 - **Solution:** Don't add `DATE_TIME` (or other non-name entity types) to `supported_entities`/`auto_prefixes`. `tests/test_config.py::test_date_time_is_never_a_supported_entity` guards against a regression here.
+
+### A town or country name is not redacted
+
+- **Symptom:** `Springfield` or `Kenya` stays in the output, while `P.O. Box 123-00100, Springfield` next to it became `[ADDRESS]`.
+- **Cause:** Deliberate. Addresses are matched by pattern (`infrastructure/detection/address_recognizers.py`): P.O. boxes and private bags, a bare `Box` only with a postcode, plot/house/L.R. numbers, and capitalised street names ending in Road, Street, Avenue, Lane, Crescent or Highway. Drive, Close and Way count only after a house number, because "Year End Close" is not an address. spaCy's LOCATION type was not used: it tags every town and country, which in a finance document means bank names, project names and currencies, and it misses P.O. boxes.
+- **Solution:** Type a place name into the words box for that run. A town that follows a P.O. box is already covered.
+- **Known false positives:** a capitalised phrase ending in a street word, such as `Staff Street Party`. Untick it in the review table.
+
+### A link no longer works in the redacted file
+
+- **Applies to:** Word and PDF. Excel output is rebuilt from cell values and never kept links.
+- **Cause:** Deliberate. A link's destination can name a person (`mailto:jane.doe@example.org` behind "click here") or a private file path, and nothing on the page shows it. So every link that leaves the document is removed: web and email links, file launches, and links into other PDFs. Links to another page of the same PDF stay. The visible text stays and goes through detection like any other text. The download section says how many were removed.
+- **Word detail:** python-docx does not include hyperlinked runs in `paragraph.runs`, so before this change the visible text of a Word hyperlink was never scanned at all. `docx_gateway.py` now unwraps hyperlinks (and `HYPERLINK` field codes) when the file is opened, before any text is read.
+- **Not covered:** other PDF annotations, bookmarks and metadata, and Word document properties. These are still open.
 
 ## Testing and linting
 

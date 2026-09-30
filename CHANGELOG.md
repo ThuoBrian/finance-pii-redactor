@@ -8,6 +8,20 @@ the `version` field in `pyproject.toml`.
 
 ### Added
 
+- **PDF detects names that aren't on the master list.** The PDF flow now uses
+  the same spaCy-backed engine as Excel and Word, which reverses the old
+  "no guessing in PDF" rule. An unlisted name gets a label in the document and
+  a flagged `AUTO-` row in the mapping, which still holds no names. Model
+  false positives are unticked in the review table. `PatternDetector` is gone.
+- **Postal and street addresses are masked as `[ADDRESS]`** in all three
+  formats: P.O. boxes, plot/house/L.R. numbers, and street addresses
+  (`infrastructure/detection/address_recognizers.py`). Town and country names
+  on their own are deliberately left alone.
+- **Link destinations are removed from Word and PDF output.** Web, email and
+  file links are stripped, and the visible text still goes through detection.
+  Links within the same PDF stay. The download section shows how many were
+  removed.
+
 - **Bank and payment details are detected and masked.** Card numbers and
   IBANs (Presidio's checksum-validated recognizers), plus Kenyan bank account
   numbers, M-Pesa till/paybill numbers and SWIFT/BIC codes
@@ -130,6 +144,11 @@ the `version` field in `pyproject.toml`.
   match late in the document before one near the top.
 
 ### Security
+
+- The visible text of a Word hyperlink was never scanned, because python-docx
+  leaves hyperlinked runs out of `paragraph.runs`. A name written as a link
+  went through untouched, along with its `mailto:` target. Hyperlinks are now
+  unwrapped before detection.
 
 - Replaced real staff names, a real vendor/country pairing, and their real
   `Internal ID`s with synthetic equivalents across test fixtures, docstrings,

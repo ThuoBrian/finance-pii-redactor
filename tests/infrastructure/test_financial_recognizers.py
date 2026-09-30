@@ -1,4 +1,4 @@
-"""Tests for bank/payment detection: the labelled recognizers and the PDF detector.
+"""Tests for bank/payment detection: the labelled recognizers and the full engine.
 
 Every value here is synthetic: Visa's published test card, the IBAN example
 from the IBAN registry, made-up Kenyan account and paybill numbers, and a
@@ -13,9 +13,6 @@ from finance_redactor.config import DEFAULT_SETTINGS
 from finance_redactor.domain.entities import DetectionSource
 from finance_redactor.infrastructure.detection.financial_recognizers import (
     build_financial_recognizers,
-)
-from finance_redactor.infrastructure.detection.pattern_detector import (
-    PatternDetector,
 )
 
 _LABELLED = ["KE_BANK_ACCOUNT", "MPESA_NUMBER", "SWIFT_CODE"]
@@ -70,14 +67,12 @@ def test_recognizer_respects_the_requested_entities() -> None:
     assert only_mpesa == ["MPESA_NUMBER"]
 
 
-def test_pdf_detector_finds_every_financial_type_as_a_pattern_match() -> None:
+def test_engine_finds_every_financial_type_as_a_pattern_match(regex_engine) -> None:
     text = (
         "Card 4111 1111 1111 1111, IBAN GB82 WEST 1234 5698 7654 32, "
         "A/C No: 0123456789, Paybill 123456, SWIFT TESTKENA"
     )
-    detections = PatternDetector().analyze(
-        text, list(DEFAULT_SETTINGS.fixed_masks), 0.4
-    )
+    detections = regex_engine().analyze(text, list(DEFAULT_SETTINGS.fixed_masks), 0.4)
 
     assert {d.entity_type: d.text for d in detections} == {
         "CREDIT_CARD": "4111 1111 1111 1111",
@@ -89,8 +84,8 @@ def test_pdf_detector_finds_every_financial_type_as_a_pattern_match() -> None:
     assert {d.source for d in detections} == {DetectionSource.PATTERN}
 
 
-def test_pdf_detector_rejects_a_card_number_that_fails_luhn() -> None:
-    detections = PatternDetector().analyze(
+def test_engine_rejects_a_card_number_that_fails_luhn(regex_engine) -> None:
+    detections = regex_engine().analyze(
         "Card 4111 1111 1111 1112", ["CREDIT_CARD"], 0.4
     )
     assert detections == []

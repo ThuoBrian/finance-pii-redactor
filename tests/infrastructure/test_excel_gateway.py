@@ -158,3 +158,34 @@ def test_text_columns_excludes_numeric_and_date_columns_from_a_real_upload():
     )
 
     assert gateway.text_columns(df) == ["Payee"]
+
+
+def test_hyperlink_targets_never_reach_the_output():
+    """Output is rebuilt from values, so a cell's link target is dropped.
+
+    Guards against a future switch to editing the workbook in place, which
+    would silently carry ``mailto:`` targets through.
+    """
+    from openpyxl import Workbook
+
+    source = Workbook()
+    cell = source.active["A2"]
+    source.active["A1"] = "notes"
+    cell.value = "Contact"
+    cell.hyperlink = "mailto:jane.doe@example.org"
+    buffer = BytesIO()
+    source.save(buffer)
+    buffer.seek(0)
+
+    gateway = OpenpyxlExcelGateway()
+    df = gateway.read(buffer)
+    output = gateway.write(df, set(), _crosswalk_df([]))
+
+    workbook = load_workbook(BytesIO(output))
+    assert workbook["Redacted"]["A2"].value == "Contact"
+    assert all(
+        not sheet_cell.hyperlink
+        for sheet in workbook.worksheets
+        for row in sheet.iter_rows()
+        for sheet_cell in row
+    )

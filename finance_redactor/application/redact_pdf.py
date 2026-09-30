@@ -1,19 +1,21 @@
 """PDF pseudonymization / blackout use case.
 
-The PDF flow detects what can be matched *deterministically* and nothing
-more. Via the injected ``pattern_detector`` (see
-``infrastructure/detection/pattern_detector.py``, which never loads a spaCy
-model) that means email addresses and websites by regex, plus curated
-master-list names by exact automaton match. It also blacks out embedded
-images/logos by default.
+The injected ``detector`` is the same spaCy-backed engine Excel and Word use,
+so the PDF flow finds emails, websites, bank/payment details and addresses by
+pattern, curated master-list names by exact match, and names or organizations
+*not* on the master list by spaCy NER. An unlisted name gets a flagged
+``AUTO-`` placeholder in the mapping, never the name itself. The user's
+"words to redact" box still covers codenames, case numbers and anything the
+model misses. Embedded images/logos are blacked out by default, and external
+link targets (URLs, files, other documents) are removed from every page.
 
-What stays out is spaCy NER, which is a statistical guess and behaves badly
-on scanned financial PDFs. So a name that is **not** on the master list is
-still only redacted if the user types it into the "words to redact" box
-(`pdf_view.py`'s Advanced settings), which remains the way to cover project
-codenames, case numbers, and anyone not yet curated. Orchestrates
-the per-page pipeline: extract text (gateway) -> normalize PDF artifacts ->
-find emails/URLs (``pattern_detector``) and the user's words
+PDF originally ran no model at all: spaCy was judged too unreliable on
+scanned financial PDFs. A scanned page has no text layer for the model to
+misread, though, and leaving unlisted names in place leaked them. Model
+false positives are unticked in the review table like any other.
+
+Orchestrates the per-page pipeline: extract text (gateway) -> normalize PDF
+artifacts -> detect (``detector``) and find the user's words
 (`domain/custom_words.find_custom_words`) -> dedupe overlaps (domain rule) ->
 resolve pseudonyms (domain) -> redact (gateway). A single
 :class:`Pseudonymizer` spans the whole document so the same word gets the
@@ -76,13 +78,11 @@ from finance_redactor.domain.pseudonyms import (
 )
 from finance_redactor.domain.rules import dedupe_overlapping
 
-# Fixed, low threshold for the always-on email/URL pass - not user-tunable
-# (there's no UI control for it, matching the "just works" ask). Presidio's
-# own recognizers already validate matches (e.g. EmailRecognizer's TLD check)
-# before assigning a score, so this only needs to be low enough to admit the
-# lower-confidence URL patterns (e.g. schema-less matches score 0.5).
-_PATTERN_THRESHOLD = 0.4
-_PATTERN_ENTITIES = ["EMAIL_ADDRESS", "URL", "PERSON", "ORGANIZATION"]
+# Fixed threshold - not user-tunable (PDF has no threshold widget, matching
+# the "just works" ask). Low enough to admit schema-less URLs (score 0.5) and
+# spaCy names (0.85); Presidio's recognizers validate matches before scoring.
+_THRESHOLD = 0.4
+_ENTITIES = ["EMAIL_ADDRESS", "URL", "PERSON", "ORGANIZATION"]
 
 # Bracketed numbers already present in the source, which look like the
 # ``[001]`` labels this flow writes. Counted, reported, and otherwise left
@@ -98,14 +98,14 @@ class RedactionStyle(str, Enum):
 
 
 class RedactPdfService:
-    """Pseudonymizes (or blacks out) only the user-supplied words in a PDF."""
+    """Pseudonymizes (or blacks out) detected PII and the user's words in a PDF."""
 
     def __init__(
         self,
         open_document: PdfDocumentFactory,
         master_map: Mapping[tuple[str, str], MasterEntry],
         auto_prefixes: Mapping[str, str],
-        pattern_detector: PiiDetector,
+        detector: PiiDetector,
         fuzzy_threshold: float = 0.84,
         custom_words_score: float = 1.0,
         *,
@@ -113,9 +113,9 @@ class RedactPdfService:
     ) -> None:
         """Wire a PDF-opening factory, the pseudonym vocabulary, and a detector.
 
-        ``pattern_detector`` finds emails/URLs and is always supplied by the
-        composition root (see ``infrastructure/detection/pattern_detector.py``) -
-        this is a fixed, always-on capability, not optional or user-tunable.
+        ``detector`` is the composition root's spaCy-backed engine (see
+        ``infrastructure/detection/presidio_detector.py``) - always on, not
+        optional or user-tunable.
         ``fuzzy_threshold`` should normally be ``Settings.fuzzy_match_threshold``,
         passed explicitly by the composition root; the default here only covers
         callers (e.g. tests) that don't care about the fuzzy-suggestion feature.
@@ -129,7 +129,7 @@ class RedactPdfService:
         self._open_document = open_document
         self._master_map = master_map
         self._auto_prefixes = auto_prefixes
-        self._pattern_detector = pattern_detector
+        self._detector = detector
         self._fuzzy_threshold = fuzzy_threshold
         self._custom_words_score = custom_words_score
         self._fixed_masks = fixed_masks
@@ -145,12 +145,13 @@ class RedactPdfService:
     ) -> PdfRedactionResult:
         """Redact ``source`` and return new bytes, findings, page count, crosswalk.
 
-        Emails and URLs are always detected automatically (``pattern_detector``,
-        no toggle). ``custom_words`` is an additional list of words/phrases to
-        redact on every page - matched literally and case-insensitively (see
+        Names, organizations, emails, URLs and masked types are always
+        detected automatically (``detector``, no toggle). ``custom_words`` is an
+        additional list of words/phrases to redact on every page - matched
+        literally and case-insensitively (see
         ``domain/custom_words.find_custom_words``). An empty ``custom_words``
         list just means there's nothing extra to add on top of the automatic
-        email/URL/image detection - this method runs cleanly either way.
+        detection - this method runs cleanly either way.
 
         ``exclude`` is a set of already-normalized terms (see
         ``domain/pseudonyms.normalize``) the operator ticked off in the review
@@ -164,6 +165,9 @@ class RedactPdfService:
             self._master_map, self._auto_prefixes, fuzzy_threshold=self._fuzzy_threshold
         )
         try:
+            # Before redacting: ``apply_redactions`` silently deletes links
+            # that overlap a redaction, which would make this count too low.
+            removed_links = document.remove_external_links()
             findings: list[Finding] = []
             bracketed = 0
             for page_index in range(document.page_count):
@@ -176,10 +180,10 @@ class RedactPdfService:
                 )
                 detections = (
                     [
-                        *self._pattern_detector.analyze(
+                        *self._detector.analyze(
                             normalized.text,
-                            [*_PATTERN_ENTITIES, *self._fixed_masks],
-                            _PATTERN_THRESHOLD,
+                            [*_ENTITIES, *self._fixed_masks],
+                            _THRESHOLD,
                         ),
                         *find_custom_words(
                             normalized.text, custom_words, self._custom_words_score
@@ -256,6 +260,7 @@ class RedactPdfService:
                 page_count=document.page_count,
                 crosswalk=pseudonymizer.crosswalk(),
                 source_bracketed_numbers=bracketed,
+                removed_links=removed_links,
             )
         finally:
             document.close()

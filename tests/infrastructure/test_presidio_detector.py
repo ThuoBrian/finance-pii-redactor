@@ -157,3 +157,60 @@ def test_masked_type_is_a_pattern_match_whatever_its_score(
     detections = engine.analyze("4111 1111 1111 1111", ["CREDIT_CARD"], 0.35)
 
     assert [d.source for d in detections] == [DetectionSource.PATTERN]
+
+
+@pytest.mark.parametrize("entity_type", ["EMAIL_ADDRESS", "URL"])
+def test_email_and_url_are_pattern_matches_whatever_their_score(
+    engine: PresidioEngine, entity_type: str
+) -> None:
+    """Regex-only types must not rank as a model guess in ``dedupe_overlapping``."""
+    engine._analyzer.analyze.return_value = [
+        _result(entity_type=entity_type, start=0, end=16, score=1.0)
+    ]
+
+    detections = engine.analyze("jane@example.com", [entity_type], 0.35)
+
+    assert [d.source for d in detections] == [DetectionSource.PATTERN]
+
+
+# --- The real registry, on a no-op NLP engine (see conftest.py) -------------
+
+_ALL = list(DEFAULT_SETTINGS.supported_entities)
+
+
+def test_real_engine_never_loads_spacy_with_an_injected_nlp_engine(
+    regex_engine,
+) -> None:
+    """Guards the fixture itself: a falsy engine would load the real model."""
+    import sys
+
+    regex_engine()
+    assert not any("en_core_web_lg" in name for name in sys.modules)
+
+
+def test_real_engine_finds_curated_names_emails_urls_and_addresses(
+    regex_engine,
+) -> None:
+    engine = regex_engine(people=["Jane Doe"], orgs=["Care Organisation"])
+    text = (
+        "Jane Doe of Care Organisation, billing@example.org, "
+        "P.O. Box 123-00100, Springfield. See https://example.org/report"
+    )
+
+    found = {(d.entity_type, d.text, d.source) for d in engine.analyze(text, _ALL, 0.4)}
+
+    assert found == {
+        ("PERSON", "Jane Doe", DetectionSource.MASTER_LIST),
+        ("ORGANIZATION", "Care Organisation", DetectionSource.MASTER_LIST),
+        ("EMAIL_ADDRESS", "billing@example.org", DetectionSource.PATTERN),
+        ("URL", "https://example.org/report", DetectionSource.PATTERN),
+        ("ADDRESS", "P.O. Box 123-00100, Springfield", DetectionSource.PATTERN),
+    }
+
+
+def test_real_engine_respects_the_requested_entities(regex_engine) -> None:
+    text = "Email jane@example.com or visit https://example.org"
+
+    detections = regex_engine().analyze(text, ["EMAIL_ADDRESS"], 0.4)
+
+    assert [d.entity_type for d in detections] == ["EMAIL_ADDRESS"]

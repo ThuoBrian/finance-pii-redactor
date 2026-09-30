@@ -88,6 +88,13 @@ class PdfDocument(Protocol):
         """
         ...
 
+    def remove_external_links(self) -> int:
+        """Remove link targets that leave the document; return how many.
+
+        The visible link text stays and goes through normal detection.
+        """
+        ...
+
     def to_bytes(self) -> bytes:
         """Render the redacted document to bytes."""
         ...
@@ -129,6 +136,13 @@ class WordDocument(Protocol):
         """Replace each ``Span`` (offsets into ``block_text(block_index)``) with
         its paired pseudonym, editing the underlying runs in place so
         unaffected text keeps its original formatting.
+        """
+        ...
+
+    def remove_external_links(self) -> int:
+        """Remove link targets that leave the document; return how many.
+
+        The visible link text stays and goes through normal detection.
         """
         ...
 

@@ -57,8 +57,6 @@ are cached with `@st.cache_resource`:
   or pointing at a different folder, rebuilds it. Streamlit only re-checks
   the key on a rerun, never on a timer, so an edit shows up after the next
   widget interaction or page reload.
-- **PDF pattern detector.** Keyed the same way, because the master-list
-  recognizers are baked into it.
 
 ## Outputs and sensitivity
 

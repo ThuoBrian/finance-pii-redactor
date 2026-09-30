@@ -17,6 +17,9 @@ from presidio_analyzer.nlp_engine import NlpEngine, NlpEngineProvider
 from finance_redactor.config import Settings
 from finance_redactor.domain.entities import DetectionSource, PiiDetection, Span
 from finance_redactor.domain.rules import classify_source, dedupe_overlapping
+from finance_redactor.infrastructure.detection.address_recognizers import (
+    build_address_recognizers,
+)
 from finance_redactor.infrastructure.detection.custom_recognizer import (
     CustomNameRecognizer,
 )
@@ -24,6 +27,11 @@ from finance_redactor.infrastructure.detection.financial_recognizers import (
     build_financial_recognizers,
 )
 from finance_redactor.infrastructure.detection.recasing import recase_uppercase
+
+# Presidio finds these by regex alone, never via spaCy, so they are pattern
+# matches whatever their score. Without this, an email (score 1.0) would be
+# labelled a model guess and rank below a typed word in ``dedupe_overlapping``.
+_PATTERN_ENTITIES = frozenset({"EMAIL_ADDRESS", "URL"})
 
 
 class PresidioEngine:
@@ -49,8 +57,12 @@ class PresidioEngine:
             supported_languages=[settings.language],
         )
         # Card numbers and IBANs are already in Presidio's default registry;
-        # only the labelled Kenyan formats need adding.
-        for recognizer in [*recognizers, *build_financial_recognizers()]:
+        # only the labelled Kenyan formats and addresses need adding.
+        for recognizer in [
+            *recognizers,
+            *build_financial_recognizers(),
+            *build_address_recognizers(),
+        ]:
             self._analyzer.registry.add_recognizer(recognizer)
 
     @staticmethod
@@ -125,12 +137,13 @@ class PresidioEngine:
             span=Span(result.start, result.end),
             score=result.score,
             text=text[result.start : result.end],
-            # Masked types are pattern matches by definition. Their validated
-            # score (1.0 for a Luhn-valid card) would otherwise classify them as
-            # a spaCy guess, or as a master-list hit.
+            # Masked types, emails and URLs are pattern matches by definition.
+            # Their validated score (1.0 for a Luhn-valid card) would otherwise
+            # classify them as a spaCy guess, or as a master-list hit.
             source=(
                 DetectionSource.PATTERN
                 if result.entity_type in self._settings.fixed_masks
+                or result.entity_type in _PATTERN_ENTITIES
                 else classify_source(result.score, self._settings.custom_match_score)
             ),
         )

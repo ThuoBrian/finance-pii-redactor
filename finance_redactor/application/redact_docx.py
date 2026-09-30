@@ -131,11 +131,13 @@ class RedactDocxService:
                     replacements.append((detection.span, pseudonym))
                 document.replace_block_text(block_index, replacements)
 
+            removed_links = document.remove_external_links()
             return DocxRedactionResult(
                 data=document.to_bytes(),
                 findings=findings,
                 block_count=document.block_count,
                 crosswalk=pseudonymizer.crosswalk(),
+                removed_links=removed_links,
             )
         finally:
             document.close()

@@ -142,11 +142,12 @@ _DEFAULT_AUTO_PREFIXES: Mapping[str, str] = MappingProxyType(
     }
 )
 
-# Bank and payment details are replaced with a fixed mask, not a pseudonym:
-# there is nothing to decode, and they never enter the crosswalk or the PDF
-# mapping file. Kept short because the PDF gateway draws the replacement
-# inside the original text's box. Detection lives in Presidio's card/IBAN
-# recognizers and in infrastructure/detection/financial_recognizers.py.
+# Bank and payment details, and postal/street addresses, are replaced with a
+# fixed mask, not a pseudonym: there is nothing to decode, and they never enter
+# the crosswalk or the PDF mapping file. Kept short because the PDF gateway
+# draws the replacement inside the original text's box. Detection lives in
+# Presidio's card/IBAN recognizers and in infrastructure/detection/
+# financial_recognizers.py and address_recognizers.py.
 _DEFAULT_FIXED_MASKS: Mapping[str, str] = MappingProxyType(
     {
         "CREDIT_CARD": "[CARD]",
@@ -154,6 +155,7 @@ _DEFAULT_FIXED_MASKS: Mapping[str, str] = MappingProxyType(
         "KE_BANK_ACCOUNT": "[ACCOUNT]",
         "MPESA_NUMBER": "[MPESA]",
         "SWIFT_CODE": "[SWIFT]",
+        "ADDRESS": "[ADDRESS]",
     }
 )
 
@@ -178,7 +180,7 @@ class Settings:
     language: str = "en"
     spacy_model: str = "en_core_web_lg"
     # Names, organizations, emails and websites, plus the masked bank/payment
-    # types in `fixed_masks` - see the note on `_DEFAULT_AUTO_PREFIXES` above
+    # and address types in `fixed_masks` - see the note on `_DEFAULT_AUTO_PREFIXES` above
     # for why other non-name types (e.g. DATE_TIME) must never be added here.
     supported_entities: tuple[str, ...] = (
         "PERSON",

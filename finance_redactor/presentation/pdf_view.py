@@ -2,20 +2,16 @@
 
 Thin presentation: handles session state and widgets, delegates the whole
 pseudonymize pipeline to :class:`RedactPdfService`, and renders the summary
-via ``presenters``. PDF detects everything that can be matched
-deterministically - emails and websites by regex, curated master-list names
-by exact automaton match (see
-``infrastructure/detection/pattern_detector.py``) - and by default blacks out
-embedded images/logos. What stays removed is the spaCy model, whose
-statistical guessing is unreliable on scanned financial PDFs, so the words
-box below covers anything not yet on the master list (a new name, a
-codename, a case number), the same role it plays in Word.
+via ``presenters``. PDF uses the same spaCy-backed engine as Excel and Word:
+names and organizations (curated or not), emails, websites, bank/payment
+details and addresses. It also blacks out embedded images/logos by default
+and removes external link targets. The words box below covers anything the
+model misses (a codename, a case number), the same role it plays in Word.
 
-This flow still has no entity multiselect and no confidence threshold:
-neither applies to exact matching. It *does* show the master-list status
-panel, because the master list now drives detection here too - a PDF
-redacted against an empty or unsynced list would silently leave curated
-names in place, and that panel is what makes it visible.
+This flow has no entity multiselect and no confidence threshold: PDF runs
+with fixed settings, and false positives are unticked in the review table.
+It shows the master-list status panel, because a PDF redacted against an
+empty or unsynced list would leave curated names with flagged IDs only.
 """
 
 from __future__ import annotations
@@ -78,6 +74,7 @@ def run_pdf_flow(
             "pdf_pages",
             "pdf_crosswalk",
             "pdf_bracketed",
+            "pdf_links",
             "pdf_all_findings",
             "pdf_excluded_applied",
         ),
@@ -165,6 +162,7 @@ def run_pdf_flow(
         st.session_state.pdf_pages = result.page_count
         st.session_state.pdf_crosswalk = result.crosswalk
         st.session_state.pdf_bracketed = result.source_bracketed_numbers
+        st.session_state.pdf_links = result.removed_links
         # The unfiltered detections, kept as the deselect editor's stable row
         # list. Never overwritten by a re-run below, so a term can be unticked
         # and re-ticked; refiltering it would take the tick box away with the
@@ -188,10 +186,11 @@ def run_pdf_flow(
     st.subheader("3. Review the results")
 
     images_requested = st.session_state.get("pdf_redact_images", True)
-    if n_entities == 0 and not images_requested:
+    removed_links = st.session_state.get("pdf_links", 0)
+    if n_entities == 0 and not images_requested and not removed_links:
         st.info(
-            "No emails, websites, or matching words/phrases were found across "
-            f"{total_pages} page(s)."
+            "No names, emails, websites, addresses, or matching words/phrases "
+            f"were found across {total_pages} page(s)."
         )
         st.stop()
 
@@ -200,9 +199,9 @@ def run_pdf_flow(
         # Nothing text-based to report, but images may still have been
         # blacked out below (image redactions aren't tracked as findings).
         st.info(
-            "No emails, websites, or matching words/phrases were found across "
-            f"{total_pages} page(s). Any images on the page(s) were still "
-            "blacked out in the downloaded PDF."
+            "No names, emails, websites, addresses, or matching words/phrases "
+            f"were found across {total_pages} page(s). Any images and link "
+            "targets were still removed in the downloaded PDF."
         )
     elif style_value == RedactionStyle.BLACKOUT.value:
         st.success(
@@ -236,9 +235,8 @@ def run_pdf_flow(
         excluded=st.session_state.get("pdf_excluded_applied", frozenset()),
     )
     if excluded != st.session_state.get("pdf_excluded_applied", frozenset()):
-        # Re-redacting is the whole cost of a tick change here, and it is
-        # cheap: the PDF detector never loads spaCy (see
-        # infrastructure/detection/pattern_detector.py's _NullNlpEngine).
+        # Re-redacting is the whole cost of a tick change here. The spaCy
+        # model is already loaded and cached, so this is one detection pass.
         uploaded.seek(0)
         with st.spinner("Rebuilding the file without those terms..."):
             rerun = pdf_service.execute(
@@ -282,8 +280,13 @@ def run_pdf_flow(
                 "above to decode it."
             )
         caption += (
-            " Bank and payment details show as a fixed mask such as [ACCOUNT] "
-            "or [CARD], with nothing to decode."
+            " Bank and payment details and addresses show as a fixed mask such "
+            "as [ACCOUNT] or [ADDRESS], with nothing to decode."
+        )
+    if removed_links:
+        caption += (
+            f" {removed_links} link target(s) (websites, email addresses, "
+            "files) were removed; the link text stays, redacted where it matched."
         )
     st.download_button(
         label=label,

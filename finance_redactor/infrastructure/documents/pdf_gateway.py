@@ -16,6 +16,8 @@ import fitz  # PyMuPDF
 from finance_redactor.domain.entities import IMAGE_REDACTION_SENTINEL
 from finance_redactor.domain.errors import EncryptedPdfError
 
+_EXTERNAL_LINK_KINDS = frozenset({fitz.LINK_URI, fitz.LINK_LAUNCH, fitz.LINK_GOTOR})
+
 # Common legal suffixes and punctuation variants a search might miss.
 _ORG_SUFFIX_RE = re.compile(
     r"\s*(?:\b(?:Ltd\.?|Limited|Inc\.?|Incorporated|LLC|PLC|Corp\.?|Corporation|Co\.?|Company)\b)?\s*[.,;]*\s*$",
@@ -198,6 +200,21 @@ class PyMuPdfDocument:
                     fill=(0, 0, 0) if blackout else (1, 1, 1),
                 )
         page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+
+    def remove_external_links(self) -> int:
+        """Delete every link that leaves the document; return how many.
+
+        URLs, file launches and links into other PDFs go, since the target can
+        name a person (``mailto:``) or a private path. Jumps to another page of
+        this same document stay. The visible text is left for detection.
+        """
+        removed = 0
+        for page in self._doc:
+            for link in page.get_links():
+                if link["kind"] in _EXTERNAL_LINK_KINDS:
+                    page.delete_link(link)
+                    removed += 1
+        return removed
 
     def to_bytes(self) -> bytes:
         """Render the redacted document to bytes."""

@@ -28,9 +28,8 @@ def classify_source(score: float, custom_match_score: float) -> DetectionSource:
 
 # Overlap priority, low to high: a master-list-sourced detection (an exact
 # match against the curated vocabulary) always wins, since a curated match is
-# the strongest signal. A pattern match (a deterministic regex, e.g. an email
-# or URL - see domain/custom_words.py's sibling infrastructure/detection/
-# pattern_detector.py) ranks next, since it's just as deterministic as a
+# the strongest signal. A pattern match (a deterministic regex, e.g. an email,
+# URL or address) ranks next, since it's just as deterministic as a
 # curated lookup, only uncurated. A custom word (typed in for this run only)
 # ranks above a plain model guess, since it's still an explicit, exact match,
 # just not curated or pattern-validated.
@@ -53,8 +52,8 @@ def dedupe_overlapping(detections: Iterable[PiiDetection]) -> list[PiiDetection]
     Springfield"`` as one entity, which contains and outspans the master-list
     match ``"Jane Doe"``) would win on length alone, and the name would
     resolve to a flagged auto-id instead of its curated one. A pattern match
-    (see ``infrastructure/detection/pattern_detector.py`` - an email or URL)
-    ranks next, equally deterministic but not curated; a custom word (see
+    (an email, URL, bank/payment detail or address) ranks next, equally
+    deterministic but not curated; a custom word (see
     ``domain/custom_words.py``) in turn beats an overlapping model guess,
     since it's still an explicit, exact match the user typed for this run,
     just not curated or pattern-validated. Within the same source, leftmost

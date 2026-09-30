@@ -53,6 +53,7 @@ def run_docx_flow(
             "docx_findings",
             "docx_blocks",
             "docx_crosswalk",
+            "docx_links",
             "docx_all_findings",
             "docx_excluded_applied",
         ),
@@ -104,6 +105,7 @@ def run_docx_flow(
         st.session_state.docx_findings = result.findings
         st.session_state.docx_blocks = result.block_count
         st.session_state.docx_crosswalk = result.crosswalk
+        st.session_state.docx_links = result.removed_links
         # Unfiltered baseline for the deselect editor - see pdf_view for why
         # this must not be refiltered on a re-run.
         st.session_state.docx_all_findings = result.findings
@@ -121,11 +123,20 @@ def run_docx_flow(
     show_step(steps, 3)
     st.subheader("3. Review the results")
 
-    if n_entities == 0:
+    removed_links = st.session_state.get("docx_links", 0)
+    if n_entities == 0 and not removed_links:
         st.info("No PII was detected in this document. The file is already clean.")
         st.stop()
 
-    st.success(f"Found {n_entities} PII instance(s) in this document.")
+    if n_entities == 0:
+        # The original still carries the link targets, so it is not clean.
+        st.info(
+            "No PII was detected in the text, but the document had "
+            f"{removed_links} hyperlink target(s). Download the copy below, "
+            "which has them removed."
+        )
+    else:
+        st.success(f"Found {n_entities} PII instance(s) in this document.")
 
     base_name = sanitize_base_name(uploaded.name)
     render_crosswalk_section(
@@ -174,9 +185,15 @@ def run_docx_flow(
         type="primary",
         width="stretch",
     )
-    st.caption(
+    caption = (
         "Detected names and organizations are replaced with their pseudonyms "
         "(e.g. STF-10010) directly in the document text. Bank and payment "
-        "details show as a fixed mask such as [ACCOUNT] or [CARD], with "
-        "nothing to decode."
+        "details and addresses show as a fixed mask such as [ACCOUNT] or "
+        "[ADDRESS], with nothing to decode."
     )
+    if removed_links:
+        caption += (
+            f" {removed_links} hyperlink target(s) were removed; the link text "
+            "stays, pseudonymized where it matched."
+        )
+    st.caption(caption)

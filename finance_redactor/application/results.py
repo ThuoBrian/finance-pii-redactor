@@ -53,6 +53,9 @@ class PdfRedactionResult:
     references, line items) a reader cannot always tell a redaction from
     original content. The tool cannot fix that without changing the label
     format, so it reports it and leaves the judgement to the operator.
+
+    ``removed_links`` counts link targets (URLs, files, other documents)
+    deleted from the output; their visible text went through detection.
     """
 
     data: bytes
@@ -60,6 +63,7 @@ class PdfRedactionResult:
     page_count: int
     crosswalk: list[Assignment]
     source_bracketed_numbers: int = 0
+    removed_links: int = 0
 
     @property
     def entity_count(self) -> int:
@@ -73,12 +77,14 @@ class DocxRedactionResult:
 
     ``findings`` reuses :class:`Finding`, whose ``page`` field holds the
     paragraph/block ordinal here rather than a PDF page number.
+    ``removed_links`` counts hyperlink targets stripped from the output.
     """
 
     data: bytes
     findings: list[Finding]
     block_count: int
     crosswalk: list[Assignment]
+    removed_links: int = 0
 
     @property
     def entity_count(self) -> int:

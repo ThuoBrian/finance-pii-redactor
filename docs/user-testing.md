@@ -87,10 +87,12 @@ what happened instead — then file it.
   typed in.
 - [ ] A name/organization **that is on your test master list** redacts with
   nothing typed into "Additional words/phrases to redact".
-- [ ] A name that is **not** on the master list does **not** redact unless
-  typed into that box — expected (see
-  [troubleshooting.md](troubleshooting.md#pdf-only-auto-detects-what-can-be-matched-exactly---no-spacy-guessing)),
-  not a bug to report.
+- [ ] A name that is **not** on the master list still redacts, with a flagged
+  row in the mapping (see
+  [troubleshooting.md](troubleshooting.md#pdf-detects-names-the-same-way-excel-and-word-do)).
+- [ ] A P.O. box or street address becomes `[ADDRESS]`, with no mapping row.
+- [ ] A link in the PDF (for example a `mailto:` behind someone's name) no
+  longer opens anything in the downloaded file.
 - [ ] The master-list summary appears in PDF's **Advanced settings**, showing
   the same row counts as Excel and Word. If it shows 0 names, curated names
   will silently not be redacted — that is the check that catches it.

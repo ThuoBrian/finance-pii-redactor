@@ -5,6 +5,11 @@ exposes only the operations the use case needs: enumerating paragraph
 "blocks" (body, table cells, headers/footers), reading a block's flattened
 text, and splicing pseudonyms back into the underlying runs so unaffected
 text keeps its original formatting.
+
+Hyperlinks are stripped on open, before any text is read (see
+``_strip_hyperlinks``): the target could be ``mailto:`` a person, and
+python-docx's ``paragraph.runs`` skips the runs inside ``<w:hyperlink>``, so
+without this a link's *visible* text was never scanned either.
 """
 
 from __future__ import annotations
@@ -14,6 +19,10 @@ from typing import cast
 
 from docx import Document as open_docx
 from docx.document import Document
+from docx.opc.constants import RELATIONSHIP_TYPE as RT
+from docx.opc.part import XmlPart
+from docx.oxml.ns import qn
+from docx.oxml.xmlchemy import BaseOxmlElement
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 
@@ -29,6 +38,117 @@ def _table_paragraphs(table: Table) -> list[Paragraph]:
             for nested_table in cell.tables:
                 paragraphs.extend(_table_paragraphs(nested_table))
     return paragraphs
+
+
+_R_ID = qn("r:id")
+_HYPERLINK = qn("w:hyperlink")
+_FLD_SIMPLE = qn("w:fldSimple")
+_INSTR = qn("w:instr")
+_INSTR_TEXT = qn("w:instrText")
+_FLD_CHAR = qn("w:fldChar")
+_FLD_CHAR_TYPE = qn("w:fldCharType")
+
+
+def _unwrap(element: BaseOxmlElement) -> None:
+    """Replace ``element`` with its own children, in place."""
+    parent = element.getparent()
+    if parent is None:
+        return
+    index = parent.index(element)
+    for offset, child in enumerate(list(element)):
+        parent.insert(index + offset, child)
+    parent.remove(element)
+
+
+def _fld_char_type(run: BaseOxmlElement) -> str | None:
+    fld_char = run.find(_FLD_CHAR)
+    return None if fld_char is None else fld_char.get(_FLD_CHAR_TYPE)
+
+
+def _remove_complex_field_code(instr_text: BaseOxmlElement) -> None:
+    """Drop a ``HYPERLINK`` field's code runs and markers, keeping its result.
+
+    A complex field is sibling runs: ``begin``, code (``instrText``),
+    ``separate``, the visible result, ``end``. The result runs stay as plain
+    text. If the layout isn't the expected one, blank the code instead, which
+    still removes the target.
+    """
+    run = instr_text.getparent()
+    parent = None if run is None else run.getparent()
+    if run is None or parent is None:
+        instr_text.text = ""
+        return
+    siblings = list(parent)
+    index = siblings.index(run)
+    begin = next(
+        (i for i in range(index, -1, -1) if _fld_char_type(siblings[i]) == "begin"),
+        None,
+    )
+    separate = next(
+        (
+            i
+            for i in range(index, len(siblings))
+            if _fld_char_type(siblings[i]) in {"separate", "end"}
+        ),
+        None,
+    )
+    if begin is None or separate is None:
+        instr_text.text = ""
+        return
+    end = next(
+        (
+            i
+            for i in range(separate, len(siblings))
+            if _fld_char_type(siblings[i]) == "end"
+        ),
+        None,
+    )
+    doomed = siblings[begin : separate + 1]
+    if end is not None and end != separate:
+        doomed.append(siblings[end])
+    for element in doomed:
+        parent.remove(element)
+
+
+def _strip_part_hyperlinks(part: XmlPart) -> int:
+    """Strip every hyperlink from one XML part; return external targets removed."""
+    external = {r_id for r_id, rel in part.rels.items() if rel.reltype == RT.HYPERLINK}
+    root = part.element
+    removed = 0
+    # Internal (anchor) links are unwrapped too: their runs are just as
+    # invisible to ``paragraph.runs``.
+    for element in list(root.iter(_HYPERLINK)):
+        if element.get(_R_ID) in external:
+            removed += 1
+        _unwrap(element)
+    # Anything else pointing at a hyperlink relationship (a clickable image's
+    # ``a:hlinkClick``, say) goes; a dangling r:id would corrupt the file.
+    for element in list(root.iter()):
+        if element.get(_R_ID) in external:
+            removed += 1
+            parent = element.getparent()
+            if parent is not None:
+                parent.remove(element)
+    for r_id in external:
+        part.rels.pop(r_id)
+    for element in list(root.iter(_FLD_SIMPLE)):
+        if "HYPERLINK" in (element.get(_INSTR) or "").upper():
+            removed += 1
+            _unwrap(element)
+    for element in list(root.iter(_INSTR_TEXT)):
+        if "HYPERLINK" in (element.text or "").upper():
+            removed += 1
+            _remove_complex_field_code(element)
+    return removed
+
+
+def _strip_hyperlinks(document: Document) -> int:
+    """Strip hyperlinks from every XML part (body, headers, footers, notes)."""
+    return sum(
+        _strip_part_hyperlinks(part)
+        for part in document.part.package.iter_parts()
+        if isinstance(part, XmlPart)
+    )
 
 
 def _collect_paragraphs(document: Document) -> list[Paragraph]:
@@ -63,8 +183,12 @@ class PythonDocxDocument:
     """A single open Word document being pseudonymized paragraph by paragraph."""
 
     def __init__(self, document: Document) -> None:
-        """Wrap an already-open python-docx ``Document`` and index its blocks."""
+        """Wrap an already-open python-docx ``Document`` and index its blocks.
+
+        Hyperlinks are stripped first, so link text is part of the blocks.
+        """
         self._document = document
+        self._removed_links = _strip_hyperlinks(document)
         self._paragraphs = _collect_paragraphs(document)
 
     @classmethod
@@ -132,6 +256,10 @@ class PythonDocxDocument:
         for run, text in zip(runs, texts):
             if run.text != text:
                 run.text = text
+
+    def remove_external_links(self) -> int:
+        """Return how many link targets were stripped (done on open)."""
+        return self._removed_links
 
     def to_bytes(self) -> bytes:
         """Render the pseudonymized document to bytes."""

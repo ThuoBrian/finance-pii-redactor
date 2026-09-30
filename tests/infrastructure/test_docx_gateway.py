@@ -117,3 +117,118 @@ def test_to_bytes_round_trips_replacements():
     reopened = PythonDocxDocument.open(gateway.to_bytes())
     assert "STF-99" in reopened.block_text(0)
     assert "John" not in reopened.block_text(0)
+
+
+# --- Hyperlinks ---------------------------------------------------------------
+
+_TARGET = "mailto:jane.doe@example.org"
+
+
+def _add_hyperlink(paragraph, text: str, target: str = _TARGET) -> None:
+    """Append a real external ``<w:hyperlink>`` (python-docx has no API for it)."""
+    from docx.opc.constants import RELATIONSHIP_TYPE as RT
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    r_id = paragraph.part.relate_to(target, RT.HYPERLINK, is_external=True)
+    link = OxmlElement("w:hyperlink")
+    link.set(qn("r:id"), r_id)
+    run = OxmlElement("w:r")
+    text_el = OxmlElement("w:t")
+    text_el.text = text
+    run.append(text_el)
+    link.append(run)
+    paragraph._p.append(link)
+
+
+def _add_field_run(paragraph, *, fld_char: str | None = None, instr: str | None = None):
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    run = OxmlElement("w:r")
+    if fld_char:
+        element = OxmlElement("w:fldChar")
+        element.set(qn("w:fldCharType"), fld_char)
+        run.append(element)
+    if instr:
+        element = OxmlElement("w:instrText")
+        element.text = instr
+        run.append(element)
+    paragraph._p.append(run)
+
+
+def test_hyperlink_text_is_scanned_and_its_target_is_removed():
+    """Regression: ``paragraph.runs`` skipped link runs, so the text leaked too."""
+
+    def build(document):
+        paragraph = document.add_paragraph("Contact ")
+        _add_hyperlink(paragraph, "Jane Doe")
+
+    gateway = PythonDocxDocument.open(_build_docx(build))
+
+    assert gateway.block_text(0) == "Contact Jane Doe"
+    assert gateway.remove_external_links() == 1
+    gateway.replace_block_text(0, [(Span(8, 16), "STF-10010")])
+    output = gateway.to_bytes()
+    assert b"mailto:" not in output
+    reopened = Document(BytesIO(output))
+    assert reopened.paragraphs[0].text == "Contact STF-10010"
+    assert all("hyperlink" not in rel.reltype for rel in reopened.part.rels.values())
+
+
+def test_hyperlink_in_a_header_is_removed():
+    def build(document):
+        _add_hyperlink(document.sections[0].header.paragraphs[0], "Jane Doe")
+
+    gateway = PythonDocxDocument.open(_build_docx(build))
+
+    assert gateway.remove_external_links() == 1
+    assert "Jane Doe" in [gateway.block_text(i) for i in range(gateway.block_count)]
+    assert b"mailto:" not in gateway.to_bytes()
+
+
+def test_hyperlink_field_code_is_removed_and_its_result_kept():
+    def build(document):
+        paragraph = document.add_paragraph("See ")
+        _add_field_run(paragraph, fld_char="begin")
+        _add_field_run(paragraph, instr=f' HYPERLINK "{_TARGET}" ')
+        _add_field_run(paragraph, fld_char="separate")
+        paragraph.add_run("Jane Doe")
+        _add_field_run(paragraph, fld_char="end")
+
+    gateway = PythonDocxDocument.open(_build_docx(build))
+
+    assert gateway.remove_external_links() == 1
+    assert gateway.block_text(0) == "See Jane Doe"
+    output = gateway.to_bytes()
+    assert b"mailto:" not in output
+    assert b"fldChar" not in output
+
+
+def test_simple_hyperlink_field_is_unwrapped():
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    def build(document):
+        paragraph = document.add_paragraph("See ")
+        field = OxmlElement("w:fldSimple")
+        field.set(qn("w:instr"), f' HYPERLINK "{_TARGET}" ')
+        run = OxmlElement("w:r")
+        text_el = OxmlElement("w:t")
+        text_el.text = "Jane Doe"
+        run.append(text_el)
+        field.append(run)
+        paragraph._p.append(field)
+
+    gateway = PythonDocxDocument.open(_build_docx(build))
+
+    assert gateway.remove_external_links() == 1
+    assert gateway.block_text(0) == "See Jane Doe"
+    assert b"mailto:" not in gateway.to_bytes()
+
+
+def test_document_without_links_reports_zero():
+    gateway = PythonDocxDocument.open(
+        _build_docx(lambda d: d.add_paragraph("No links here."))
+    )
+    assert gateway.remove_external_links() == 0

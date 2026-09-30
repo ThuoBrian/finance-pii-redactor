@@ -1,11 +1,10 @@
 """Tests for the PDF pseudonymization / blackout use case.
 
 Framework-free: a fake :class:`PdfDocument` stands in for PyMuPDF and a fake
-:class:`PiiDetector` stands in for the real spaCy-free ``PatternDetector``,
-so these tests run without any heavy dependency. Most tests drive the
-service purely through the ``custom_words`` list (the fake pattern detector
-finds nothing by default); a few specifically exercise the pattern-detector
-merge.
+:class:`PiiDetector` stands in for the spaCy-backed ``PresidioEngine``, so
+these tests run without any heavy dependency. Most tests drive the service
+purely through the ``custom_words`` list (the fake detector finds nothing by
+default); a few specifically exercise the detector merge.
 """
 
 from __future__ import annotations
@@ -27,6 +26,8 @@ class FakePdfDocument:
         """Create a fake document with the given page texts and image rectangles."""
         self._pages = pages
         self._image_rects = image_rects or {}
+        self.links = 0
+        self.links_removed_before_render = False
         self.redactions_by_page: dict[int, list[tuple[str, str]]] = {}
         self.blackout_by_page: dict[int, bool] = {}
         self.closed = False
@@ -48,8 +49,14 @@ class FakePdfDocument:
             tuple(float(c) for c in r) for r in self._image_rects.get(page_index, [])
         ]
 
+    def remove_external_links(self) -> int:
+        """Report the canned link count and remember it was called."""
+        self.links_removed_before_render = True
+        return self.links
+
     def to_bytes(self) -> bytes:
         """Render the document to bytes (here, the joined page texts)."""
+        assert self.links_removed_before_render
         return b"\n---PAGE---\n".join(p.encode("utf-8") for p in self._pages)
 
     def close(self) -> None:
@@ -95,12 +102,12 @@ class FakePdfDocument:
         return rects
 
 
-class FakePatternDetector:
+class FakeDetector:
     """A ``PiiDetector`` double that returns a fixed, canned list of matches.
 
-    Real production code always hits the real ``PatternDetector`` for
-    emails/URLs; tests that don't care about that merge use the default
-    (finds nothing), keeping their assertions focused on custom words alone.
+    Production uses the real ``PresidioEngine``; tests that don't care about
+    detection use the default (finds nothing), keeping their assertions
+    focused on custom words alone.
     """
 
     def __init__(self, detections: list[PiiDetection] | None = None) -> None:
@@ -123,14 +130,20 @@ def _document_factory(source: object) -> FakePdfDocument:
 
 
 def _service(
-    pattern_detector: FakePatternDetector | None = None,
+    detector: FakeDetector | None = None,
     master_map: dict | None = None,
+    auto_prefixes: dict | None = None,
 ) -> RedactPdfService:
     return RedactPdfService(
         open_document=_document_factory,
         master_map=master_map or {},
-        auto_prefixes={"CUSTOM": "CST", "EMAIL_ADDRESS": "EML", "URL": "URL"},
-        pattern_detector=pattern_detector or FakePatternDetector(),
+        auto_prefixes={
+            "CUSTOM": "CST",
+            "EMAIL_ADDRESS": "EML",
+            "URL": "URL",
+            **(auto_prefixes or {}),
+        },
+        detector=detector or FakeDetector(),
         fixed_masks=DEFAULT_SETTINGS.fixed_masks,
     )
 
@@ -269,8 +282,8 @@ def test_pseudonymize_mode_can_redact_images_too() -> None:
     assert doc.blackout_by_page[0] is False
 
 
-def test_pattern_detector_matches_are_merged_with_custom_words() -> None:
-    """Emails/URLs from the pattern detector are redacted alongside custom words.
+def test_detector_matches_are_merged_with_custom_words() -> None:
+    """Emails/URLs from the detector are redacted alongside custom words.
 
     Both sources contribute detections on the same page; each keeps its own
     ``DetectionSource`` and resolves to its own pseudonym prefix.
@@ -280,7 +293,7 @@ def test_pattern_detector_matches_are_merged_with_custom_words() -> None:
         text.index("jane@example.com"),
         text.index("jane@example.com") + len("jane@example.com"),
     )
-    detector = FakePatternDetector(
+    detector = FakeDetector(
         [
             PiiDetection(
                 entity_type="EMAIL_ADDRESS",
@@ -352,7 +365,7 @@ def test_curated_name_is_redacted_without_being_typed_in() -> None:
             "STF-10010", "Staff", internal_id="10010"
         )
     }
-    detector = FakePatternDetector(
+    detector = FakeDetector(
         [
             PiiDetection(
                 entity_type="PERSON",
@@ -365,7 +378,7 @@ def test_curated_name_is_redacted_without_being_typed_in() -> None:
     )
     doc = FakePdfDocument(["Paid to Jane Doe."])
 
-    result = _service(pattern_detector=detector, master_map=master).execute(doc, [])
+    result = _service(detector=detector, master_map=master).execute(doc, [])
 
     assert result.entity_count == 1
     assert doc.redactions_by_page[0][0][1] == "[001]"
@@ -381,8 +394,8 @@ def test_person_and_organization_are_requested_from_the_detector() -> None:
     is absent from the requested list, so this is the wiring that makes
     master-list detection reachable at all in the PDF flow.
     """
-    detector = FakePatternDetector([])
-    _service(pattern_detector=detector).execute(FakePdfDocument(["text"]), [])
+    detector = FakeDetector([])
+    _service(detector=detector).execute(FakePdfDocument(["text"]), [])
 
     assert "PERSON" in detector.requested_entities
     assert "ORGANIZATION" in detector.requested_entities
@@ -461,7 +474,7 @@ def test_bank_detail_is_masked_without_claiming_a_label() -> None:
     )
     doc = FakePdfDocument([text])
 
-    result = _service(FakePatternDetector([account])).execute(doc, ["John", "Mary"])
+    result = _service(FakeDetector([account])).execute(doc, ["John", "Mary"])
 
     assert ("0123456789", "[ACCOUNT]") in doc.redactions_by_page[0]
     assert [(a.original_name, a.label) for a in result.crosswalk] == [
@@ -471,7 +484,63 @@ def test_bank_detail_is_masked_without_claiming_a_label() -> None:
 
 
 def test_financial_types_are_requested_from_the_detector() -> None:
-    detector = FakePatternDetector()
+    detector = FakeDetector()
     _service(detector).execute(FakePdfDocument(["anything"]), [])
 
     assert set(DEFAULT_SETTINGS.fixed_masks) <= set(detector.requested_entities)
+
+
+def test_unlisted_name_from_the_model_is_redacted_with_a_flagged_placeholder() -> None:
+    """A spaCy guess on a name that isn't curated is still redacted.
+
+    It gets a label in the document and a flagged ``AUTO`` row with no
+    Internal ID, so the name is never decodable from the mapping alone.
+    """
+    text = "Advance paid to Someone Uncurated."
+    name = PiiDetection(
+        entity_type="PERSON",
+        span=Span(text.index("Someone"), text.index("Someone") + 17),
+        score=0.85,
+        text="Someone Uncurated",
+        source=DetectionSource.MODEL,
+    )
+    doc = FakePdfDocument([text])
+
+    result = _service(FakeDetector([name]), auto_prefixes={"PERSON": "PSN"}).execute(
+        doc, []
+    )
+
+    assert doc.redactions_by_page[0] == [("Someone Uncurated", "[001]")]
+    [row] = result.crosswalk
+    assert row.auto is True
+    assert row.pseudonym.startswith("PSN-AUTO-")
+    assert not row.internal_id
+    assert result.findings[0].source == DetectionSource.MODEL
+
+
+def test_address_is_masked_without_a_label_or_mapping_row() -> None:
+    text = "Deliver to P.O. Box 123-00100, Springfield"
+    address = PiiDetection(
+        entity_type="ADDRESS",
+        span=Span(text.index("P.O."), len(text)),
+        score=0.85,
+        text="P.O. Box 123-00100, Springfield",
+        source=DetectionSource.PATTERN,
+    )
+    doc = FakePdfDocument([text])
+
+    result = _service(FakeDetector([address])).execute(doc, [])
+
+    assert doc.redactions_by_page[0] == [
+        ("P.O. Box 123-00100, Springfield", "[ADDRESS]")
+    ]
+    assert result.crosswalk == []
+
+
+def test_link_targets_are_removed_and_counted() -> None:
+    doc = FakePdfDocument(["See the attached report."])
+    doc.links = 2
+
+    result = _service().execute(doc, [])
+
+    assert result.removed_links == 2
