@@ -11,16 +11,17 @@ machines that hold real, Confidential data.
 
 ## Commands
 
-Run through `uv`; recipes live in the `justfile`.
+Recipes live in the `justfile` and call `uv` themselves. Use a system `just`
+(`winget install Casey.Just`); without one, prefix each command with `uv run`.
 
 ```bash
-uv run just setup      # install runtime + dev dependencies from uv.lock
-uv run just check      # everything CI runs: lint, format check, mypy, tests, codespell
-uv run just test       # pytest with the 80% coverage gate
-uv run just run        # start the app on 127.0.0.1
+just setup      # install runtime + dev dependencies from uv.lock
+just check      # everything CI runs: lint, format check, mypy, tests, codespell
+just test       # pytest with the 80% coverage gate
+just run        # start the app on 127.0.0.1
 ```
 
-Run `uv run just check` before calling a change done.
+Run `just check` before calling a change done.
 
 ## Rules
 

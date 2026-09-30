@@ -8,6 +8,14 @@ the `version` field in `pyproject.toml`.
 
 ### Added
 
+- **The Windows installer adds a "Finance PII Redactor" shortcut** to the
+  Desktop and Start menu, so reopening the tool is a double-click instead of
+  finding `run.bat`. Updating refreshes it. If a managed machine blocks
+  shortcuts, the install carries on and `run.bat` still works.
+- Developer docs use a system `just` (`winget install Casey.Just`), so it's
+  `just check` rather than `uv run just check`. The `rust-just` dev
+  dependency stays as a fallback and is what CI uses.
+
 - **PDF detects names that aren't on the master list.** The PDF flow now uses
   the same spaCy-backed engine as Excel and Word, which reverses the old
   "no guessing in PDF" rule. An unlisted name gets a label in the document and

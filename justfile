@@ -1,4 +1,5 @@
-# Developer commands. Run `uv run just` to list recipes.
+# Developer commands. Run `just` to list recipes (install: winget install
+# Casey.Just). Without a system just, `uv run just` works too.
 # End users don't need this - they use run.bat / run.sh.
 
 set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
@@ -13,8 +14,8 @@ default:
 setup:
     uv sync --python 3.12
 
-# Start the app on localhost
 # Ctrl+C makes Streamlit exit non-zero; don't report that as a recipe failure.
+# Start the app on localhost
 [no-exit-message]
 run:
     uv run streamlit run app.py --server.address=127.0.0.1

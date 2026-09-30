@@ -123,8 +123,11 @@ A few things that surprise people the first time:
 - A black window opens too. **Leave it open** while you're working. Closing
   it stops the tool.
 
-**Opening it again later:** double-click **`run.bat`** (Windows) or run
-**`./run.sh`** (macOS/Linux) in the folder you installed into.
+**Opening it again later:** on Windows, double-click **Finance PII
+Redactor** on your desktop, or type "Finance" in the Start menu. The
+installer adds that shortcut. If it isn't there, double-click **`run.bat`**
+in the folder you installed into. On macOS/Linux, run **`./run.sh`** in that
+folder.
 
 **Updating:** paste the same install command again. Your master list is kept
 as it is.

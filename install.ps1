@@ -4,7 +4,8 @@
 #
 #   irm https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/install.ps1 | iex
 #
-# It asks where to install, downloads the latest version there, and starts the
+# It asks where to install, downloads the latest version there, adds a
+# "Finance PII Redactor" shortcut to the Desktop and Start menu, and starts the
 # app. The first launch sets up the environment (a few minutes, once).
 # To skip the prompt, set $env:FPR_INSTALL_DIR before running.
 #
@@ -115,10 +116,33 @@ if ($savedMaster) {
 Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue
 Remove-Item $tmpExtract -Recurse -Force -ErrorAction SilentlyContinue
 
+# 6. Desktop and Start Menu shortcuts, so reopening the app is a double-click
+#    instead of finding run.bat. Re-running the installer (the update path)
+#    overwrites them, so they always point at this install. Some managed
+#    machines block this; the app still works from run.bat.
+try {
+    $shell = New-Object -ComObject WScript.Shell
+    $startMenu = Join-Path ([Environment]::GetFolderPath('Programs')) 'Finance PII Redactor.lnk'
+    $onDesktop = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Finance PII Redactor.lnk'
+    foreach ($path in @($onDesktop, $startMenu)) {
+        $link = $shell.CreateShortcut($path)
+        $link.TargetPath       = Join-Path $Target 'run.bat'
+        $link.WorkingDirectory = $Target
+        $link.Description      = 'Redact names from Excel, PDF and Word files (runs locally)'
+        # A padlock from Windows' own icon set; no icon file to ship.
+        $link.IconLocation     = "$env:SystemRoot\System32\shell32.dll,47"
+        $link.Save()
+    }
+    Write-Host "Added a 'Finance PII Redactor' shortcut to your Desktop and Start menu." @green
+}
+catch {
+    Write-Host "Could not add shortcuts. Open the app later with run.bat in $Target." @cyan
+}
+
 Write-Host ""
 Write-Host "Done. Starting the app (first run sets up the environment)..." @green
 Write-Host ""
 
-# 6. Launch. run.bat resolves its own location, so cwd does not matter.
+# 7. Launch. run.bat resolves its own location, so cwd does not matter.
 Set-Location $Target
 & (Join-Path $Target 'run.bat')

@@ -15,15 +15,25 @@ uv sync --python 3.12
 ```
 
 This installs runtime and dev dependencies (`ruff`, `mypy`, `pytest`,
-`codespell`, [`just`](https://just.systems/), plus type stubs) from
-`uv.lock`, including the pinned `en_core_web_lg` spaCy model.
+`codespell`, type stubs) from `uv.lock`, including the pinned
+`en_core_web_lg` spaCy model.
 
-Common commands live in the `justfile`. Run `uv run just` to list them.
+Common commands live in the `justfile`. Install [`just`](https://just.systems/)
+once so you can call it directly:
+
+```bash
+winget install Casey.Just   # Windows
+brew install just           # macOS
+```
+
+Run `just` to list the recipes. A copy of `just` also comes with the dev
+dependencies, so `uv run just <recipe>` works without a system install (CI
+uses that).
 
 Run the app locally with:
 
 ```bash
-uv run just run
+just run
 ```
 
 ## Before opening a PR
@@ -32,10 +42,10 @@ CI runs exactly this command (`.github/workflows/ci.yml` calls the
 justfile's `check` recipe), so run it locally first:
 
 ```bash
-uv run just check
+just check
 ```
 
-`uv run just fmt` fixes formatting in place. If you'd rather not use
+`just fmt` fixes formatting in place. If you'd rather not use
 `just`, these are the underlying commands:
 
 ```bash
@@ -55,7 +65,7 @@ If you changed prose in `README.md`, `docs/`, or `data/README.md`, also run
 [Vale](https://vale.sh/) (config in `.vale.ini`):
 
 ```bash
-uv run just docs
+just docs
 ```
 
 ## Pull requests
