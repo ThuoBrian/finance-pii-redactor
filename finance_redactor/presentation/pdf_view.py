@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any
+from typing import Any, Literal
 
 import streamlit as st
 
@@ -141,7 +141,12 @@ def run_pdf_flow(
     button_label = (
         "Black out PDF" if style == RedactionStyle.BLACKOUT else "Pseudonymize PDF"
     )
-    if st.button(button_label, type="primary", width="stretch"):
+    # Red/primary only before the first run - once a result exists, the
+    # download button below becomes the one action that matters.
+    main_button_type: Literal["primary", "secondary"] = (
+        "secondary" if st.session_state.get("pdf_buffer") is not None else "primary"
+    )
+    if st.button(button_label, type=main_button_type, width="stretch"):
         uploaded.seek(0)
         try:
             with st.spinner("Scanning PDF..."):

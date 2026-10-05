@@ -8,7 +8,7 @@ and rendering to ``presenters``.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any
+from typing import Any, Literal
 
 import streamlit as st
 
@@ -105,7 +105,12 @@ def run_excel_flow(
         st.warning("Select at least one column to scan.")
         st.stop()
 
-    if st.button("Pseudonymize", type="primary", width="stretch"):
+    # Red/primary only before the first run - once a result exists, the
+    # download button below becomes the one action that matters.
+    main_button_type: Literal["primary", "secondary"] = (
+        "secondary" if "findings" in st.session_state else "primary"
+    )
+    if st.button("Pseudonymize", type=main_button_type, width="stretch"):
         progress = st.progress(0.0, text="Scanning for PII...")
 
         def _on_progress(done: int, total: int) -> None:

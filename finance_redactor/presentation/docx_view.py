@@ -9,7 +9,7 @@ stays fully editable, matching the Excel flow rather than the PDF flow.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any
+from typing import Any, Literal
 
 import streamlit as st
 
@@ -97,7 +97,12 @@ def run_docx_flow(
 
     custom_words = [w.strip() for w in custom_words_input.splitlines() if w.strip()]
 
-    if st.button("Pseudonymize Word document", type="primary", width="stretch"):
+    # Red/primary only before the first run - once a result exists, the
+    # download button below becomes the one action that matters.
+    main_button_type: Literal["primary", "secondary"] = (
+        "secondary" if st.session_state.get("docx_buffer") is not None else "primary"
+    )
+    if st.button("Pseudonymize Word document", type=main_button_type, width="stretch"):
         uploaded.seek(0)
         with st.spinner("Scanning document for PII..."):
             scan_result = docx_service.scan(uploaded, entity_options, threshold)
