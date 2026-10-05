@@ -89,6 +89,12 @@ the `version` field in `pyproject.toml`.
   changes** button: tick or untick as many rows as you like, and the file
   rebuilds once, on Apply, instead of once per tick. Previously every single
   tick triggered its own full Streamlit rerun and rebuild.
+- **Download is now the one clearly emphasized action once a file is
+  processed.** Previously the main action button (Pseudonymize/Black out),
+  Apply changes, and Download were all highlighted red at the same time,
+  with no visual cue for which to use next. The main action button and
+  Apply changes now render as plain buttons once a result exists, leaving
+  Download as the single highlighted next step.
 - **PDF redaction now writes a per-document label (`[001]`) instead of a
   pseudonym.** A pseudonym is literally `<prefix>-<Internal ID>`, so the
   redacted PDF used to carry the master list's own join key: anyone holding

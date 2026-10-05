@@ -96,9 +96,7 @@ def render_deselect_editor(
                 },
                 disabled=[c for c in table.columns if c != REDACT_COLUMN],
             )
-            submitted = st.form_submit_button(
-                "Apply changes", type="primary", width="stretch"
-            )
+            submitted = st.form_submit_button("Apply changes", width="stretch")
 
     # Only recompute on the rerun that the Apply click itself caused. Under
     # Streamlit's documented form semantics this guard is provably redundant:
