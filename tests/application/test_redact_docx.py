@@ -69,10 +69,15 @@ class _NameDetector:
 
     _NAMES = ("John", "Mary")
 
+    def __init__(self) -> None:
+        """Track how many times ``analyze`` was called."""
+        self.call_count = 0
+
     def analyze(
         self, text: str, entities: list[str], threshold: float
     ) -> list[PiiDetection]:
         """Return a detection for each configured name found in ``text``."""
+        self.call_count += 1
         if "PERSON" not in entities:
             return []
         detections: list[PiiDetection] = []
@@ -320,3 +325,163 @@ def test_link_targets_removed_on_open_are_reported() -> None:
     )
 
     assert result.removed_links == 3
+
+
+# --- scan()/redact() split -------------------------------------------------
+
+
+def test_scan_then_redact_matches_execute_for_a_custom_word() -> None:
+    """scan()+redact() with no exclusions equals execute() for a custom word."""
+    blocks = ["Total salaries paid", "No name here", "More salaries noted"]
+    service = _service()
+
+    expected = service.execute(
+        FakeWordDocument(list(blocks)), ["PERSON"], 0.35, custom_words=["salaries"]
+    )
+
+    scan_result = service.scan(FakeWordDocument(list(blocks)), ["PERSON"], 0.35)
+    actual = service.redact(FakeWordDocument(list(blocks)), scan_result, ["salaries"])
+
+    assert actual.findings == expected.findings
+    assert actual.crosswalk == expected.crosswalk
+    assert actual.data == expected.data
+
+
+def test_scan_then_redact_matches_execute_for_a_detector_sourced_match() -> None:
+    """scan()+redact() with no exclusions equals execute() for a detector hit."""
+    blocks = ["John paid invoice 1", "No name here", "John paid invoice 2"]
+    service = _service()
+
+    expected = service.execute(FakeWordDocument(list(blocks)), ["PERSON"], 0.35)
+
+    scan_result = service.scan(FakeWordDocument(list(blocks)), ["PERSON"], 0.35)
+    actual = service.redact(FakeWordDocument(list(blocks)), scan_result)
+
+    assert actual.findings == expected.findings
+    assert actual.crosswalk == expected.crosswalk
+    assert actual.data == expected.data
+
+
+def test_scan_then_redact_matches_execute_with_an_excluded_term() -> None:
+    """scan()+redact() reproduces execute()'s exclude behavior exactly."""
+    blocks = ["Total salaries paid to John"]
+    service = _service()
+
+    expected = service.execute(
+        FakeWordDocument(list(blocks)),
+        ["PERSON"],
+        0.35,
+        custom_words=["salaries"],
+        exclude=frozenset({"salaries"}),
+    )
+
+    scan_result = service.scan(FakeWordDocument(list(blocks)), ["PERSON"], 0.35)
+    actual = service.redact(
+        FakeWordDocument(list(blocks)),
+        scan_result,
+        ["salaries"],
+        exclude=frozenset({"salaries"}),
+    )
+
+    assert actual.findings == expected.findings
+    assert actual.crosswalk == expected.crosswalk
+    assert actual.data == expected.data
+
+
+def test_redact_does_not_call_the_detector_again_across_exclude_changes() -> None:
+    """The whole point of the split: a tick change never re-runs detection."""
+    detector = _NameDetector()
+    service = _service(detector)
+    scan_result = service.scan(
+        FakeWordDocument(["salaries, John, Mary"]), ["PERSON"], 0.35
+    )
+    calls_after_scan = detector.call_count
+    assert calls_after_scan > 0
+
+    service.redact(
+        FakeWordDocument(["salaries, John, Mary"]),
+        scan_result,
+        ["salaries"],
+        exclude=frozenset({"salaries"}),
+    )
+    assert detector.call_count == calls_after_scan
+
+    service.redact(
+        FakeWordDocument(["salaries, John, Mary"]),
+        scan_result,
+        ["salaries"],
+        exclude=frozenset(),
+    )
+    assert detector.call_count == calls_after_scan
+
+
+def test_scan_closes_the_document_and_does_not_redact() -> None:
+    """scan() is read-only: it never removes links or replaces block text."""
+    doc = FakeWordDocument(["John paid"])
+
+    _service().scan(doc, ["PERSON"], 0.35)
+
+    assert doc.closed is True
+    assert doc.replacements_by_block == {}
+
+
+def test_scan_records_every_block_including_blank_ones() -> None:
+    """Block indices must stay aligned between scan() and redact()."""
+    doc = FakeWordDocument(["", "John paid", "   "])
+
+    scan_result = _service().scan(doc, ["PERSON"], 0.35)
+
+    assert scan_result.block_count == 3
+    assert scan_result.blocks[0].detections == []
+    assert scan_result.blocks[2].detections == []
+
+
+def test_scan_redact_excluded_term_is_not_replaced_in_any_block() -> None:
+    """The exclude behavior still holds when driven through scan()+redact()."""
+    doc = FakeWordDocument(["Total salaries paid", "John approved salaries"])
+    service = _service()
+    scan_result = service.scan(
+        FakeWordDocument(["Total salaries paid", "John approved salaries"]),
+        ["PERSON"],
+        0.35,
+    )
+
+    result = service.redact(
+        doc, scan_result, ["salaries"], exclude=frozenset({"salaries"})
+    )
+
+    replaced = [
+        text for block in doc.replacements_by_block.values() for _, text in block
+    ]
+    assert all("salaries" not in t for t in replaced)
+    assert all(a.original_name != "salaries" for a in result.crosswalk)
+
+
+def test_scan_redact_skips_blank_blocks() -> None:
+    """A blank block scanned as empty detections is also skipped by redact()."""
+    doc = FakeWordDocument(["", "John paid", "   "])
+    service = _service()
+    scan_result = service.scan(
+        FakeWordDocument(["", "John paid", "   "]), ["PERSON"], 0.35
+    )
+
+    result = service.redact(doc, scan_result)
+
+    assert result.entity_count == 1
+    assert 0 not in doc.replacements_by_block
+    assert 2 not in doc.replacements_by_block
+    assert 1 in doc.replacements_by_block
+
+
+def test_scan_redact_excluding_one_term_leaves_others_replaced() -> None:
+    doc = FakeWordDocument(["John paid salaries"])
+    service = _service()
+    scan_result = service.scan(
+        FakeWordDocument(["John paid salaries"]), ["PERSON"], 0.35
+    )
+
+    result = service.redact(
+        doc, scan_result, ["salaries"], exclude=frozenset({"salaries"})
+    )
+
+    assert [a.original_name for a in result.crosswalk] == ["John"]

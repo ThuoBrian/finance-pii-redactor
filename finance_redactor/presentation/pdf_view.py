@@ -77,6 +77,7 @@ def run_pdf_flow(
             "pdf_links",
             "pdf_all_findings",
             "pdf_excluded_applied",
+            "pdf_scan_result",
         ),
     )
 
@@ -144,12 +145,7 @@ def run_pdf_flow(
         uploaded.seek(0)
         try:
             with st.spinner("Scanning PDF..."):
-                result = pdf_service.execute(
-                    uploaded,
-                    custom_words,
-                    style=style,
-                    redact_images=redact_images,
-                )
+                scan_result = pdf_service.scan(uploaded)
         except EncryptedPdfError:
             st.error(
                 "This PDF is password-protected, so its pages can't be read. "
@@ -157,6 +153,16 @@ def run_pdf_flow(
                 "unlocked copy, and upload that copy instead."
             )
             st.stop()
+        st.session_state.pdf_scan_result = scan_result
+        uploaded.seek(0)
+        with st.spinner("Building redacted PDF..."):
+            result = pdf_service.redact(
+                uploaded,
+                scan_result,
+                custom_words,
+                style=style,
+                redact_images=redact_images,
+            )
         st.session_state.pdf_buffer = result.data
         st.session_state.pdf_findings = result.findings
         st.session_state.pdf_pages = result.page_count
@@ -235,12 +241,15 @@ def run_pdf_flow(
         excluded=st.session_state.get("pdf_excluded_applied", frozenset()),
     )
     if excluded != st.session_state.get("pdf_excluded_applied", frozenset()):
-        # Re-redacting is the whole cost of a tick change here. The spaCy
-        # model is already loaded and cached, so this is one detection pass.
+        # No detector call happens here at all: ``pdf_scan_result`` was
+        # computed once, on the button click above, and this just reruns the
+        # cheap, detector-free redaction-building/apply step over it with the
+        # new exclude set.
         uploaded.seek(0)
         with st.spinner("Rebuilding the file without those terms..."):
-            rerun = pdf_service.execute(
+            rerun = pdf_service.redact(
                 uploaded,
+                st.session_state.pdf_scan_result,
                 custom_words,
                 style=style,
                 redact_images=redact_images,

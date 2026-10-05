@@ -55,18 +55,33 @@ redacted.
 Behavior preserved from the original ``redact_pdf``: pages without text are
 skipped; a finding is recorded for every kept match even when its text
 cannot be located on the page; redactions are applied per page.
+
+``execute`` runs the whole pipeline - including the detector call - every
+time, which is wasteful when only ``exclude`` changed (unticking a false
+positive in the review table). ``scan``/``redact`` split that in two, the
+same way Excel's ``RedactExcelService`` already does: ``scan`` opens the
+document once and runs the detector once per page, returning a
+:class:`PdfScanResult`; ``redact`` takes that cached result plus a fresh
+``exclude`` set and rebuilds the output with no detector call and no
+``page_text`` call at all. ``execute`` is unchanged and kept for callers that
+don't need the split.
 """
 
 from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from dataclasses import dataclass
 from enum import Enum
 
 from finance_redactor.application.ports import PdfDocumentFactory, PiiDetector
 from finance_redactor.application.results import PdfRedactionResult
 from finance_redactor.domain.custom_words import find_custom_words
-from finance_redactor.domain.entities import IMAGE_REDACTION_SENTINEL, Finding
+from finance_redactor.domain.entities import (
+    IMAGE_REDACTION_SENTINEL,
+    Finding,
+    PiiDetection,
+)
 from finance_redactor.domain.pdf_text_normalizer import (
     NormalizedText,
     normalize_pdf_text,
@@ -95,6 +110,38 @@ class RedactionStyle(str, Enum):
 
     PSEUDONYMIZE = "pseudonymize"
     BLACKOUT = "blackout"
+
+
+@dataclass(frozen=True)
+class _PdfPageScan:
+    """One page's worth of detector output, cached between ``scan`` and ``redact``.
+
+    ``detections`` is the detector's own output only - never includes custom
+    words, which depend on the per-call ``custom_words`` list and so can't be
+    cached across a tick change.
+    """
+
+    raw_text: str
+    normalized: NormalizedText
+    detections: list[PiiDetection]
+    bracketed: int
+
+
+@dataclass(frozen=True)
+class PdfScanResult:
+    """A document's detector pass, cached so ``redact`` never re-detects.
+
+    Internal cache between :meth:`RedactPdfService.scan` and
+    :meth:`RedactPdfService.redact` - not a use-case output in its own right,
+    so it lives here rather than in ``application/results.py``.
+    """
+
+    pages: list[_PdfPageScan]
+
+    @property
+    def page_count(self) -> int:
+        """Number of pages captured by the scan."""
+        return len(self.pages)
 
 
 class RedactPdfService:
@@ -202,47 +249,15 @@ class RedactPdfService:
                 # irrelevant to the output; it only fixes the label numbering.
                 bracketed += len(_BRACKETED_NUMBER.findall(normalized.text))
 
-                kept = sorted(
-                    dedupe_overlapping(detections), key=lambda d: d.span.start
+                redactions = self._page_redactions(
+                    page_index=page_index,
+                    raw_text=raw_text,
+                    normalized=normalized,
+                    detections=detections,
+                    exclude=exclude,
+                    pseudonymizer=pseudonymizer,
+                    findings=findings,
                 )
-                redactions: list[tuple[str | list[str], str]] = []
-                for detection in kept:
-                    # Dropped before ``assign``, so an excluded term claims no
-                    # ordinal and the labels that do get written stay
-                    # contiguous. It also never reaches the crosswalk, which is
-                    # what keeps it out of the names-free mapping file.
-                    if normalize(detection.text) in exclude:
-                        continue
-                    # The document gets the document-local label, never the
-                    # pseudonym: the pseudonym embeds the master-list Internal
-                    # ID, and keeping that out of the output is the whole point
-                    # of the two-hop scheme (see domain/pseudonyms.py).
-                    # A bank/payment mask skips ``assign`` too, for the same
-                    # two reasons: no ordinal, and no mapping row.
-                    label = (
-                        self._fixed_masks.get(detection.entity_type)
-                        or pseudonymizer.assign(
-                            detection.entity_type, detection.text
-                        ).label
-                    )
-                    findings.append(
-                        Finding(
-                            page=page_index,
-                            detected_text=detection.text,
-                            entity_type=detection.entity_type,
-                            score=detection.score,
-                            source=detection.source,
-                        )
-                    )
-                    raw_span = normalized.to_raw_span(detection.span)
-                    raw_substring = raw_text[raw_span.start : raw_span.end]
-                    # Pass the normalized match text first, with the original
-                    # extracted substring as a fallback so PyMuPDF can find it
-                    # even when the page stores it with ligatures or hyphens.
-                    candidates: list[str] = [detection.text]
-                    if raw_substring != detection.text:
-                        candidates.append(raw_substring)
-                    redactions.append((candidates, label))
 
                 if redact_images and document.page_image_rects(page_index):
                     redactions.append((IMAGE_REDACTION_SENTINEL, ""))
@@ -264,3 +279,181 @@ class RedactPdfService:
             )
         finally:
             document.close()
+
+    def scan(self, source: object) -> PdfScanResult:
+        """Run the detector once per page and cache the result for ``redact``.
+
+        Pure and read-only: no custom words, no dedupe, no ``exclude``, no
+        redactions applied, and ``remove_external_links`` is never called.
+        This is the expensive pass (the detector call is spaCy/Presidio under
+        the hood) - the whole point of splitting it out is that the caller
+        runs it exactly once per upload, then reuses the result across every
+        tick change in the review table via :meth:`redact`.
+        """
+        document = self._open_document(source)
+        try:
+            pages: list[_PdfPageScan] = []
+            for page_index in range(document.page_count):
+                raw_text = document.page_text(page_index)
+                has_text = bool(raw_text.strip())
+                normalized = (
+                    normalize_pdf_text(raw_text)
+                    if has_text
+                    else NormalizedText("", raw_text, ())
+                )
+                detections = (
+                    self._detector.analyze(
+                        normalized.text,
+                        [*_ENTITIES, *self._fixed_masks],
+                        _THRESHOLD,
+                    )
+                    if has_text
+                    else []
+                )
+                bracketed = len(_BRACKETED_NUMBER.findall(normalized.text))
+                pages.append(
+                    _PdfPageScan(
+                        raw_text=raw_text,
+                        normalized=normalized,
+                        detections=detections,
+                        bracketed=bracketed,
+                    )
+                )
+            return PdfScanResult(pages=pages)
+        finally:
+            document.close()
+
+    def redact(
+        self,
+        source: object,
+        scan_result: PdfScanResult,
+        custom_words: list[str],
+        *,
+        style: RedactionStyle = RedactionStyle.PSEUDONYMIZE,
+        redact_images: bool = False,
+        exclude: frozenset[str] = frozenset(),
+    ) -> PdfRedactionResult:
+        """Rebuild the redacted document from an existing :class:`PdfScanResult`.
+
+        ``source`` must be freshly opened (the caller resets its read
+        position before calling this) - a new document build needs a fresh
+        page tree to redact into, and a fresh :class:`Pseudonymizer` so this
+        call's crosswalk starts clean. Everything else - raw text, normalized
+        text, the detector's own findings, the bracketed-number count - comes
+        from ``scan_result``: this method calls ``document.page_text()`` and
+        ``self._detector.analyze()`` zero times, which is what makes
+        re-applying a changed ``exclude`` set cheap.
+        """
+        document = self._open_document(source)
+        pseudonymizer = Pseudonymizer(
+            self._master_map, self._auto_prefixes, fuzzy_threshold=self._fuzzy_threshold
+        )
+        try:
+            # Same ordering/reasoning as ``execute``: must happen before
+            # ``apply_redactions`` deletes overlapping links.
+            removed_links = document.remove_external_links()
+            findings: list[Finding] = []
+            bracketed = 0
+            for page_index, page in enumerate(scan_result.pages):
+                detections = [
+                    *page.detections,
+                    *find_custom_words(
+                        page.normalized.text, custom_words, self._custom_words_score
+                    ),
+                ]
+                bracketed += page.bracketed
+
+                redactions = self._page_redactions(
+                    page_index=page_index,
+                    raw_text=page.raw_text,
+                    normalized=page.normalized,
+                    detections=detections,
+                    exclude=exclude,
+                    pseudonymizer=pseudonymizer,
+                    findings=findings,
+                )
+
+                if redact_images and document.page_image_rects(page_index):
+                    redactions.append((IMAGE_REDACTION_SENTINEL, ""))
+
+                if redactions:
+                    document.redact_page(
+                        page_index,
+                        redactions,
+                        blackout=(style == RedactionStyle.BLACKOUT),
+                    )
+
+            return PdfRedactionResult(
+                data=document.to_bytes(),
+                findings=findings,
+                page_count=document.page_count,
+                crosswalk=pseudonymizer.crosswalk(),
+                source_bracketed_numbers=bracketed,
+                removed_links=removed_links,
+            )
+        finally:
+            document.close()
+
+    def _page_redactions(
+        self,
+        *,
+        page_index: int,
+        raw_text: str,
+        normalized: NormalizedText,
+        detections: list[PiiDetection],
+        exclude: frozenset[str],
+        pseudonymizer: Pseudonymizer,
+        findings: list[Finding],
+    ) -> list[tuple[str | list[str], str]]:
+        """Dedupe/exclude/assign/build the redaction list for one page.
+
+        Shared by ``execute`` and ``redact`` - identical logic, factored out
+        once both methods needed it. Appends to ``findings`` in place (one
+        list spans the whole document in both callers) and returns this
+        page's ``(candidates, label)`` redaction list.
+        """
+        # Sorted by position, not by dedupe_overlapping's own order: that
+        # sorts by source priority first (see domain/rules.py), so a
+        # master-list match late on the page would otherwise be assigned -
+        # and therefore numbered - before a custom-word match near the top.
+        # The gateway adds all annotations and applies them in one pass, so
+        # the order it receives them in is irrelevant to the output; it only
+        # fixes the label numbering.
+        kept = sorted(dedupe_overlapping(detections), key=lambda d: d.span.start)
+        redactions: list[tuple[str | list[str], str]] = []
+        for detection in kept:
+            # Dropped before ``assign``, so an excluded term claims no
+            # ordinal and the labels that do get written stay contiguous. It
+            # also never reaches the crosswalk, which is what keeps it out of
+            # the names-free mapping file.
+            if normalize(detection.text) in exclude:
+                continue
+            # The document gets the document-local label, never the
+            # pseudonym: the pseudonym embeds the master-list Internal ID,
+            # and keeping that out of the output is the whole point of the
+            # two-hop scheme (see domain/pseudonyms.py). A bank/payment mask
+            # skips ``assign`` too, for the same two reasons: no ordinal, and
+            # no mapping row.
+            label = (
+                self._fixed_masks.get(detection.entity_type)
+                or pseudonymizer.assign(detection.entity_type, detection.text).label
+            )
+            findings.append(
+                Finding(
+                    page=page_index,
+                    detected_text=detection.text,
+                    entity_type=detection.entity_type,
+                    score=detection.score,
+                    source=detection.source,
+                )
+            )
+            raw_span = normalized.to_raw_span(detection.span)
+            raw_substring = raw_text[raw_span.start : raw_span.end]
+            # Pass the normalized match text first, with the original
+            # extracted substring as a fallback so PyMuPDF can find it even
+            # when the page stores it with ligatures or hyphens.
+            candidates: list[str] = [detection.text]
+            if raw_substring != detection.text:
+                candidates.append(raw_substring)
+            redactions.append((candidates, label))
+        return redactions

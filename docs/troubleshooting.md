@@ -125,10 +125,10 @@ This file records known errors, edge cases, and their solutions when developing 
   - **`master list`** - the workbook has a row whose `Name` is that word. Someone added a payee or account called `Salaries`, and the tool matches master-list names exactly, so every occurrence of the word is now a hit in all three formats. This is the common cause in a finance master list.
   - **`model`** - spaCy guessed. Possible in all three formats. Often an ALL-CAPS label (`SALARIES`) that the recasing pass turns into a name-shaped `Salaries` (see "ALL-CAPS names and acronym false positives" below).
   - **`custom word`** - it came from the "Additional words/phrases to redact" box. Clear it; the box is not saved between sessions.
-- **Fix it for this document:** untick the word in **Check what was detected**. The file is rebuilt immediately without it, and everything else stays redacted. This works in all three formats and is the only lever PDF has.
+- **Fix it for this document:** untick the word in **Check what was detected** and click **Apply changes**. The file is rebuilt without it, and everything else stays redacted. This works in all three formats and is the only lever PDF has.
 - **Fix it for good (the `master list` case):** edit `data/Names List - Organized.xlsx` - delete the row, or make the name distinctive (`Salaries Account`, `Salaries Ltd`). A multi-word name no longer matches the bare word, because the matcher keys on the whole string. Save, close, then click **🔄 Refresh master list**. Do this rather than unticking every time: an unticked word is per-document and you would repeat it forever.
 - **Fix it for good (the `model` case):** raise the **Confidence threshold** in Advanced settings, in Excel or Word. Do **not** push it past **0.90** - curated master-list matches score exactly 0.90, so anything above that stops matching **every** name in the workbook at once, which is a far worse problem than the one you started with.
-- **Note on unticking:** it is a deliberate decision to leave text un-redacted, so the word appears in the downloaded file exactly as in the original. The app warns above the download button and lists what it left alone. Re-tick to undo.
+- **Note on unticking:** it is a deliberate decision to leave text un-redacted, so the word appears in the downloaded file exactly as in the original. The app warns above the download button and lists what it left alone. Re-tick it and click **Apply changes** to undo.
 
 ### A typed word gets a flagged code instead of a curated Internal ID
 

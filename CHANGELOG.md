@@ -73,6 +73,22 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **Rebuilding a PDF after unticking a false positive is much faster.**
+  `RedactPdfService` now splits into `scan()` (runs name/entity detection once)
+  and `redact()` (rebuilds the output from that cached scan), the same split
+  Excel already used. Unticking a term in the review table no longer re-runs
+  detection at all — only the redaction-building/apply step reruns.
+- **Rebuilding a Word document after unticking a false positive is much
+  faster, the same way.** `RedactDocxService` now splits into `scan()` and
+  `redact()` too, so unticking a term no longer re-runs spaCy over every
+  paragraph. Also fixes a `NameError` on that same path: the "words to
+  redact" list is now computed once per rerun instead of only inside the
+  button's own click handler.
+- **Rejecting false positives is now reviewed in one batch.** The
+  **Check what was detected** table sits inside a form with an **Apply
+  changes** button: tick or untick as many rows as you like, and the file
+  rebuilds once, on Apply, instead of once per tick. Previously every single
+  tick triggered its own full Streamlit rerun and rebuild.
 - **PDF redaction now writes a per-document label (`[001]`) instead of a
   pseudonym.** A pseudonym is literally `<prefix>-<Internal ID>`, so the
   redacted PDF used to carry the master list's own join key: anyone holding

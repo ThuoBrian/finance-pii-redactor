@@ -114,12 +114,14 @@ class FakeDetector:
         """Store the canned detections to return from every ``analyze`` call."""
         self._detections = detections or []
         self.requested_entities: list[str] = []
+        self.call_count = 0
 
     def analyze(
         self, text: str, entities: list[str], threshold: float
     ) -> list[PiiDetection]:
         """Return the canned detections, recording which entities were asked for."""
         self.requested_entities = list(entities)
+        self.call_count += 1
         return list(self._detections)
 
 
@@ -544,3 +546,167 @@ def test_link_targets_are_removed_and_counted() -> None:
     result = _service().execute(doc, [])
 
     assert result.removed_links == 2
+
+
+# --- scan()/redact() split -------------------------------------------------
+
+
+def test_scan_then_redact_matches_execute_for_a_plain_custom_word() -> None:
+    """scan()+redact() with no exclusions equals execute() for a custom word."""
+    pages = ["John paid invoice 1", "No name here", "John paid invoice 2"]
+    service = _service()
+
+    expected = service.execute(FakePdfDocument(list(pages)), ["John"])
+
+    scan_result = service.scan(FakePdfDocument(list(pages)))
+    actual = service.redact(FakePdfDocument(list(pages)), scan_result, ["John"])
+
+    assert actual.findings == expected.findings
+    assert actual.crosswalk == expected.crosswalk
+    assert actual.data == expected.data
+
+
+def test_scan_then_redact_matches_execute_for_a_detector_sourced_match() -> None:
+    """scan()+redact() with no exclusions equals execute() for a detector hit."""
+    text = "Contact jane@example.com or ask John for details"
+    email_span = Span(
+        text.index("jane@example.com"),
+        text.index("jane@example.com") + len("jane@example.com"),
+    )
+    detector = FakeDetector(
+        [
+            PiiDetection(
+                entity_type="EMAIL_ADDRESS",
+                span=email_span,
+                score=1.0,
+                text="jane@example.com",
+                source=DetectionSource.PATTERN,
+            )
+        ]
+    )
+    service = _service(detector)
+
+    expected = service.execute(FakePdfDocument([text]), ["John"])
+
+    scan_result = service.scan(FakePdfDocument([text]))
+    actual = service.redact(FakePdfDocument([text]), scan_result, ["John"])
+
+    assert actual.findings == expected.findings
+    assert actual.crosswalk == expected.crosswalk
+    assert actual.data == expected.data
+
+
+def test_scan_then_redact_matches_execute_with_an_excluded_term() -> None:
+    """scan()+redact() reproduces execute()'s exclude behavior exactly."""
+    text = "Total salaries paid to John"
+    service = _service()
+
+    expected = service.execute(
+        FakePdfDocument([text]), ["salaries", "John"], exclude=frozenset({"salaries"})
+    )
+
+    scan_result = service.scan(FakePdfDocument([text]))
+    actual = service.redact(
+        FakePdfDocument([text]),
+        scan_result,
+        ["salaries", "John"],
+        exclude=frozenset({"salaries"}),
+    )
+
+    assert actual.findings == expected.findings
+    assert actual.crosswalk == expected.crosswalk
+    assert actual.data == expected.data
+
+
+def test_redact_does_not_call_the_detector_again_across_exclude_changes() -> None:
+    """The whole point of the split: a tick change never re-runs detection."""
+    detector = FakeDetector()
+    service = _service(detector)
+    scan_result = service.scan(FakePdfDocument(["salaries, John, Mary"]))
+    calls_after_scan = detector.call_count
+    assert calls_after_scan > 0
+
+    service.redact(
+        FakePdfDocument(["salaries, John, Mary"]),
+        scan_result,
+        ["salaries", "John", "Mary"],
+        exclude=frozenset({"salaries"}),
+    )
+    assert detector.call_count == calls_after_scan
+
+    service.redact(
+        FakePdfDocument(["salaries, John, Mary"]),
+        scan_result,
+        ["salaries", "John", "Mary"],
+        exclude=frozenset(),
+    )
+    assert detector.call_count == calls_after_scan
+
+
+def test_scan_closes_the_document_and_does_not_redact() -> None:
+    """scan() is read-only: it never removes links or applies a redaction."""
+    doc = FakePdfDocument(["John paid"])
+
+    _service().scan(doc)
+
+    assert doc.closed is True
+    assert doc.links_removed_before_render is False
+    assert doc.redactions_by_page == {}
+
+
+def test_scan_redact_excluded_term_is_not_redacted_and_not_in_the_crosswalk() -> None:
+    """The exclude behavior still holds when driven through scan()+redact()."""
+    doc = FakePdfDocument(["Total salaries paid to John"])
+    service = _service()
+    scan_result = service.scan(FakePdfDocument(["Total salaries paid to John"]))
+
+    result = service.redact(
+        doc, scan_result, ["salaries", "John"], exclude=frozenset({"salaries"})
+    )
+
+    redacted_terms = [candidate for candidate, _ in doc.redactions_by_page[0]]
+    assert "John" in redacted_terms
+    assert "salaries" not in redacted_terms
+    assert [a.original_name for a in result.crosswalk] == ["John"]
+
+
+def test_scan_redact_excluding_one_term_leaves_the_others_redacted() -> None:
+    service = _service()
+    scan_result = service.scan(FakePdfDocument(["salaries, John, Mary"]))
+
+    result = service.redact(
+        FakePdfDocument(["salaries, John, Mary"]),
+        scan_result,
+        ["salaries", "John", "Mary"],
+        exclude=frozenset({"salaries"}),
+    )
+
+    assert result.entity_count == 2
+    assert {a.original_name for a in result.crosswalk} == {"John", "Mary"}
+
+
+def test_scan_redact_labels_stay_contiguous_when_a_term_is_excluded() -> None:
+    service = _service()
+    scan_result = service.scan(FakePdfDocument(["salaries, John, Mary"]))
+
+    result = service.redact(
+        FakePdfDocument(["salaries, John, Mary"]),
+        scan_result,
+        ["salaries", "John", "Mary"],
+        exclude=frozenset({"salaries"}),
+    )
+
+    assert [a.label for a in result.crosswalk] == ["[001]", "[002]"]
+
+
+def test_scan_redact_exclusion_is_case_and_whitespace_insensitive() -> None:
+    service = _service()
+    doc = FakePdfDocument(["SALARIES and Salaries and salaries"])
+    scan_result = service.scan(FakePdfDocument(["SALARIES and Salaries and salaries"]))
+
+    result = service.redact(
+        doc, scan_result, ["salaries"], exclude=frozenset({"salaries"})
+    )
+
+    assert result.crosswalk == []
+    assert 0 not in doc.redactions_by_page

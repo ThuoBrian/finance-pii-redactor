@@ -56,6 +56,7 @@ def run_docx_flow(
             "docx_links",
             "docx_all_findings",
             "docx_excluded_applied",
+            "docx_scan_result",
         ),
     )
 
@@ -94,13 +95,15 @@ def run_docx_flow(
             on_refresh=on_refresh_master_list,
         )
 
+    custom_words = [w.strip() for w in custom_words_input.splitlines() if w.strip()]
+
     if st.button("Pseudonymize Word document", type="primary", width="stretch"):
         uploaded.seek(0)
-        custom_words = [w.strip() for w in custom_words_input.splitlines() if w.strip()]
         with st.spinner("Scanning document for PII..."):
-            result = docx_service.execute(
-                uploaded, entity_options, threshold, custom_words=custom_words
-            )
+            scan_result = docx_service.scan(uploaded, entity_options, threshold)
+            st.session_state.docx_scan_result = scan_result
+            uploaded.seek(0)
+            result = docx_service.redact(uploaded, scan_result, custom_words)
         st.session_state.docx_buffer = result.data
         st.session_state.docx_findings = result.findings
         st.session_state.docx_blocks = result.block_count
@@ -149,16 +152,16 @@ def run_docx_flow(
         excluded=st.session_state.get("docx_excluded_applied", frozenset()),
     )
     if excluded != st.session_state.get("docx_excluded_applied", frozenset()):
-        # The expensive case: unlike Excel, the Word flow has no scan/redact
-        # split, so this re-runs spaCy over every block. Splitting it the way
-        # redact_excel.py is split would remove the cost.
+        # Now the cheap case: the scan/redact split (see redact_docx.py) means
+        # this never re-runs spaCy - only the per-block dedupe/exclude/assign/
+        # apply step reruns, over the cached DocxScanResult from the button
+        # handler above.
         uploaded.seek(0)
         with st.spinner("Re-scanning the document without those terms..."):
-            rerun = docx_service.execute(
+            rerun = docx_service.redact(
                 uploaded,
-                entity_options,
-                threshold,
-                custom_words=custom_words,
+                st.session_state.docx_scan_result,
+                custom_words,
                 exclude=excluded,
             )
         st.session_state.docx_buffer = rerun.data

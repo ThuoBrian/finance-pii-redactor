@@ -140,14 +140,20 @@ what happened instead — then file it.
 - [ ] Open **Check what was detected**. The word appears as **one** row, not
   one per occurrence, with an **Occurrences** count and **Source** =
   `master list`.
-- [ ] Untick it. The file rebuilds, and the downloaded file now contains the
-  word while **every other detection is still redacted**. That second half is
-  the important check.
+- [ ] Untick it, then click **Apply changes**. The file rebuilds, and the
+  downloaded file now contains the word while **every other detection is
+  still redacted**. That second half is the important check.
+- [ ] Before clicking Apply, nothing rebuilds no matter how many rows you
+  tick/untick - reviewing several terms and applying once is the point of
+  the button.
 - [ ] A warning appears above the download button naming what was left
   un-redacted.
-- [ ] Re-tick it. The file goes back to fully redacted.
-- [ ] Try the same in all three formats. In Excel it should be near-instant
-  (no re-scan); in Word expect a pause, since it re-runs the language model.
+- [ ] Re-tick it and click **Apply changes** again. The file goes back to
+  fully redacted.
+- [ ] Try the same in all three formats. All three rebuild from the already-
+  cached scan (no re-run of spaCy), so none should pause noticeably longer
+  than another - the old "Word re-runs the language model" pause no longer
+  applies now that Word has its own scan/redact split.
 
 ### Edge cases worth specifically trying
 

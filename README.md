@@ -146,8 +146,9 @@ is always safe.
 3. Look over **Check what was detected** and untick anything that isn't
    really a name. Ordinary words sometimes get caught, usually because
    someone added one to the master list as a payee. The **Source** column
-   says why it matched. Unticking rebuilds the file without that word and
-   leaves everything else redacted.
+   says why it matched. Tick or untick as many rows as you like, then click
+   **Apply changes** to rebuild the file without them - everything else
+   stays redacted.
 4. Download the redacted copy.
 
 In Excel, every cell the tool changed is highlighted in yellow, so you can
