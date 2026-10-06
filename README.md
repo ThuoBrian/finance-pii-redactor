@@ -120,8 +120,10 @@ A few things that surprise people the first time:
 - The tool opens in your **web browser**, like a website would. It isn't
   online though; it's only running on your machine. If the browser doesn't
   open by itself, go to http://127.0.0.1:8501.
-- A black window opens too. **Leave it open** while you're working. Closing
-  it stops the tool.
+- A black window opens too. **Leave it open** while you're working.
+- **When you're done, click "Close the app" in the sidebar** (in the
+  browser tab). Closing only the browser tab, or only the black window,
+  leaves the other one running - the sidebar button closes both.
 
 **Opening it again later:** on Windows, double-click **Finance PII
 Redactor** on your desktop, or type "Finance" in the Start menu. The

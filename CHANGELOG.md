@@ -19,6 +19,11 @@ the `version` field in `pyproject.toml`.
 - **The app defaults to Streamlit's dark theme** (`.streamlit/config.toml`),
   since the logo (`assets/data-privacy-ai-dark-nobg.svg`) is a white-on-
   transparent SVG and was invisible on the default light background.
+- **A "Close the app" button in the sidebar** (`presentation/shutdown.py`)
+  fully quits the tool from the browser, with one confirm step. Closing only
+  the browser tab, or only the console window, used to leave the other one
+  running in the background with the master list and NLP model still in
+  memory; this button (hard process exit, `os._exit`) ends both at once.
 - Developer docs use a system `just` (`winget install Casey.Just`), so it's
   `just check` rather than `uv run just check`. The `rust-just` dev
   dependency stays as a fallback and is what CI uses.

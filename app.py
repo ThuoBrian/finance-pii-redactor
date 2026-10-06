@@ -36,6 +36,7 @@ from finance_redactor.presentation.master_list_setup import (
     render_master_list_setup_dialog,
 )
 from finance_redactor.presentation.pdf_view import run_pdf_flow
+from finance_redactor.presentation.shutdown import render_quit_control
 from finance_redactor.presentation.steps import show_step
 
 # Resolved from this file, not the CWD - run.bat launches from anywhere.
@@ -50,6 +51,7 @@ def _main() -> None:
     st.set_page_config(
         page_title="Finance PII Redactor", page_icon=":shield:", layout="wide"
     )
+    render_quit_control()
 
     # Re-resolved fresh (not DEFAULT_SETTINGS) so a folder saved via the in-app
     # "Set up shared master list" dialog takes effect on the next rerun - see
