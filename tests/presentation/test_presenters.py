@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from finance_redactor.application.results import CellFinding, ExcelScanResult
 from finance_redactor.domain.entities import (
@@ -13,63 +14,73 @@ from finance_redactor.domain.entities import (
 )
 from finance_redactor.domain.pseudonyms import Assignment
 from finance_redactor.presentation.presenters import (
+    CHANGED_MARKER,
+    HIGHLIGHT_HEX,
     crosswalk_dataframe,
     detection_editor_dataframe,
     excluded_terms,
     findings_dataframe,
-    highlighted_html,
     pdf_mapping_dataframe,
     pdf_review_dataframe,
+    plural,
+    preview_hidden_count,
+    preview_styler,
     scan_result_findings,
 )
 
 
-def test_highlighted_html_escapes_cell_values() -> None:
-    """A cell containing markup must not produce unescaped HTML.
-
-    Cell values come from user-uploaded files (often authored by a third party,
-    e.g. a vendor's spreadsheet), and the caller renders this output with
-    Streamlit's ``unsafe_allow_html=True``, so unescaped markup would execute in
-    the browser.
-    """
-    df = pd.DataFrame(
-        {"Name": ["<img src=x onerror=alert(1)>", "<script>evil()</script>"]}
-    )
-    rendered = highlighted_html(df, cell_keys=set(), bg="#FFA500")
-    assert "<img" not in rendered
-    assert "<script>" not in rendered
-    assert "&lt;img src=x onerror=alert(1)&gt;" in rendered
-    assert "&lt;script&gt;evil()&lt;/script&gt;" in rendered
+def test_preview_shows_markup_literally_and_never_as_html_source() -> None:
+    """Cell text with markup stays text; st.dataframe draws it on a canvas."""
+    df = pd.DataFrame({"<b>Name</b>": ["<img src=x onerror=alert(1)>", "**bold**"]})
+    styler = preview_styler(df, cell_keys=set())
+    assert list(styler.data.columns) == ["<b>Name</b>"]
+    assert list(styler.data["<b>Name</b>"]) == [
+        "<img src=x onerror=alert(1)>",
+        "**bold**",
+    ]
 
 
-def test_highlighted_html_escapes_column_headers() -> None:
-    """A column name containing markup is also escaped."""
-    df = pd.DataFrame({"<b>Name</b>": ["Alice"]})
-    rendered = highlighted_html(df, cell_keys=set(), bg="#FFA500")
-    assert "<b>Name</b>" not in rendered
-    assert "&lt;b&gt;Name&lt;/b&gt;" in rendered
+def test_preview_marks_flagged_cells_by_text_and_by_colour() -> None:
+    df = pd.DataFrame({"Name": ["Alice Test", "Bob Test"], "Note": ["a", "b"]})
+    styler = preview_styler(df, cell_keys={(0, "Name")})
+    assert list(styler.data["Name"]) == [CHANGED_MARKER + "Alice Test", "Bob Test"]
+    assert list(styler.data["Note"]) == ["a", "b"]
+    html = styler.to_html()
+    assert html.count(HIGHLIGHT_HEX) == 1  # only the flagged cell is filled
+    assert HIGHLIGHT_HEX == "#FFFF00"  # same yellow as the downloaded workbook
 
 
-def test_highlighted_html_still_highlights_selected_cells() -> None:
-    """Escaping must not break the existing cell-highlighting behavior."""
-    df = pd.DataFrame({"Name": ["Alice", "Bob"]})
-    rendered = highlighted_html(df, cell_keys={(0, "Name")}, bg="#90EE90")
-    assert 'style="background:#90EE90;color:#1a1a1a;padding:4px 8px">Alice</td>' in (
-        rendered
-    )
-    assert 'style="padding:4px 8px">Bob</td>' in rendered
+def test_preview_renders_missing_values_as_empty_text() -> None:
+    df = pd.DataFrame({"Name": ["Alice Test", None]})
+    assert list(preview_styler(df, cell_keys=set()).data["Name"]) == ["Alice Test", ""]
 
 
-def test_highlighted_html_sets_explicit_text_color_on_highlighted_cells() -> None:
-    """A highlighted cell must not inherit the page's (theme-dependent) text color.
+def test_preview_is_row_capped_and_reports_flagged_cells_it_hid() -> None:
+    df = pd.DataFrame({"Name": [f"Person {i}" for i in range(5)]})
+    keys = {(0, "Name"), (3, "Name"), (4, "Name")}
+    styler = preview_styler(df, keys, max_rows=2)
+    assert len(styler.data) == 2
+    assert preview_hidden_count(df, keys, max_rows=2) == 2
+    assert preview_hidden_count(df, keys, max_rows=5) == 0
 
-    The highlight colors are always light, so an inherited near-white body
-    text color (as in Streamlit's dark theme) would be unreadable against
-    them - see ``highlighted_html``'s docstring.
-    """
-    df = pd.DataFrame({"Name": ["Alice"]})
-    rendered = highlighted_html(df, cell_keys={(0, "Name")}, bg="#FFA500")
-    assert "color:#1a1a1a" in rendered
+
+def test_preview_ignores_keys_for_unknown_rows_or_columns() -> None:
+    df = pd.DataFrame({"Name": ["Alice Test"]})
+    styler = preview_styler(df, {(9, "Name"), (0, "Missing")})
+    assert list(styler.data["Name"]) == ["Alice Test"]
+
+
+@pytest.mark.parametrize(
+    ("count", "expected"),
+    [(0, "0 matches"), (1, "1 match"), (2, "2 matches"), (1234, "1,234 matches")],
+)
+def test_plural_picks_the_right_noun_form(count: int, expected: str) -> None:
+    assert plural(count, "match", "matches") == expected
+
+
+def test_plural_defaults_to_adding_s() -> None:
+    assert plural(1, "page") == "1 page"
+    assert plural(3, "page") == "3 pages"
 
 
 def test_findings_dataframe_labels_the_location_column_paragraph() -> None:
@@ -271,22 +282,22 @@ def test_editor_defaults_to_redacting_everything() -> None:
     """The safe default: nothing is excluded until someone unticks it."""
     table = detection_editor_dataframe([_finding("Salaries")])
 
-    assert bool(table.loc[0, "Redact?"]) is True
+    assert bool(table.loc[0, "Hide in output?"]) is True
 
 
 def test_unticking_round_trips_through_excluded_terms() -> None:
     """The editor and its inverse have to agree, or a tick would not stick."""
     findings = [_finding("Salaries"), _finding("Care Organisation")]
     table = detection_editor_dataframe(findings)
-    table.loc[table["Detected text"] == "Salaries", "Redact?"] = False
+    table.loc[table["Detected text"] == "Salaries", "Hide in output?"] = False
 
     excluded = excluded_terms(table)
 
     assert excluded == frozenset({"salaries"})
     # Seeding a fresh table with that set leaves the same row unticked.
     reseeded = detection_editor_dataframe(findings, excluded)
-    assert bool(reseeded.loc[0, "Redact?"]) is False
-    assert bool(reseeded.loc[1, "Redact?"]) is True
+    assert bool(reseeded.loc[0, "Hide in output?"]) is False
+    assert bool(reseeded.loc[1, "Hide in output?"]) is True
 
 
 def test_empty_inputs_exclude_nothing() -> None:
@@ -294,7 +305,7 @@ def test_empty_inputs_exclude_nothing() -> None:
     assert excluded_terms(pd.DataFrame()) == frozenset()
     assert detection_editor_dataframe([]).empty
     assert list(detection_editor_dataframe([]).columns) == [
-        "Redact?",
+        "Hide in output?",
         "Detected text",
         "Entity type",
         "Source",

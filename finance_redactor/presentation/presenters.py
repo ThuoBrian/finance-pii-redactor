@@ -1,18 +1,17 @@
 """View formatters: turn domain results into UI-ready artifacts.
 
 These were previously private helpers scattered inside the UI and PDF modules
-(``_make_highlighted_html``, ``_build_findings_table``, ``_findings_to_dataframe``).
+(``_build_findings_table``, ``_findings_to_dataframe``).
 Collected here, they are the presentation layer's single rendering vocabulary.
-The HTML/markup is byte-for-byte identical to the original.
 """
 
 from __future__ import annotations
 
-import html
 from collections import Counter
 from collections.abc import Sequence
 
 import pandas as pd
+from pandas.io.formats.style import Styler
 
 from finance_redactor.application.results import ExcelScanResult
 from finance_redactor.domain.entities import Finding
@@ -62,43 +61,89 @@ _FLAG_NOT_CURATED = "not in master list"
 _FLAG_AMBIGUOUS = "ambiguous - matched several master-list rows"
 
 
-def highlighted_html(df: pd.DataFrame, cell_keys: set[tuple[int, str]], bg: str) -> str:
-    """Render ``df`` as an HTML table, shading the given cells with ``bg``.
+# Matches the fill the downloaded workbook uses (excel_gateway._HIGHLIGHT_FILL),
+# so what the reviewer sees on screen is what they get in Excel.
+HIGHLIGHT_HEX = "#FFFF00"
+# Colour alone is invisible to some readers, so a changed cell also carries
+# this prefix in its text.
+CHANGED_MARKER = "» "
+PREVIEW_MAX_ROWS = 500
 
-    Cell and header text is HTML-escaped: the values come from user-uploaded
-    files (often authored by a third party, e.g. a vendor's spreadsheet), so an
-    unescaped cell containing markup would otherwise render/execute in the
-    browser via the ``unsafe_allow_html=True`` call at the render site.
 
-    A highlighted cell's text color is set explicitly (dark, since ``bg`` is
-    always a light highlight color) rather than left to inherit the page's
-    theme color: the surrounding Streamlit theme can be light or dark, and an
-    inherited near-white body text color on a light highlight background would
-    be nearly unreadable.
+THRESHOLD_HELP = (
+    "How sure the tool must be before it hides something. Lower catches more "
+    "(fewer missed names, but more words that were not names); higher catches "
+    "less. Lowering it is the safe direction. If unsure, keep the default. "
+    "Do not go above 0.90 - that stops matching every name on the master list."
+)
+ENTITY_HELP = (
+    "The kinds of sensitive information to look for: people, organizations, "
+    "email addresses, websites, and bank or payment details (shown as a fixed "
+    "mask like [ACCOUNT] rather than a pseudonym). Remove a kind only if you "
+    "are sure the file has none of it."
+)
+
+
+def entity_label(entity_type: str) -> str:
+    """Readable form of an entity code, e.g. ``EMAIL_ADDRESS`` -> ``Email address``."""
+    return entity_type.replace("_", " ").capitalize()
+
+
+def plural(count: int, singular: str, plural_form: str | None = None) -> str:
+    """Return ``"1 name"`` / ``"2 names"``: a count with the right noun form."""
+    word = singular if count == 1 else (plural_form or f"{singular}s")
+    return f"{count:,} {word}"
+
+
+def _marked_positions(
+    shown: pd.DataFrame, cell_keys: set[tuple[int, str]]
+) -> set[tuple[int, int]]:
+    """Positions (row, col) in ``shown`` of the cells named by ``cell_keys``."""
+    row_pos = {label: i for i, label in enumerate(shown.index)}
+    col_pos = {label: j for j, label in enumerate(shown.columns)}
+    return {
+        (row_pos[r], col_pos[c]) for r, c in cell_keys if r in row_pos and c in col_pos
+    }
+
+
+def preview_hidden_count(
+    df: pd.DataFrame,
+    cell_keys: set[tuple[int, str]],
+    max_rows: int = PREVIEW_MAX_ROWS,
+) -> int:
+    """Count highlighted cells that fall below the row cap and so are not shown."""
+    visible = set(df.index[:max_rows])
+    return sum(
+        1
+        for r, c in cell_keys
+        if c in df.columns and r in df.index and r not in visible
+    )
+
+
+def preview_styler(
+    df: pd.DataFrame,
+    cell_keys: set[tuple[int, str]],
+    max_rows: int = PREVIEW_MAX_ROWS,
+) -> Styler:
+    """Build the on-screen preview: first ``max_rows`` rows, flagged cells marked.
+
+    Returned for ``st.dataframe``, which draws cells on a canvas as text, so a
+    cell containing markup is shown literally and nothing here needs HTML. All
+    values are turned into text, flagged cells get :data:`CHANGED_MARKER` in
+    front, and also a yellow fill (dark text, so it reads on any theme).
+    Row-capped because a preview of a very large sheet only slows the page;
+    the download always has every row, and :func:`preview_hidden_count` tells the
+    caller say how many flagged cells the cap hid.
     """
-    highlighted = {(r, c) for r, c in cell_keys if c in df.columns and r in df.index}
-    rows_html = []
-    for row_idx, row in df.iterrows():
-        cells = []
-        for col in df.columns:
-            val = "" if pd.isna(row[col]) else html.escape(str(row[col]))
-            style = (
-                f' style="background:{bg};color:#1a1a1a;padding:4px 8px"'
-                if (row_idx, col) in highlighted
-                else ' style="padding:4px 8px"'
-            )
-            cells.append(f"<td{style}>{val}</td>")
-        rows_html.append("<tr>" + "".join(cells) + "</tr>")
-    headers = "".join(
-        f'<th style="padding:4px 8px;text-align:left;border-bottom:1px solid #ccc">'
-        f"{html.escape(str(c))}</th>"
-        for c in df.columns
-    )
-    return (
-        '<div style="overflow-x:auto"><table style="border-collapse:collapse;'
-        f'font-size:0.85em;width:100%"><thead><tr>{headers}</tr></thead>'
-        f"<tbody>{''.join(rows_html)}</tbody></table></div>"
-    )
+    shown = df.head(max_rows)
+    marked = _marked_positions(shown, cell_keys)
+    text = shown.map(lambda v: "" if pd.isna(v) else str(v))
+    for i, j in marked:
+        text.iat[i, j] = f"{CHANGED_MARKER}{text.iat[i, j]}"
+    css = pd.DataFrame("", index=text.index, columns=text.columns)
+    for i, j in marked:
+        css.iat[i, j] = f"background-color: {HIGHLIGHT_HEX}; color: #1a1a1a"
+    return text.style.apply(lambda _: css, axis=None)
 
 
 def excel_findings_dataframe(scan_result: ExcelScanResult) -> pd.DataFrame:
@@ -273,7 +318,7 @@ def findings_dataframe(findings: list[Finding], page_label: str) -> pd.DataFrame
 # A second copy of the string over there would drift silently: its
 # ``disabled`` filter would stop excluding the real column, the tick boxes
 # would render read-only, and nothing would raise.
-REDACT_COLUMN = "Redact?"
+REDACT_COLUMN = "Hide in output?"
 _TERM_COLUMN = "Detected text"
 
 _EDITOR_COLUMNS = [
@@ -291,7 +336,7 @@ def detection_editor_dataframe(
     """Render detections as a tickable table for rejecting false positives.
 
     One row per distinct detected term, ordered by first appearance, with
-    ``Redact?`` seeded from ``excluded`` so an unticked row stays unticked
+    ``Hide in output?`` seeded from ``excluded`` so an unticked row stays unticked
     across reruns. Pair with :func:`excluded_terms` to read the ticks back.
 
     ``Source`` is here on purpose: it is what tells the operator which fix

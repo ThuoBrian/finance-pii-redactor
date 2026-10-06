@@ -61,7 +61,7 @@ variable if both end up set.
      your shell profile (e.g. `~/.zshrc` or `~/.bashrc`), then re-open the
      terminal before running `./run.sh`.
 3. Refresh the app in the browser and check the master-list summary in
-   **Advanced settings** — the row counts should match what everyone else on
+   the options step (above **Advanced settings**) — the row counts should match what everyone else on
    the team sees. If it shows zero names, double-check the path and the
    exact filename (see below) before assuming the shared list is empty.
 

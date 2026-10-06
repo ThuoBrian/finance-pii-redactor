@@ -93,7 +93,7 @@ what happened instead — then file it.
 - [ ] A P.O. box or street address becomes `[ADDRESS]`, with no mapping row.
 - [ ] A link in the PDF (for example a `mailto:` behind someone's name) no
   longer opens anything in the downloaded file.
-- [ ] The master-list summary appears in PDF's **Advanced settings**, showing
+- [ ] The master-list summary appears in PDF's options step, showing
   the same row counts as Excel and Word. If it shows 0 names, curated names
   will silently not be redacted — that is the check that catches it.
 - [ ] Typing a name into that box redacts every occurrence, case-insensitive.
@@ -165,7 +165,7 @@ what happened instead — then file it.
   accented text in the document.
 - [ ] Deliberately create a data-quality issue in your test master list (two
   rows with the same name in different categories, or two names sharing one
-  `Internal ID`) — a warning banner appears under **Advanced settings** the
+  `Internal ID`) — a warning banner appears above **Advanced settings** the
   next time you load a file.
 - [ ] Put the **same name in two categories with different `Internal ID`s**,
   then type it into a PDF's words box. It should still redact, but its

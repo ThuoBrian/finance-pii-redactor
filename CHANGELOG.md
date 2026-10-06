@@ -37,6 +37,33 @@ the `version` field in `pyproject.toml`.
   `just check` rather than `uv run just check`. The `rust-just` dev
   dependency stays as a fallback and is what CI uses.
 
+### Changed
+
+- **Cleaner layout, using Streamlit's own components only (no custom CSS, no
+  HTML injection).** Each step sits in a bordered box; the step tracker is a
+  row of native badges; results show as counts (`st.metric`) with
+  **Preview / Mapping / Details** tabs (Word and PDF have no preview, so just
+  Mapping / Details); scanning shows a progress status instead of a spinner.
+  PDF redaction style, additional words and the image option are now plain
+  options, and **Advanced settings** (confidence threshold, kinds of
+  information) starts collapsed, with master-list quality warnings shown above
+  it. Nothing about detection or redaction changed.
+- **Excel preview is now a table you can scroll and sort**, not HTML. Changed
+  cells are yellow (the same yellow as the downloaded workbook, replacing the
+  orange/green preview colours) and also start with `»`, so they show
+  without relying on colour. The preview stops at 500 rows and says how many
+  highlighted cells it hid; the download always has every row. This removes
+  the app's only `unsafe_allow_html`. `presenters.highlighted_html` is replaced
+  by `presenters.preview_styler`.
+- **Plain-language help** for the confidence threshold and kinds of
+  information; the "Redact?" tick column is now "Hide in output?"; counts read
+  "1 match" / "2 matches" instead of "match(es)".
+- **The built Excel file is kept in session state**, like Word and PDF, so it
+  is no longer rebuilt on every click.
+- `jinja2>=3.1.5` is now a declared dependency (locked at 3.1.6): pandas'
+  `Styler`, used for the preview, refuses to import with the previously locked
+  3.1.4.
+
 ### Fixed
 
 - **Excel's before/after comparison table was unreadable in the new dark

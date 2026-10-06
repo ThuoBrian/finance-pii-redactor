@@ -1,6 +1,6 @@
 """Shared rendering of the master-list status panel.
 
-Both the Excel and PDF flows show the same panel inside their Advanced settings
+Both the Excel and PDF flows show the same panel above their Advanced settings
 expander: a one-line summary of loaded entries plus a warning for each data-quality
 issue found in the workbook (duplicate names, conflicting or reused IDs, blank IDs).
 The warnings are actionable — they tell the user what to fix, at whichever path
@@ -18,13 +18,15 @@ from pathlib import Path
 import streamlit as st
 
 from finance_redactor.domain.quality import SEVERITY_WARNING, QualityIssue
+from finance_redactor.presentation.presenters import plural
 
 
 def _name_list_help(counts: Mapping[str, int], master_list_path: Path) -> str:
     total = sum(counts.values())
     by_cat = ", ".join(f"{n:,} {cat}" for cat, n in sorted(counts.items())) or "none"
     return (
-        f"Loaded {total:,} master-list entr(y/ies): {by_cat}. Edit "
+        f"Loaded {plural(total, 'master-list entry', 'master-list entries')}: "
+        f"{by_cat}. Edit "
         f"`{master_list_path}` "
         "and refresh the page to update it."
     )

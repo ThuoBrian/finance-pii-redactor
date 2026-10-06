@@ -11,3 +11,21 @@ base = "dark"
 # original) - still fine for large/UI-component uses, just worth knowing if
 # this ever gets revisited.
 primaryColor = "#D32F2F"
+# Explicit so the contrast figures in this file stay checkable. All pairs below
+# clear WCAG AA (text >= 4.5:1, borders/UI >= 3:1) - see the checks in the
+# CHANGELOG entry. Fonts stay on Streamlit's bundled default: no web fonts, so
+# the app makes no external requests.
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#1A1D27"
+textColor = "#FAFAFA"
+# Lighter than primaryColor: red text on the dark background only reaches 3.80:1.
+linkColor = "#FF8A80"
+borderColor = "#6B7280"
+dataframeHeaderBackgroundColor = "#1E222D"
+baseRadius = "0.75rem"
+buttonRadius = "0.5rem"
+
+[browser]
+# Streamlit sends anonymous usage statistics by default. This app promises that
+# nothing leaves the machine, so switch it off.
+gatherUsageStats = false

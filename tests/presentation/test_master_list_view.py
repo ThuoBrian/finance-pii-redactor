@@ -36,4 +36,4 @@ def test_help_text_reports_total_and_per_category_counts():
 def test_help_text_handles_empty_counts():
     text = _name_list_help({}, Path("data/Names List - Organized.xlsx"))
 
-    assert "Loaded 0 master-list entr(y/ies): none." in text
+    assert "Loaded 0 master-list entries: none." in text

@@ -15,18 +15,21 @@ STEPS = ("Upload", "Set options", "Review", "Download")
 
 
 def steps_markdown(current: int) -> str:
-    """Render the tracker line, with ``current`` being the 1-based active step."""
+    """Render the tracker as Streamlit badges; ``current`` is the 1-based step.
+
+    Uses Streamlit's own ``:color-badge[...]`` markdown directive (no HTML):
+    green with a tick for done, blue for the active step, gray for upcoming.
+    """
     parts = []
     for number, name in enumerate(STEPS, start=1):
+        label = f"{number}. {name}"
         if number < current:
-            icon = "✅"
+            parts.append(f":green-badge[:material/check: {label}]")
         elif number == current:
-            icon = "🔵"
+            parts.append(f":blue-badge[:material/arrow_forward: {label}]")
         else:
-            icon = "⚪"
-        label = f"**{number}. {name}**" if number == current else f"{number}. {name}"
-        parts.append(f"{icon} {label}")
-    return " → ".join(parts)
+            parts.append(f":gray-badge[{label}]")
+    return " ".join(parts)
 
 
 def show_step(placeholder: Any, current: int) -> None:

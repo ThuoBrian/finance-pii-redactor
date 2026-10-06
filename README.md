@@ -144,8 +144,8 @@ is always safe.
 1. Upload your Excel, PDF, or Word file.
 2. Choose what you want redacted, then look over what the tool found. If
    there's something specific you want covered that it wouldn't know about,
-   like a codename or a case number, type it into **Advanced settings**.
-3. Look over **Check what was detected** and untick anything that isn't
+   like a codename or a case number, type it into **Additional words/phrases** in the options step.
+3. Look over **Check what was detected** (Review step, **Details** tab) and untick anything that isn't
    really a name. Ordinary words sometimes get caught, usually because
    someone added one to the master list as a payee. The **Source** column
    says why it matched. Tick or untick as many rows as you like, then click
@@ -168,7 +168,7 @@ stands for.
 
 To change which names get which codes, edit the master list
 (`Names List - Organized.xlsx`) and click **🔄 Refresh master list** in
-**Advanced settings**.
+the master-list panel in the options step.
 
 ## Which file is safe to share
 

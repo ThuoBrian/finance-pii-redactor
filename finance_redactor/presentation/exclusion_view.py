@@ -32,6 +32,7 @@ from finance_redactor.presentation.presenters import (
     REDACT_COLUMN,
     detection_editor_dataframe,
     excluded_terms,
+    plural,
 )
 
 
@@ -61,9 +62,12 @@ def render_deselect_editor(
     table = detection_editor_dataframe(findings, excluded)
     n_terms = len(table)
 
-    with st.expander(f"Check what was detected ({n_terms} distinct term(s))"):
+    # Rendered in the review step's "Details" tab, so no expander of its own.
+    with st.container():
+        st.markdown(f"**Check what was detected ({plural(n_terms, 'distinct term')})**")
         st.caption(
-            "Untick anything that is not really a name or a bank/payment "
+            "Each row is one term the tool found. Untick **Hide in output?** "
+            "for anything that is not really a name or a bank/payment "
             "detail, then click **Apply changes**. Nothing is rebuilt until "
             "you click it, so tick and untick as many rows as you like "
             "first. An unticked term is left as-is in the file you download. "
@@ -90,7 +94,7 @@ def render_deselect_editor(
                 column_config={
                     REDACT_COLUMN: st.column_config.CheckboxColumn(
                         REDACT_COLUMN,
-                        help="Untick to leave this term un-redacted in this document.",
+                        help="Untick to leave this term visible in this document.",
                         default=True,
                     )
                 },
@@ -118,7 +122,7 @@ def render_exclusion_warning(excluded: frozenset[str]) -> None:
 
     terms = ", ".join(f"`{term}`" for term in sorted(excluded))
     st.warning(
-        f"**{len(excluded)} term(s) will not be redacted**, at your request: "
+        f"**{plural(len(excluded), 'term')} will not be hidden**, at your request: "
         f"{terms}. They appear in the downloaded file exactly as they do in "
         "the original. Re-tick them above and click **Apply changes** if "
         "that is not what you meant."

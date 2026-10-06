@@ -126,24 +126,25 @@ def _main() -> None:
     logo_col.image(str(_LOGO))
     st.title("Finance PII Redactor", text_alignment="center")
     st.caption(
-        "Upload an Excel, PDF, or Word file. Pick what you want pseudonymized,"
-        "and instantly download a clean copy with names replaced by stable ID codes."
+        "Upload an Excel, PDF, or Word file. Pick what you want pseudonymized, "
+        "and instantly download a clean copy with names replaced by stable ID codes. "
         "Everything runs locally on your laptop, no data ever leaves your device.",
         text_alignment="center",
     )
     steps = st.empty()
     show_step(steps, 1)
 
-    st.subheader("1. Upload your file")
-    uploaded = st.file_uploader(
-        "Upload a file (.xlsx, .xls, .pdf, or .docx)",
-        type=["xlsx", "xls", "pdf", "docx"],
-        help="The file is processed entirely on your machine.",
-    )
+    with st.container(border=True):
+        st.subheader("1. Upload your file")
+        uploaded = st.file_uploader(
+            "Upload a file (.xlsx, .xls, .pdf, or .docx)",
+            type=["xlsx", "xls", "pdf", "docx"],
+            help="The file is processed entirely on your machine.",
+        )
 
-    if uploaded is None:
-        st.info("Upload a file above to get started.")
-        st.stop()
+        if uploaded is None:
+            st.info("Upload a file above to get started.")
+            st.stop()
 
     extension = uploaded.name.rsplit(".", 1)[-1].lower()
 

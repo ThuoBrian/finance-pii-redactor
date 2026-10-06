@@ -29,6 +29,7 @@ from finance_redactor.presentation.presenters import (
     crosswalk_dataframe,
     pdf_mapping_dataframe,
     pdf_review_dataframe,
+    plural,
 )
 
 _PDF_MAPPING_NOTICE = (
@@ -55,6 +56,37 @@ _CROSSWALK_EMBEDDED_NOTICE = (
 )
 
 
+def render_pdf_mapping_warnings(crosswalk: list[Assignment]) -> None:
+    """Warn about PDF items that cannot be decoded later. Call above the tabs.
+
+    These stay outside the mapping tab on purpose: in the Excel and Word flows
+    a flagged row is a nudge to tidy the master list, because the CSV still
+    carries the name. Here the download has no names, so an unresolved row is
+    genuinely undecodable later - that deserves to be seen without opening
+    anything.
+    """
+    unresolved = [a for a in crosswalk if a.internal_id is None]
+    ambiguous = [a for a in unresolved if a.ambiguous]
+    missing = [a for a in unresolved if not a.ambiguous]
+
+    if missing:
+        st.warning(
+            f"Not in the master list: {plural(len(missing), 'redacted item')}. "
+            "They were still redacted, but their mapping rows carry a "
+            "placeholder token instead of an Internal ID, so **they cannot be "
+            "decoded from the master list later**. Add them to the master list "
+            "and re-run if you need them identifiable."
+        )
+    if ambiguous:
+        st.warning(
+            "Ambiguous master-list match: "
+            f"{plural(len(ambiguous), 'redacted item')}. Each matched more than "
+            "one master-list row with conflicting IDs, so no Internal ID was "
+            "recorded rather than guessing one. Fix the duplicate rows (see the "
+            "master-list data-quality panel above the options) and re-run."
+        )
+
+
 def render_pdf_mapping_section(
     crosswalk: list[Assignment],
     base_name: str,
@@ -67,60 +99,35 @@ def render_pdf_mapping_section(
     as a flag. The two differ in the one way that matters - what ends up in a
     file - and a shared function with a switch is exactly how a name
     eventually reaches a download that promised not to have any.
-
-    Unresolved entities are warned about **above** the expander, not inside
-    it. In the Excel and Word flows a flagged row is a nudge to tidy the
-    master list, because the CSV still carries the name. Here the download has
-    no names, so an unresolved row is genuinely undecodable later - that
-    deserves to be seen without opening anything.
     """
     if not crosswalk:
+        st.caption("Nothing was replaced with a label, so there is no mapping.")
         return
-
-    unresolved = [a for a in crosswalk if a.internal_id is None]
-    ambiguous = [a for a in unresolved if a.ambiguous]
-    missing = [a for a in unresolved if not a.ambiguous]
-
-    if missing:
-        st.warning(
-            f"{len(missing)} redacted item(s) are not in the master list. They "
-            "were still redacted, but their mapping rows carry a placeholder "
-            "token instead of an Internal ID, so **they cannot be decoded from "
-            "the master list later**. Add them to the master list and re-run if "
-            "you need them identifiable."
-        )
-    if ambiguous:
-        st.warning(
-            f"{len(ambiguous)} redacted item(s) matched more than one master-list "
-            "row with conflicting IDs, so no Internal ID was recorded rather "
-            "than guessing one. Fix the duplicate rows (see the master-list "
-            "data-quality panel in Advanced settings) and re-run."
-        )
 
     n_suggested = sum(1 for a in crosswalk if a.suggested_pseudonym)
     mapping_df = pdf_mapping_dataframe(crosswalk, master_list_fingerprint)
 
-    with st.expander(f"Label -> Internal ID mapping ({len(crosswalk)} item(s))"):
-        if n_suggested:
-            st.info(
-                f"{n_suggested} unresolved item(s) closely resemble a curated "
-                "master-list name - see 'Possible match' (e.g. a likely typo). "
-                "This is a hint only; it was **not** applied automatically."
-            )
-        st.caption(
-            "Names are shown here for your review only. The downloaded file "
-            "below contains no names."
+    st.markdown(f"**Label -> Internal ID mapping ({plural(len(crosswalk), 'item')})**")
+    if n_suggested:
+        st.info(
+            f"Close master-list match for {plural(n_suggested, 'unresolved item')}"
+            " - see 'Possible match' (e.g. a likely typo). "
+            "This is a hint only; it was **not** applied automatically."
         )
-        st.dataframe(pdf_review_dataframe(crosswalk), width="stretch", hide_index=True)
-        st.info(_PDF_MAPPING_NOTICE)
-        st.download_button(
-            label="Download label mapping (CSV, no names)",
-            data=mapping_df.to_csv(index=False).encode("utf-8"),
-            file_name=f"{base_name}_mapping.csv",
-            mime="text/csv",
-            key="pdf_mapping_download",
-            width="stretch",
-        )
+    st.caption(
+        "Names are shown here for your review only. The downloaded file "
+        "below contains no names."
+    )
+    st.dataframe(pdf_review_dataframe(crosswalk), width="stretch", hide_index=True)
+    st.info(_PDF_MAPPING_NOTICE)
+    st.download_button(
+        label="Download label mapping (CSV, no names)",
+        data=mapping_df.to_csv(index=False).encode("utf-8"),
+        file_name=f"{base_name}_mapping.csv",
+        mime="text/csv",
+        key="pdf_mapping_download",
+        width="stretch",
+    )
 
 
 def render_crosswalk_section(
@@ -132,7 +139,7 @@ def render_crosswalk_section(
 ) -> None:
     """Render the crosswalk review table, plus a guarded CSV download.
 
-    ``download_separately`` is True for flows (PDF) where the crosswalk only
+    ``download_separately`` is True for flows (Word) where the crosswalk only
     ever leaves the app as its own CSV file, so it must stay separate from
     the pseudonymized output. Excel passes ``download_separately=False``: the
     crosswalk is already embedded as a sheet in the downloaded workbook (see
@@ -140,36 +147,37 @@ def render_crosswalk_section(
     here and the warning instead points at the sheet that's already there.
     """
     if not crosswalk:
+        st.caption("No names were replaced, so there is no mapping.")
         return
 
     n_flagged = sum(1 for a in crosswalk if a.auto)
     n_suggested = sum(1 for a in crosswalk if a.suggested_pseudonym)
     df = crosswalk_dataframe(crosswalk)
 
-    with st.expander(f"Name -> pseudonym mapping ({len(crosswalk)} name(s))"):
-        if n_flagged:
-            st.info(
-                f"{n_flagged} name(s) were not in the master list and received a "
-                "flagged auto-generated ID (shown as 'yes' under Flagged). Review "
-                "them and, if correct, add them to the master list with a curated ID."
-            )
-        if n_suggested:
-            st.info(
-                f"{n_suggested} flagged name(s) closely resemble a curated master-"
-                "list name - see 'Possible match' (e.g. a likely typo). This is a "
-                "hint only; it was **not** applied automatically. Fix the source "
-                "document or add an alias, then re-run."
-            )
-        st.dataframe(df, width="stretch", hide_index=True)
-        if download_separately:
-            st.warning(_CROSSWALK_WARNING)
-            st.download_button(
-                label="Download name mapping (CSV)",
-                data=df.to_csv(index=False).encode("utf-8"),
-                file_name=f"{base_name}_crosswalk.csv",
-                mime="text/csv",
-                key=f"{key_prefix}_crosswalk_download",
-                width="stretch",
-            )
-        else:
-            st.info(_CROSSWALK_EMBEDDED_NOTICE)
+    st.markdown(f"**Name -> pseudonym mapping ({plural(len(crosswalk), 'name')})**")
+    if n_flagged:
+        st.info(
+            f"Not in the master list: {plural(n_flagged, 'name')}. Each received "
+            "a flagged auto-generated ID (shown as 'yes' under Flagged). Review "
+            "them and, if correct, add them to the master list with a curated ID."
+        )
+    if n_suggested:
+        st.info(
+            f"Close master-list match for {plural(n_suggested, 'flagged name')}"
+            " - see 'Possible match' (e.g. a likely typo). This is a "
+            "hint only; it was **not** applied automatically. Fix the source "
+            "document or add an alias, then re-run."
+        )
+    st.dataframe(df, width="stretch", hide_index=True)
+    if download_separately:
+        st.warning(_CROSSWALK_WARNING)
+        st.download_button(
+            label="Download name mapping (CSV)",
+            data=df.to_csv(index=False).encode("utf-8"),
+            file_name=f"{base_name}_crosswalk.csv",
+            mime="text/csv",
+            key=f"{key_prefix}_crosswalk_download",
+            width="stretch",
+        )
+    else:
+        st.info(_CROSSWALK_EMBEDDED_NOTICE)

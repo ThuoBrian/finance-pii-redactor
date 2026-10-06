@@ -5,13 +5,17 @@ from __future__ import annotations
 from finance_redactor.presentation.steps import steps_markdown
 
 
-def test_first_step_is_current_and_the_rest_are_upcoming():
+def test_first_step_is_active_and_the_rest_are_upcoming():
     assert steps_markdown(1) == (
-        "🔵 **1. Upload** → ⚪ 2. Set options → ⚪ 3. Review → ⚪ 4. Download"
+        ":blue-badge[:material/arrow_forward: 1. Upload] "
+        ":gray-badge[2. Set options] :gray-badge[3. Review] :gray-badge[4. Download]"
     )
 
 
 def test_last_step_marks_every_earlier_step_done():
     assert steps_markdown(4) == (
-        "✅ 1. Upload → ✅ 2. Set options → ✅ 3. Review → 🔵 **4. Download**"
+        ":green-badge[:material/check: 1. Upload] "
+        ":green-badge[:material/check: 2. Set options] "
+        ":green-badge[:material/check: 3. Review] "
+        ":blue-badge[:material/arrow_forward: 4. Download]"
     )
