@@ -15,6 +15,7 @@ import streamlit as st
 
 from finance_redactor.application.redact_docx import RedactDocxService
 from finance_redactor.config import Settings
+from finance_redactor.domain.errors import UnreadableFileError
 from finance_redactor.domain.quality import QualityIssue
 from finance_redactor.presentation.crosswalk_view import render_crosswalk_section
 from finance_redactor.presentation.exclusion_view import (
@@ -76,6 +77,11 @@ def run_docx_flow(
             "Entity types to pseudonymize",
             options=list(settings.supported_entities),
             default=list(settings.supported_entities),
+            help=(
+                "Which kinds of PII to catch: names and organizations, email "
+                "addresses, websites, and bank/payment details (shown as a "
+                "fixed mask like [ACCOUNT] rather than a pseudonym)."
+            ),
             key="docx_entities",
         )
         custom_words_input = st.text_area(
@@ -104,11 +110,19 @@ def run_docx_flow(
     )
     if st.button("Pseudonymize Word document", type=main_button_type, width="stretch"):
         uploaded.seek(0)
-        with st.spinner("Scanning document for PII..."):
-            scan_result = docx_service.scan(uploaded, entity_options, threshold)
-            st.session_state.docx_scan_result = scan_result
-            uploaded.seek(0)
-            result = docx_service.redact(uploaded, scan_result, custom_words)
+        try:
+            with st.spinner("Scanning document for PII..."):
+                scan_result = docx_service.scan(uploaded, entity_options, threshold)
+        except UnreadableFileError:
+            st.error(
+                "This file could not be read as a Word document. It may be "
+                "corrupted, or not really a .docx file despite its name. "
+                "Open it in Word, save a fresh copy, and upload that instead."
+            )
+            st.stop()
+        st.session_state.docx_scan_result = scan_result
+        uploaded.seek(0)
+        result = docx_service.redact(uploaded, scan_result, custom_words)
         st.session_state.docx_buffer = result.data
         st.session_state.docx_findings = result.findings
         st.session_state.docx_blocks = result.block_count

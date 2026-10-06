@@ -14,7 +14,7 @@ from io import BytesIO
 import fitz  # PyMuPDF
 
 from finance_redactor.domain.entities import IMAGE_REDACTION_SENTINEL
-from finance_redactor.domain.errors import EncryptedPdfError
+from finance_redactor.domain.errors import EncryptedPdfError, UnreadableFileError
 
 _EXTERNAL_LINK_KINDS = frozenset({fitz.LINK_URI, fitz.LINK_LAUNCH, fitz.LINK_GOTOR})
 
@@ -95,9 +95,18 @@ class PyMuPdfDocument:
         no password needed to view) reports ``needs_pass == 0``, so it opens
         and redacts normally. Note that the redacted copy is written
         unencrypted, dropping those restrictions.
+
+        Raises :class:`UnreadableFileError` for a corrupted PDF or one
+        renamed to ``.pdf`` without really being one - PyMuPDF raises its own
+        ``FileDataError`` for that, which is reraised as the shared type so
+        the presentation layer has one error to catch across all three
+        formats.
         """
         data = source.read() if hasattr(source, "read") else source
-        doc = fitz.open(stream=data, filetype="pdf")
+        try:
+            doc = fitz.open(stream=data, filetype="pdf")
+        except fitz.FileDataError as e:
+            raise UnreadableFileError from e
         if doc.needs_pass:
             doc.close()
             raise EncryptedPdfError

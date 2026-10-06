@@ -14,6 +14,7 @@ without this a link's *visible* text was never scanned either.
 
 from __future__ import annotations
 
+import zipfile
 from io import BytesIO
 from typing import cast
 
@@ -27,6 +28,7 @@ from docx.table import Table
 from docx.text.paragraph import Paragraph
 
 from finance_redactor.domain.entities import Span
+from finance_redactor.domain.errors import UnreadableFileError
 
 
 def _table_paragraphs(table: Table) -> list[Paragraph]:
@@ -193,13 +195,22 @@ class PythonDocxDocument:
 
     @classmethod
     def open(cls, source: object) -> PythonDocxDocument:
-        """Open a .docx from bytes or a readable file-like object."""
+        """Open a .docx from bytes or a readable file-like object.
+
+        Raises :class:`UnreadableFileError` for a corrupted document or one
+        renamed to ``.docx`` without really being one - python-docx raises
+        ``BadZipFile`` when the bytes aren't a zip at all, and ``KeyError``
+        when they're a zip but missing the docx package parts.
+        """
         data = source.read() if hasattr(source, "read") else source
         # `source` is deliberately typed as `object` at the port boundary (it
         # may be raw bytes or any file-like upload, e.g. Streamlit's
         # UploadedFile) - the actual runtime contract (bytes in, either way)
         # isn't expressible there without narrowing the port itself.
-        return cls(open_docx(BytesIO(cast(bytes, data))))
+        try:
+            return cls(open_docx(BytesIO(cast(bytes, data))))
+        except (zipfile.BadZipFile, KeyError) as e:
+            raise UnreadableFileError from e
 
     @property
     def block_count(self) -> int:

@@ -9,8 +9,10 @@ from __future__ import annotations
 from io import BytesIO
 
 import pandas as pd
+import pytest
 from openpyxl import load_workbook
 
+from finance_redactor.domain.errors import UnreadableFileError
 from finance_redactor.infrastructure.documents.excel_gateway import (
     OpenpyxlExcelGateway,
 )
@@ -27,6 +29,14 @@ _CROSSWALK_COLUMNS = [
 
 def _crosswalk_df(rows: list[dict]) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=_CROSSWALK_COLUMNS)
+
+
+def test_read_rejects_a_file_that_is_not_really_a_workbook():
+    """A corrupted or wrongly-renamed file surfaces as the shared error type,
+    not openpyxl's own ``BadZipFile``/``KeyError``.
+    """
+    with pytest.raises(UnreadableFileError):
+        OpenpyxlExcelGateway().read(BytesIO(b"not a workbook file at all"))
 
 
 def test_write_produces_redacted_and_crosswalk_sheets():

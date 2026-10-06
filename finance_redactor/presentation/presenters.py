@@ -69,6 +69,12 @@ def highlighted_html(df: pd.DataFrame, cell_keys: set[tuple[int, str]], bg: str)
     files (often authored by a third party, e.g. a vendor's spreadsheet), so an
     unescaped cell containing markup would otherwise render/execute in the
     browser via the ``unsafe_allow_html=True`` call at the render site.
+
+    A highlighted cell's text color is set explicitly (dark, since ``bg`` is
+    always a light highlight color) rather than left to inherit the page's
+    theme color: the surrounding Streamlit theme can be light or dark, and an
+    inherited near-white body text color on a light highlight background would
+    be nearly unreadable.
     """
     highlighted = {(r, c) for r, c in cell_keys if c in df.columns and r in df.index}
     rows_html = []
@@ -77,7 +83,7 @@ def highlighted_html(df: pd.DataFrame, cell_keys: set[tuple[int, str]], bg: str)
         for col in df.columns:
             val = "" if pd.isna(row[col]) else html.escape(str(row[col]))
             style = (
-                f' style="background:{bg};padding:4px 8px"'
+                f' style="background:{bg};color:#1a1a1a;padding:4px 8px"'
                 if (row_idx, col) in highlighted
                 else ' style="padding:4px 8px"'
             )

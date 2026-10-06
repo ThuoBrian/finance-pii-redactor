@@ -5,7 +5,7 @@ from __future__ import annotations
 import fitz
 import pytest
 
-from finance_redactor.domain.errors import EncryptedPdfError
+from finance_redactor.domain.errors import EncryptedPdfError, UnreadableFileError
 from finance_redactor.infrastructure.documents.pdf_gateway import (
     PyMuPdfDocument,
     _search_variants,
@@ -160,6 +160,14 @@ def test_encrypted_pdf_error_carries_no_document_content():
         PyMuPdfDocument.open(data)
 
     assert str(excinfo.value) == ""
+
+
+def test_open_rejects_a_file_that_is_not_really_a_pdf():
+    """A corrupted or wrongly-renamed file surfaces as the shared error type,
+    not PyMuPDF's own ``FileDataError``.
+    """
+    with pytest.raises(UnreadableFileError):
+        PyMuPdfDocument.open(b"not a pdf file at all")
 
 
 def test_open_accepts_an_owner_password_only_pdf():

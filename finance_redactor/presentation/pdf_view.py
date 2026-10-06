@@ -24,7 +24,7 @@ import streamlit as st
 
 from finance_redactor.application.redact_pdf import RedactionStyle, RedactPdfService
 from finance_redactor.config import Settings
-from finance_redactor.domain.errors import EncryptedPdfError
+from finance_redactor.domain.errors import EncryptedPdfError, UnreadableFileError
 from finance_redactor.domain.quality import QualityIssue
 from finance_redactor.presentation.crosswalk_view import render_pdf_mapping_section
 from finance_redactor.presentation.exclusion_view import (
@@ -156,6 +156,13 @@ def run_pdf_flow(
                 "This PDF is password-protected, so its pages can't be read. "
                 "Open it in a PDF reader, enter the password, save an "
                 "unlocked copy, and upload that copy instead."
+            )
+            st.stop()
+        except UnreadableFileError:
+            st.error(
+                "This file could not be read as a PDF. It may be corrupted, "
+                "or not really a .pdf file despite its name. Open it in a "
+                "PDF reader, save a fresh copy, and upload that instead."
             )
             st.stop()
         st.session_state.pdf_scan_result = scan_result

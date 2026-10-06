@@ -2,3 +2,12 @@
 # The logo (assets/data-privacy-ai-dark-nobg.svg) is white-on-transparent and
 # needs a dark background to be visible.
 base = "dark"
+# Streamlit's default primary red (#FF4B4B) only clears 3.30:1 against white
+# button-label text, below WCAG AA's 4.5:1 for normal text - this is a
+# meaningful gap here since most of the app's primary actions (Pseudonymize,
+# Download, Close the app) rely on white-on-primaryColor buttons. #D32F2F
+# clears 4.98:1 there. Trade-off: it reads a touch darker as plain
+# text/accents against the dark background (3.80:1, vs. 5.72:1 for the
+# original) - still fine for large/UI-component uses, just worth knowing if
+# this ever gets revisited.
+primaryColor = "#D32F2F"

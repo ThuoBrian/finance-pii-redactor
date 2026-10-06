@@ -24,9 +24,36 @@ the `version` field in `pyproject.toml`.
   the browser tab, or only the console window, used to leave the other one
   running in the background with the master list and NLP model still in
   memory; this button (hard process exit, `os._exit`) ends both at once.
+- **A corrupted or wrongly-renamed upload now gets a plain-language message**
+  instead of a raw traceback, in all three formats. `UnreadableFileError`
+  (`domain/errors.py`) is raised by the Excel/Word/PDF gateways and caught in
+  their views, the same pattern `EncryptedPdfError` already used for a
+  locked PDF.
+- A custom `primaryColor` (`.streamlit/config.toml`) replaces Streamlit's
+  default button red, which only cleared 3.30:1 against white button-label
+  text - below WCAG AA's 4.5:1 for normal text, and this app leans on
+  primary buttons for most of its key actions.
 - Developer docs use a system `just` (`winget install Casey.Just`), so it's
   `just check` rather than `uv run just check`. The `rust-just` dev
   dependency stays as a fallback and is what CI uses.
+
+### Fixed
+
+- **Excel's before/after comparison table was unreadable in the new dark
+  theme.** `highlighted_html` (`presentation/presenters.py`) shaded a
+  highlighted cell's background but never set its text color, so the text
+  inherited the page's theme color — near-black on the old light theme
+  (fine), near-white on the new dark default (close to invisible against the
+  light orange/green highlight colors). The highlighted branch now sets an
+  explicit dark text color, since the highlight colors themselves never
+  change with the theme.
+- Excel's "Advanced settings" expander now starts open, like PDF's and
+  Word's, instead of being the one collapsed-by-default panel of the three.
+- The "Entity types to pseudonymize" multiselect (Excel, Word) now has a
+  `help=` tooltip explaining what the entity types mean in plain language,
+  matching the other inputs in the same panel.
+
+### Added
 
 - **PDF detects names that aren't on the master list.** The PDF flow now uses
   the same spaCy-backed engine as Excel and Word, which reverses the old

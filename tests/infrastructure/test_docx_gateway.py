@@ -8,10 +8,12 @@ from __future__ import annotations
 
 from io import BytesIO
 
+import pytest
 from docx import Document
 from docx.enum.section import WD_SECTION
 
 from finance_redactor.domain.entities import Span
+from finance_redactor.domain.errors import UnreadableFileError
 from finance_redactor.infrastructure.documents.docx_gateway import PythonDocxDocument
 
 
@@ -22,6 +24,14 @@ def _build_docx(builder) -> bytes:
     buffer = BytesIO()
     document.save(buffer)
     return buffer.getvalue()
+
+
+def test_open_rejects_a_file_that_is_not_really_a_docx():
+    """A corrupted or wrongly-renamed file surfaces as the shared error type,
+    not python-docx's own ``BadZipFile``/``KeyError``.
+    """
+    with pytest.raises(UnreadableFileError):
+        PythonDocxDocument.open(b"not a docx file at all")
 
 
 def test_blocks_cover_body_table_and_header_paragraphs():

@@ -54,8 +54,22 @@ def test_highlighted_html_still_highlights_selected_cells() -> None:
     """Escaping must not break the existing cell-highlighting behavior."""
     df = pd.DataFrame({"Name": ["Alice", "Bob"]})
     rendered = highlighted_html(df, cell_keys={(0, "Name")}, bg="#90EE90")
-    assert 'style="background:#90EE90;padding:4px 8px">Alice</td>' in rendered
+    assert 'style="background:#90EE90;color:#1a1a1a;padding:4px 8px">Alice</td>' in (
+        rendered
+    )
     assert 'style="padding:4px 8px">Bob</td>' in rendered
+
+
+def test_highlighted_html_sets_explicit_text_color_on_highlighted_cells() -> None:
+    """A highlighted cell must not inherit the page's (theme-dependent) text color.
+
+    The highlight colors are always light, so an inherited near-white body
+    text color (as in Streamlit's dark theme) would be unreadable against
+    them - see ``highlighted_html``'s docstring.
+    """
+    df = pd.DataFrame({"Name": ["Alice"]})
+    rendered = highlighted_html(df, cell_keys={(0, "Name")}, bg="#FFA500")
+    assert "color:#1a1a1a" in rendered
 
 
 def test_findings_dataframe_labels_the_location_column_paragraph() -> None:

@@ -15,6 +15,7 @@ import streamlit as st
 from finance_redactor.application.ports import ExcelGateway
 from finance_redactor.application.redact_excel import RedactExcelService
 from finance_redactor.config import Settings
+from finance_redactor.domain.errors import UnreadableFileError
 from finance_redactor.domain.quality import QualityIssue
 from finance_redactor.presentation.crosswalk_view import render_crosswalk_section
 from finance_redactor.presentation.exclusion_view import (
@@ -63,7 +64,16 @@ def run_excel_flow(
         force="df" not in st.session_state,
     )
     if is_new:
-        st.session_state.df = excel_gateway.read(uploaded)
+        try:
+            st.session_state.df = excel_gateway.read(uploaded)
+        except UnreadableFileError:
+            st.error(
+                "This file could not be read as an Excel workbook. It may be "
+                "corrupted, or not really an .xlsx/.xls file despite its "
+                "name. Open it in Excel, save a fresh copy, and upload that "
+                "instead."
+            )
+            st.stop()
 
     df = st.session_state.df
     text_cols = excel_gateway.text_columns(df)
@@ -80,7 +90,7 @@ def run_excel_flow(
         ),
     )
 
-    with st.expander("Advanced settings"):
+    with st.expander("Advanced settings", expanded=True):
         threshold = st.slider(
             "Confidence threshold",
             min_value=0.1,
@@ -93,6 +103,11 @@ def run_excel_flow(
             "Entity types to pseudonymize",
             options=list(settings.supported_entities),
             default=list(settings.supported_entities),
+            help=(
+                "Which kinds of PII to catch: names and organizations, email "
+                "addresses, websites, and bank/payment details (shown as a "
+                "fixed mask like [ACCOUNT] rather than a pseudonym)."
+            ),
         )
         render_master_list_status(
             name_counts,

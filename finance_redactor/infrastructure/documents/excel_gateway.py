@@ -7,11 +7,14 @@ the UI module.
 
 from __future__ import annotations
 
+import zipfile
 from io import BytesIO
 
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill
+
+from finance_redactor.domain.errors import UnreadableFileError
 
 _HIGHLIGHT_FILL = PatternFill(fill_type="solid", fgColor="FFFF00")
 _HEADER_FONT = Font(bold=True)
@@ -23,8 +26,17 @@ class OpenpyxlExcelGateway:
     """Reads workbooks into DataFrames and writes highlighted redacted copies."""
 
     def read(self, source: object) -> pd.DataFrame:
-        """Load the first sheet of a workbook into a DataFrame."""
-        return pd.read_excel(source, engine="openpyxl")
+        """Load the first sheet of a workbook into a DataFrame.
+
+        Raises :class:`UnreadableFileError` for a corrupted workbook or one
+        renamed to ``.xlsx``/``.xls`` without really being one - openpyxl
+        raises ``BadZipFile`` when the bytes aren't a zip at all, and
+        ``KeyError`` when they're a zip but missing the xlsx package parts.
+        """
+        try:
+            return pd.read_excel(source, engine="openpyxl")
+        except (zipfile.BadZipFile, KeyError) as e:
+            raise UnreadableFileError from e
 
     def text_columns(self, df: pd.DataFrame) -> list[str]:
         """Return free-text (string dtype) columns, used as the scan default.
