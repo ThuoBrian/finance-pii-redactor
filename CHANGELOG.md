@@ -11,7 +11,14 @@ the `version` field in `pyproject.toml`.
 - **The Windows installer adds a "Finance PII Redactor" shortcut** to the
   Desktop and Start menu, so reopening the tool is a double-click instead of
   finding `run.bat`. Updating refreshes it. If a managed machine blocks
-  shortcuts, the install carries on and `run.bat` still works.
+  shortcuts, the install carries on and `run.bat` still works. The installer
+  now also confirms the shortcut files actually landed (some locked-down
+  machines let shortcut creation report success without writing anything),
+  and `run.bat` re-creates the Desktop shortcut on launch if it's missing,
+  for anyone who skipped the installer or deleted it.
+- **The app defaults to Streamlit's dark theme** (`.streamlit/config.toml`),
+  since the logo (`assets/data-privacy-ai-dark-nobg.svg`) is a white-on-
+  transparent SVG and was invisible on the default light background.
 - Developer docs use a system `just` (`winget install Casey.Just`), so it's
   `just check` rather than `uv run just check`. The `rust-just` dev
   dependency stays as a fallback and is what CI uses.

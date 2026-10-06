@@ -1,0 +1,4 @@
+[theme]
+# The logo (assets/data-privacy-ai-dark-nobg.svg) is white-on-transparent and
+# needs a dark background to be visible.
+base = "dark"

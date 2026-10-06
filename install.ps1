@@ -133,10 +133,19 @@ try {
         $link.IconLocation     = "$env:SystemRoot\System32\shell32.dll,47"
         $link.Save()
     }
-    Write-Host "Added a 'Finance PII Redactor' shortcut to your Desktop and Start menu." @green
+    # CreateShortcut/Save can silently no-op on some managed/locked-down
+    # machines instead of throwing, so confirm the files actually landed.
+    $missing = @($onDesktop, $startMenu) | Where-Object { -not (Test-Path $_) }
+    if ($missing) {
+        Write-Host "Shortcut creation did not report an error, but this is missing: $($missing -join ', ')" @cyan
+        Write-Host "Open the app later with run.bat in $Target." @cyan
+    }
+    else {
+        Write-Host "Added a 'Finance PII Redactor' shortcut to your Desktop and Start menu." @green
+    }
 }
 catch {
-    Write-Host "Could not add shortcuts. Open the app later with run.bat in $Target." @cyan
+    Write-Host "Could not add shortcuts ($($_.Exception.Message)). Open the app later with run.bat in $Target." @cyan
 }
 
 Write-Host ""

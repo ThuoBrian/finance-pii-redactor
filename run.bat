@@ -19,7 +19,7 @@ set "IPA_GREEN=%ESC%[38;2;73;172;87m"
 call :banner
 
 :: -- 1. Install uv if not already present -------------------------------------
-call :stepnum 1 2 "Checking the setup helper"
+call :stepnum 1 3 "Checking the setup helper"
 where uv >nul 2>&1
 if %errorlevel% neq 0 (
     call :info "First-time setup: installing a small helper (one-time)."
@@ -43,7 +43,7 @@ if %errorlevel% neq 0 (
 set "APPDIR=%~dp0"
 if "%APPDIR:~-1%"=="\" set "APPDIR=%APPDIR:~0,-1%"
 
-call :stepnum 2 2 "Preparing the program"
+call :stepnum 2 3 "Preparing the program"
 if not exist "%APPDIR%\.venv" (
     call :info "First-time setup: installing the program and language model (one-time)."
     call :wait "This downloads about 400 MB and can take a few minutes. Please leave this window open..."
@@ -59,7 +59,19 @@ if not exist "%APPDIR%\.venv" (
     call :ok "Program is ready."
 )
 
-:: -- 3. Launch the app --------------------------------------------------------
+:: -- 3. Make sure a Desktop shortcut exists (self-heals if missing/deleted) ----
+call :stepnum 3 3 "Checking your Desktop shortcut"
+set "SHORTCUT=%USERPROFILE%\Desktop\Finance PII Redactor.lnk"
+if not exist "%SHORTCUT%" (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $s = New-Object -ComObject WScript.Shell; $l = $s.CreateShortcut('%SHORTCUT%'); $l.TargetPath = '%APPDIR%\run.bat'; $l.WorkingDirectory = '%APPDIR%'; $l.Description = 'Redact names from Excel, PDF and Word files (runs locally)'; $l.IconLocation = '%SystemRoot%\System32\shell32.dll,47'; $l.Save() } catch {}" >nul 2>&1
+)
+if exist "%SHORTCUT%" (
+    call :ok "Desktop shortcut is ready."
+) else (
+    call :info "Could not add a Desktop shortcut. You can still run this file directly."
+)
+
+:: -- 4. Launch the app --------------------------------------------------------
 call :ready
 "%APPDIR%\.venv\Scripts\streamlit.exe" run "%APPDIR%\app.py" --server.address=127.0.0.1
 
