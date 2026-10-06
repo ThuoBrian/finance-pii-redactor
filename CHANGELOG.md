@@ -39,6 +39,9 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **Streamlit usage statistics are switched off** (`gatherUsageStats = false`
+  under `[browser]` in `.streamlit/config.toml`), so the app makes no
+  telemetry requests.
 - **Cleaner layout, using Streamlit's own components only (no custom CSS, no
   HTML injection).** Each step sits in a bordered box; the step tracker is a
   row of native badges; results show as counts (`st.metric`) with
@@ -66,6 +69,11 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **Editing the master list, or choosing a different master-list folder, now
+  takes effect on the next rerun.** The cache arguments in `app.py`'s
+  `_get_master_list_bundle` started with an underscore, which Streamlit leaves
+  out of the cache key, so the list was never reloaded except by **Refresh
+  master list** or a restart. They are now plain `path` and `mtime`.
 - **Excel's before/after comparison table was unreadable in the new dark
   theme.** `highlighted_html` (`presentation/presenters.py`) shaded a
   highlighted cell's background but never set its text color, so the text

@@ -77,6 +77,9 @@ what happened instead — then file it.
   less.
 - [ ] Unchecking an entity type (e.g. `ORGANIZATION`) stops it from being
   redacted.
+- [ ] The **Preview** tab shows a table you can scroll and sort. Changed
+  cells are yellow and start with `»`. It stops at 500 rows and says how many
+  highlighted cells it hid.
 - [ ] Downloaded file has a second **Crosswalk** sheet mapping names to IDs.
 - [ ] Editing the master list workbook, saving, and clicking **🔄 Refresh
   master list** picks up the change without restarting the app.
@@ -181,8 +184,8 @@ For each unchecked box or unexpected result, [open a GitHub
 issue](https://github.com/ThuoBrian/finance-pii-redactor/issues/new) with:
 
 - What you did (exact file type, text, and settings).
-- What you expected vs. what happened — a screenshot of the **Detection
-  details** table and/or crosswalk helps a lot.
+- What you expected vs. what happened — a screenshot of the **Details** tab
+  and/or the mapping helps a lot.
 - Whether it's reproducible on a second try.
 
 Check **[troubleshooting.md](troubleshooting.md)** first — several things that look like bugs

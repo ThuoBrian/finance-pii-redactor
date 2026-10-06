@@ -5,7 +5,8 @@ This file is the single place where concrete adapters are wired into use cases
 graph, route the upload to the right presentation flow. The heavy NLP engine is
 built once and cached across reruns; the master-list-derived bundle (parsed
 rows, recognizers, detection engine) is cached alongside it, keyed on the
-workbook's modification time so edits still take effect on the next refresh.
+workbook's path and modification time, so an edit or a folder change takes
+effect on the next rerun.
 """
 
 from __future__ import annotations
@@ -64,7 +65,7 @@ def _main() -> None:
         return PresidioEngine._create_nlp_engine(settings)
 
     @st.cache_resource(show_spinner="Loading master list...")
-    def _get_master_list_bundle(_path: str, _mtime: float | None):
+    def _get_master_list_bundle(path: str, mtime: float | None):
         """Parse the master list and build its detection engine, cached by path+mtime.
 
         Keying on the workbook's path and modification time means identical
@@ -72,11 +73,18 @@ def _main() -> None:
         and compiled recognizer patterns instead of redoing the ~26k-row parse
         and regex compilation every time, while a real edit to the workbook -
         or the master-list folder changing (e.g. via the "Set up shared
-        master list" dialog) - busts the cache immediately. ``_path`` alone
-        would already change on a folder switch, but including both makes the
-        key robust even in the unlikely case two different files share an
+        master list" dialog) - busts the cache on the next rerun. ``path``
+        alone would already change on a folder switch, but including both makes
+        the key robust even in the unlikely case two different files share an
         mtime.
+
+        The arguments must NOT start with an underscore: Streamlit leaves
+        underscore-prefixed arguments out of the cache key, which would make
+        this cache never invalidate. They are unused in the body because the
+        repository reads ``settings.master_list_file`` directly; they exist
+        only to form the key.
         """
+        del path, mtime  # key only; see docstring
         repo = MasterListRepository(
             settings.master_list_file,
             settings.categories,

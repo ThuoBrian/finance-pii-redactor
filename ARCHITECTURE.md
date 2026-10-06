@@ -56,7 +56,12 @@ are cached with `@st.cache_resource`:
   keyed on the workbook's path and modification time. Editing the workbook,
   or pointing at a different folder, rebuilds it. Streamlit only re-checks
   the key on a rerun, never on a timer, so an edit shows up after the next
-  widget interaction or page reload.
+  widget interaction or page reload. The **Refresh master list** button
+  clears the cache outright, for the case where the modification time has not
+  changed yet (for example a Box Drive sync still copying the file down).
+  The key arguments of `_get_master_list_bundle` must not start with an
+  underscore: Streamlit leaves such arguments out of the cache key, and the
+  cache would then never rebuild.
 
 ## Outputs and sensitivity
 
