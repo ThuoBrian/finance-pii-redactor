@@ -49,12 +49,10 @@ def render_deselect_editor(
     were refiltered, an unticked row would disappear along with its own tick
     box and could never be re-ticked.
 
-    Wrapped in a form so a review pass costs one rebuild, not one per tick:
-    outside a form, ``st.data_editor`` reruns the whole script on every single
-    checkbox toggle, so a caller that rebuilds the output file whenever the
-    returned set changes would rebuild once per tick. Inside a form, Streamlit
-    batches every widget change and only reruns (sending the batched values)
-    when ``form_submit_button`` is pressed.
+    Not wrapped in a form, so the Apply button can show a pending count and
+    turn primary the moment a tick changes. A review pass still costs one
+    rebuild, not one per tick: ``st.data_editor`` reruns the script on every
+    toggle, but the returned set only changes on the Apply click.
     """
     if not findings:
         return frozenset()
@@ -82,37 +80,42 @@ def render_deselect_editor(
         # operator overrule a detection, and a tick box beside the offending
         # row is where they will look for it.
         #
-        # clear_on_submit defaults to False and must stay that way: True
-        # would snap every tick box back to "redact" the moment Apply is
-        # clicked, undoing the operator's own change.
-        with st.form(key=f"{key_prefix}_deselect_form", border=False):
-            edited = st.data_editor(
-                table,
+        edited = st.data_editor(
+            table,
+            width="stretch",
+            hide_index=True,
+            key=f"{key_prefix}_deselect_editor",
+            column_config={
+                REDACT_COLUMN: st.column_config.CheckboxColumn(
+                    REDACT_COLUMN,
+                    help="Untick to leave this term visible in this document.",
+                    default=True,
+                )
+            },
+            disabled=[c for c in table.columns if c != REDACT_COLUMN],
+        )
+        pending = excluded_terms(edited)
+        n_changes = len(pending ^ excluded)
+        if n_changes:
+            applied = st.button(
+                f"Apply changes ({n_changes} pending)",
+                type="primary",
                 width="stretch",
-                hide_index=True,
-                key=f"{key_prefix}_deselect_editor",
-                column_config={
-                    REDACT_COLUMN: st.column_config.CheckboxColumn(
-                        REDACT_COLUMN,
-                        help="Untick to leave this term visible in this document.",
-                        default=True,
-                    )
-                },
-                disabled=[c for c in table.columns if c != REDACT_COLUMN],
+                key=f"{key_prefix}_deselect_apply",
             )
-            submitted = st.form_submit_button("Apply changes", width="stretch")
+        else:
+            applied = False
+            st.button(
+                "Apply changes",
+                disabled=True,
+                width="stretch",
+                key=f"{key_prefix}_deselect_apply_idle",
+            )
 
-    # Only recompute on the rerun that the Apply click itself caused. Under
-    # Streamlit's documented form semantics this guard is provably redundant:
-    # on any rerun that is *not* a submit, unsent form edits are never
-    # delivered to the script, so ``edited`` here is just ``table`` again and
-    # ``excluded_terms(edited) == excluded`` already. The guard is kept anyway
-    # as the one place that states "nothing happens before Apply" outright,
-    # rather than relying on that equivalence holding forever.
-    if not submitted:
-        return excluded
-
-    return excluded_terms(edited)
+    # Ticks reach the script on every toggle, so the returned set must stay
+    # the *applied* one until Apply is clicked: callers rebuild the output
+    # whenever it changes. Only the click's own rerun returns the pending set.
+    return pending if applied else excluded
 
 
 def render_exclusion_warning(excluded: frozenset[str]) -> None:

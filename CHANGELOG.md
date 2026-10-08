@@ -39,6 +39,9 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **"Apply changes" in the detection review lights up when there is
+  something to apply.** It is a greyed-out button until you untick or re-tick
+  a row, then turns solid red and shows how many changes are pending.
 - **Streamlit usage statistics are switched off** (`gatherUsageStats = false`
   under `[browser]` in `.streamlit/config.toml`), so the app makes no
   telemetry requests.
