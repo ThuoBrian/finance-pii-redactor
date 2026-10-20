@@ -182,6 +182,17 @@ what happened instead — then file it.
 - [ ] With a mix of terms (a few ordinary words, an ALL-CAPS heading, a
   curated name), the likeliest false positives are at the top and the curated
   name is last. The summary line above the table matches what you see.
+- [ ] The review step opens on the **Review** tab, labelled with how many model
+  guesses there are to check. The per-occurrence table is in its own
+  **Occurrences** tab.
+- [ ] There is one **Apply changes** button, under the table. The line at the
+  top says what is left: guesses to check, terms left visible, changes not
+  applied yet.
+- [ ] **Find a term** narrows the table as you type; untick a match, clear the
+  box, and it is still unticked.
+- [ ] After **Apply changes**, a green "Rebuilt the file" note appears once.
+- [ ] A file where every term is a master-list name or a strict pattern shows
+  "Nothing here is a guess" with the table folded under **Review anyway**.
 - [ ] **Show** narrows the table to one source. Untick a row, switch the
   filter so it is hidden, switch back: it is still unticked, and the pending
   count never changed.
@@ -219,7 +230,7 @@ For each unchecked box or unexpected result, [open a GitHub
 issue](https://github.com/ThuoBrian/finance-pii-redactor/issues/new) with:
 
 - What you did (exact file type, text, and settings).
-- What you expected vs. what happened — a screenshot of the **Details** tab
+- What you expected vs. what happened — a screenshot of the **Review** tab
   and/or the mapping helps a lot.
 - Whether it's reproducible on a second try.
 

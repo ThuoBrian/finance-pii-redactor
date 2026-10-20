@@ -58,6 +58,18 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **The review step leads with the review.** "3. Review the results" now opens
+  on a **Review** tab, labelled with how many model guesses there are to check
+  (PDF and Word used to open on Mapping, with the review hidden in a tab
+  called Details). The per-occurrence table moved to its own **Occurrences**
+  tab, so the review tab is one table, not two. A status line says what is
+  left (guesses to check, terms left visible, changes not applied yet), the
+  long explanation folds into "How to read this table", a **Find a term** box
+  narrows the list, and the table scrolls inside itself after about 12 rows.
+  There is now one **Apply changes** button, under the table (the second one
+  above it is gone), and applying shows a one-off "Rebuilt the file" note. When
+  nothing is a model guess, the step says so and folds the table away under
+  "Review anyway".
 - **The redacted Excel workbook keeps the original's formatting.** Column
   widths and row heights, fonts, fills, borders, alignment, number formats
   (currency, dates), merged cells, freeze panes, tab colour, zoom, gridlines
@@ -114,6 +126,12 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **The review step no longer crashes with `KeyError: <DetectionSource.MODEL:
+  'model'>`.** It happened when Streamlit re-imported the code while a result
+  was still on screen (for example after an update or a code change): findings
+  kept in the session held members of the old copy of the enum, and the review
+  table compared them by identity. It now compares by value, and any unknown
+  source sorts with the model guesses.
 - **A short word redacted in a PDF no longer blacks out the same letters inside
   longer words.** Redacting "IPA" also covered the "ipa" in "principal",
   "participant" and "municipal", because the PDF step located each detection

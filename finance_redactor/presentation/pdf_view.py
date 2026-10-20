@@ -36,7 +36,11 @@ from finance_redactor.presentation.exclusion_view import (
     render_exclusion_warning,
 )
 from finance_redactor.presentation.master_list_view import render_master_list_status
-from finance_redactor.presentation.presenters import findings_dataframe, plural
+from finance_redactor.presentation.presenters import (
+    findings_dataframe,
+    plural,
+    review_tab_labels,
+)
 from finance_redactor.presentation.session import (
     output_stem,
     reset_on_new_upload,
@@ -258,7 +262,10 @@ def run_pdf_flow(
                 )
             render_pdf_mapping_warnings(st.session_state.pdf_crosswalk)
 
-        tab_mapping, tab_details = st.tabs(["Mapping", "Details"])
+        review_findings = st.session_state.get("pdf_all_findings", [])
+        tab_review, tab_mapping, tab_occurrences = st.tabs(
+            review_tab_labels(review_findings)
+        )
         with tab_mapping:
             if style_value == RedactionStyle.BLACKOUT.value:
                 st.caption(
@@ -270,12 +277,13 @@ def run_pdf_flow(
                     base_name,
                     master_list_fingerprint=master_list_fingerprint,
                 )
-        with tab_details:
+        with tab_review:
             excluded = render_deselect_editor(
-                st.session_state.get("pdf_all_findings", []),
+                review_findings,
                 key_prefix="pdf",
                 excluded=st.session_state.get("pdf_excluded_applied", frozenset()),
             )
+        with tab_occurrences:
             st.markdown(f"**All detections ({plural(n_entities, 'finding')})**")
             st.dataframe(
                 findings_dataframe(pdf_findings, "Page"),

@@ -25,7 +25,9 @@ def review_hint(text: str, entity_type: str, source: DetectionSource) -> str:
     ``one-word organization`` is weaker: real organizations are sometimes one
     word, but so are the labels the model mistakes for one.
     """
-    if source is not DetectionSource.MODEL:
+    # ``!=``, not ``is not``: a finding kept across a module reload holds a
+    # member of an older copy of the enum, equal in value but not identical.
+    if source != DetectionSource.MODEL:
         return ""
     words = text.split()
     if len(words) == 1 and words[0].casefold() in COMMON_ENGLISH_WORDS:
