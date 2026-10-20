@@ -181,7 +181,7 @@ what happened instead — then file it.
   fully redacted.
 - [ ] With a mix of terms (a few ordinary words, an ALL-CAPS heading, a
   curated name), the likeliest false positives are at the top and the curated
-  name is last. The summary line above the table matches what you see.
+  name is last. The status line above the table matches what you see.
 - [ ] The review step opens on the **Review** tab, labelled with how many model
   guesses there are to check. The per-occurrence table is in its own
   **Occurrences** tab.
@@ -196,9 +196,8 @@ what happened instead — then file it.
 - [ ] **Show** narrows the table to one source. Untick a row, switch the
   filter so it is hidden, switch back: it is still unticked, and the pending
   count never changed.
-- [ ] **Untick all shown** and **Untick N ordinary words** state their counts,
-  change nothing until clicked, and **Apply changes** still has to be clicked.
-  A curated master-list name is never swept up by the ordinary-word button.
+- [ ] **Untick all shown** and **Tick all shown** state their counts, act only
+  on the rows shown, and **Apply changes** still has to be clicked.
 - [ ] Try the same in all three formats. All three rebuild from the already-
   cached scan (no re-run of spaCy), so none should pause noticeably longer
   than another - the old "Word re-runs the language model" pause no longer

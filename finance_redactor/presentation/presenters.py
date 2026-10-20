@@ -17,7 +17,7 @@ from finance_redactor.application.ports import SheetFormatting
 from finance_redactor.application.results import WorkbookScanResult
 from finance_redactor.domain.entities import DetectionSource, Finding
 from finance_redactor.domain.pseudonyms import Assignment, normalize
-from finance_redactor.domain.review_hints import ORDINARY_WORD, review_hint
+from finance_redactor.domain.review_hints import review_hint
 
 _EXCEL_COLUMNS = [
     "Sheet",
@@ -557,17 +557,18 @@ def review_tab_labels(
 def review_status(
     table: pd.DataFrame, applied: frozenset[str], pending: frozenset[str]
 ) -> str:
-    """One line on where the review stands: to check, left visible, not applied."""
-    parts = []
-    n_model = model_guess_count(table)
-    if n_model:
-        parts.append(f"{plural(n_model, 'model guess', 'model guesses')} to check")
+    """One line: what is in the table, what is left visible, what is not applied.
+
+    Builds on :func:`review_summary`, so the review tab has a single line
+    rather than two that both count the model guesses.
+    """
+    parts = [review_summary(table).removesuffix(".")]
     if applied:
         parts.append(f"{plural(len(applied), 'term')} left visible")
     n_changes = len(pending ^ applied)
     if n_changes:
         parts.append(f"{plural(n_changes, 'change')} not applied yet")
-    return " · ".join(parts) if parts else "Every detected term will be hidden."
+    return " · ".join(parts) + "."
 
 
 def apply_notice(left_visible: frozenset[str]) -> str:
@@ -603,12 +604,6 @@ def review_summary(table: pd.DataFrame) -> str:
                 plural(count, label, label + "es" if label.endswith("h") else None)
             )
     return f"{plural(n, 'term')}: " + ", ".join(parts) + "."
-
-
-def ordinary_word_terms(table: pd.DataFrame) -> frozenset[str]:
-    """Return the normalized terms the hint calls plain English words."""
-    rows = table[table["Hint"] == ORDINARY_WORD]
-    return frozenset(term_key(t) for t in rows[_TERM_COLUMN])
 
 
 def merge_pending(

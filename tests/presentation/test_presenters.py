@@ -29,7 +29,6 @@ from finance_redactor.presentation.presenters import (
     findings_dataframe,
     formatting_note,
     merge_pending,
-    ordinary_word_terms,
     pdf_mapping_dataframe,
     pdf_mapping_with_names_dataframe,
     pdf_review_dataframe,
@@ -517,12 +516,6 @@ def test_filter_shows_one_source_and_all_by_default() -> None:
     assert len(filter_editor_rows(table, "Model guesses")) == 4
 
 
-def test_ordinary_word_terms_only_picks_the_plain_english_hint() -> None:
-    table = detection_editor_dataframe(_mixed_findings())
-
-    assert ordinary_word_terms(table) == frozenset({"across"})
-
-
 def test_a_filter_never_changes_a_hidden_rows_tick() -> None:
     """Hidden rows keep their state: filtering is display only."""
     table = detection_editor_dataframe(_mixed_findings())
@@ -568,20 +561,24 @@ def test_review_tab_label_does_not_depend_on_the_ticks() -> None:
     assert review_tab_labels(findings) == review_tab_labels(list(findings))
 
 
-def test_review_status_says_what_is_left_to_do() -> None:
+def test_review_status_is_one_line_with_the_breakdown_and_the_progress() -> None:
     table = detection_editor_dataframe(_mixed_findings())
+    breakdown = (
+        "7 terms: 4 model guesses (2 worth a closer look), 1 typed word, "
+        "1 pattern match, 1 master-list name"
+    )
 
-    assert review_status(table, frozenset(), frozenset()) == "4 model guesses to check"
+    assert review_status(table, frozenset(), frozenset()) == breakdown + "."
     assert review_status(
         table, frozenset({"across"}), frozenset({"across", "salaries", "mary test"})
-    ) == ("4 model guesses to check · 1 term left visible · 2 changes not applied yet")
+    ) == (breakdown + " · 1 term left visible · 2 changes not applied yet.")
 
 
 def test_review_status_for_a_clean_run() -> None:
     table = detection_editor_dataframe([_finding("Care Organisation")])
 
     assert review_status(table, frozenset(), frozenset()) == (
-        "Every detected term will be hidden."
+        "1 term: 1 master-list name."
     )
 
 

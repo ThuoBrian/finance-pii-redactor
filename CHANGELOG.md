@@ -62,8 +62,8 @@ the `version` field in `pyproject.toml`.
   on a **Review** tab, labelled with how many model guesses there are to check
   (PDF and Word used to open on Mapping, with the review hidden in a tab
   called Details). The per-occurrence table moved to its own **Occurrences**
-  tab, so the review tab is one table, not two. A status line says what is
-  left (guesses to check, terms left visible, changes not applied yet), the
+  tab, so the review tab is one table, not two. One status line says what is
+  in the list and what is left (terms left visible, changes not applied yet), the
   long explanation folds into "How to read this table", a **Find a term** box
   narrows the list, and the table scrolls inside itself after about 12 rows.
   There is now one **Apply changes** button, under the table (the second one
@@ -88,9 +88,8 @@ the `version` field in `pyproject.toml`.
   gains **Confidence** and **Hint** columns (the hint says "ordinary word",
   "ALL-CAPS" or "one-word organization" for model guesses; a blank hint does
   not mean the term is right). A summary line says what is in the list, a
-  **Show** filter narrows it by source, and three bulk buttons ("Untick all
-  shown", "Tick all shown", "Untick N ordinary words") each state how many rows
-  they will touch. **Apply changes** also appears above the table. Nothing is
+  **Show** filter narrows it by source, and two bulk buttons ("Untick all
+  shown", "Tick all shown") each state how many rows they will touch. **Apply changes** also appears above the table. Nothing is
   ever unticked automatically, filtering only changes what is shown (hidden
   rows keep their state), and nothing is remembered between documents.
 - **"Apply changes" in the detection review lights up when there is

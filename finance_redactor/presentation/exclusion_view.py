@@ -37,10 +37,8 @@ from finance_redactor.presentation.presenters import (
     filter_editor_rows,
     merge_pending,
     model_guess_count,
-    ordinary_word_terms,
     plural,
     review_status,
-    review_summary,
     search_editor_rows,
     term_key,
 )
@@ -81,7 +79,7 @@ def render_deselect_editor(
 
     The table is built to be quick to get through, not just to be correct:
     likely false positives come first and curated master-list names last, a
-    summary line says how big the job is, a filter narrows the list, and a
+    status line says how big the job is, a filter narrows the list, and a
     few bulk buttons clear whole groups at once. Nothing here ever unticks a
     row on its own. Every ticked-off row is something the reviewer chose,
     and each bulk button says how many rows it will touch.
@@ -130,7 +128,6 @@ def render_deselect_editor(
         # Filled at the end, once this run's ticks are known; drawn here so
         # the line sits at the top where the reviewer looks first.
         status_slot = st.empty()
-        st.caption(review_summary(overview))
         with st.expander("How to read this table"):
             st.markdown(_HOW_TO_READ)
 
@@ -166,8 +163,7 @@ def render_deselect_editor(
 
         shown_all = search_editor_rows(filter_editor_rows(overview, choice), search)
         shown_keys = frozenset(term_key(t) for t in shown_all["Detected text"])
-        ordinary = ordinary_word_terms(shown_all)
-        untick_col, tick_col, ordinary_col = st.columns(3)
+        untick_col, tick_col = st.columns(2)
         changed = False
         if untick_col.button(
             f"Untick all shown ({len(shown_keys)})",
@@ -183,15 +179,6 @@ def render_deselect_editor(
             key=f"{key_prefix}_review_tick_shown",
         ):
             pending, changed = pending - shown_keys, True
-        if ordinary_col.button(
-            f"Untick {plural(len(ordinary), 'ordinary word')}",
-            disabled=not ordinary,
-            width="stretch",
-            help="Plain English words such as 'the' or 'across' that the model "
-            "mistook for a name. Master-list names are never included.",
-            key=f"{key_prefix}_review_untick_ordinary",
-        ):
-            pending, changed = pending | ordinary, True
         if changed:
             state[pending_key] = pending
             state[version_key] += 1
