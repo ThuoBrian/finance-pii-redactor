@@ -151,7 +151,9 @@ is always safe.
    says why it matched. Tick or untick as many rows as you like, then click
    **Apply changes** to rebuild the file without them - everything else
    stays redacted.
-4. Download the redacted copy.
+4. Download the redacted copy. It is named `redacted-` plus the date and
+   time, never after your original file, and its document properties (author,
+   title and the like) are cleared.
 
 In Excel, every cell the tool changed is highlighted in yellow, so you can
 see at a glance what was touched.

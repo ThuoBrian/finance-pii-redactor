@@ -37,8 +37,8 @@ from finance_redactor.presentation.exclusion_view import (
 from finance_redactor.presentation.master_list_view import render_master_list_status
 from finance_redactor.presentation.presenters import findings_dataframe, plural
 from finance_redactor.presentation.session import (
+    output_stem,
     reset_on_new_upload,
-    sanitize_base_name,
 )
 from finance_redactor.presentation.steps import show_step
 
@@ -209,7 +209,7 @@ def run_pdf_flow(
     n_entities = len(pdf_findings)
     total_pages = st.session_state.pdf_pages
     removed_links = st.session_state.get("pdf_links", 0)
-    base_name = sanitize_base_name(uploaded.name)
+    base_name = output_stem()
     style_value = st.session_state.get("pdf_style", RedactionStyle.PSEUDONYMIZE.value)
 
     show_step(steps, 3)
@@ -310,14 +310,14 @@ def run_pdf_flow(
         )
         if style_value == RedactionStyle.BLACKOUT.value:
             label = "Download blacked-out PDF"
-            file_name = f"{base_name}_blacked_out.pdf"
+            file_name = f"{base_name}-blackout.pdf"
             caption = (
                 "Matched text and selected images are covered with a black "
                 "shade in the downloaded PDF."
             )
         else:
             label = "Download pseudonymized PDF"
-            file_name = f"{base_name}_pseudonymized.pdf"
+            file_name = f"{base_name}.pdf"
             caption = (
                 "Matched words/phrases are replaced with a short label (e.g. "
                 "[001]) directly in the PDF text layer."

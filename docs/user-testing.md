@@ -89,6 +89,15 @@ what happened instead — then file it.
 - [ ] Editing the master list workbook, saving, and clicking **🔄 Refresh
   master list** picks up the change without restarting the app.
 
+### File names and properties (all formats)
+
+- [ ] Upload a file whose name is a made-up person's name. The download is
+  called `redacted-<date>-<time>`, nothing from the original name, and the
+  mapping CSV (PDF, Word) has the same stem.
+- [ ] Set an author and title on your test PDF and Word file first. In the
+  download, right-click > Properties (or File > Info in Word) shows both
+  blank.
+
 ### PDF
 
 - [ ] An email address and a website URL redact automatically, with nothing

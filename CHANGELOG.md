@@ -49,6 +49,21 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **Redacted files no longer carry the original file's name.** The download
+  used to be the upload's name plus a suffix, so a file called after a person
+  or vendor passed that name straight into the redacted file and its mapping
+  CSV. They are now called `redacted-YYYYMMDD-HHMM` (with `-blackout` for the
+  blacked-out PDF), and the mapping CSV shares the same stem so the pair stays
+  matched. The stem is fixed per upload.
+- **Document properties are stripped from redacted PDF and Word files.**
+  PDF: the Info dictionary (author, title, subject, keywords, creator,
+  producer, dates) and the XMP packet. Word: author, last-modified-by, title,
+  subject, keywords, comments, category and the other core properties are
+  blanked and the dates set to 1970-01-01, and the app properties, custom
+  properties and the first-page thumbnail are removed. Excel was already
+  clean, since its output is rebuilt from cell values; a test now locks that
+  in. Still open: PDF annotations, bookmarks, attachments and form fields,
+  and Word tracked changes and comments.
 - **"Apply changes" in the detection review lights up when there is
   something to apply.** It is a greyed-out button until you untick or re-tick
   a row, then turns solid red and shows how many changes are pending.

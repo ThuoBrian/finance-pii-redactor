@@ -225,3 +225,38 @@ def test_remove_external_links_keeps_internal_page_jumps():
     # The visible text is untouched; detection decides what happens to it.
     assert "Jane Doe" in reopened[0].get_text()
     reopened.close()
+
+
+def test_to_bytes_strips_document_properties_and_xmp():
+    """Author, title and XMP survive text redaction untouched, so to_bytes drops them."""
+    doc = fitz.open()
+    doc.new_page().insert_text((72, 100), "Paid to Jane Doe")
+    doc.set_metadata(
+        {
+            "author": "Pat Example",
+            "title": "Payroll Review",
+            "subject": "Subject Line",
+            "keywords": "k1, k2",
+            "creator": "Example Writer",
+            "producer": "Example PDF Tool",
+        }
+    )
+    doc.set_xml_metadata("<x:xmpmeta xmlns:x='adobe:ns:meta/'>Pat Example</x:xmpmeta>")
+    data = doc.tobytes()
+    doc.close()
+    assert b"Pat Example" in data  # the fixture really carries it
+
+    document = PyMuPdfDocument.open(data)
+    document.redact_page(0, [(["Jane Doe"], "[001]")])
+    out = document.to_bytes()
+    document.close()
+
+    reopened = fitz.open(stream=out, filetype="pdf")
+    metadata = reopened.metadata
+    reopened.close()
+    assert all(
+        not metadata[key]
+        for key in ("author", "title", "subject", "keywords", "creator", "producer")
+    )
+    for leaked in (b"Pat Example", b"Payroll Review", b"Example PDF Tool", b"xmpmeta"):
+        assert leaked not in out
