@@ -99,6 +99,11 @@ what happened instead — then file it.
   row in the mapping (see
   [troubleshooting.md](troubleshooting.md#pdf-detects-names-the-same-way-excel-and-word-do)).
 - [ ] A P.O. box or street address becomes `[ADDRESS]`, with no mapping row.
+- [ ] The mapping tab offers one download (no names) by default. Switch on
+  **Also prepare a mapping with names (Confidential)**: a second download
+  appears with a Confidential warning, and its CSV has an `Original name`
+  column. The first file still has no names. Upload another PDF and the
+  toggle is off again.
 - [ ] A link in the PDF (for example a `mailto:` behind someone's name) no
   longer opens anything in the downloaded file.
 - [ ] The master-list summary appears in PDF's options step, showing

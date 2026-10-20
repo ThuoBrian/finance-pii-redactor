@@ -8,6 +8,15 @@ the `version` field in `pyproject.toml`.
 
 ### Added
 
+- **An optional PDF mapping with names.** Under the PDF mapping download there
+  is now a toggle, "Also prepare a mapping with names (Confidential)", off by
+  default. Switched on, it adds a second download, `<name>_crosswalk.csv`, with
+  an `Original name` column (the name as it appeared in the document) next to
+  the label, Internal ID, category, flag and possible match. The default
+  mapping is unchanged: no names, **Internal**, safe to keep with the redacted
+  PDF, and a test now pins its exact header list. The names file is
+  **Confidential**, the same as Word's, and the screen says so. Excel and Word
+  already carried names and are unchanged.
 - **Excel workbooks with several tabs are now processed in full.** Before,
   only the first tab was read, scanned and written out; every other tab was
   silently dropped. Now every tab is scanned (hidden ones too), you can pick

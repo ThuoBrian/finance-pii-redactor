@@ -180,7 +180,9 @@ The mapping is where it gets more careful, and the three formats differ:
 - **PDF:** the mapping has no names in it, so it cannot identify anyone on
   its own. It is **Internal**, and you can keep it with the redacted PDF.
   What has to stay locked down is the master list, which is the only thing
-  that turns an ID number back into a name.
+  that turns an ID number back into a name. If you switch on **Also prepare a
+  mapping with names**, you get a second CSV that lists real names. That one
+  is **Confidential**, like Word's, so keep it apart from the redacted PDF.
 - **Word:** the mapping is a separate CSV listing real names, so it is
   **Confidential**. Store it somewhere else, securely, and don't send it with
   the redacted file.

@@ -1,7 +1,8 @@
 """Rendering of the mapping between what was redacted and what replaced it.
 
 Two schemes live here, because PDF and Excel/Word now differ in what they
-write into a document.
+write into a document. (PDF can also offer a separate, opt-in, Confidential
+mapping with names; the default PDF download never has any.)
 
 :func:`render_pdf_mapping_section` serves PDF, which stamps a document-local
 ``[001]`` label. Its download carries ``label -> Internal ID`` and **no
@@ -28,9 +29,14 @@ from finance_redactor.domain.pseudonyms import Assignment
 from finance_redactor.presentation.presenters import (
     crosswalk_dataframe,
     pdf_mapping_dataframe,
+    pdf_mapping_with_names_dataframe,
     pdf_review_dataframe,
     plural,
 )
+
+# Session key of the opt-in toggle; the PDF flow clears it on a new upload so a
+# names file is never offered by default for the next document.
+PDF_NAMES_TOGGLE_KEY = "pdf_names_mapping_toggle"
 
 _PDF_MAPPING_NOTICE = (
     "This file contains **no names** - only `[001] = 17728` style rows. On its "
@@ -128,6 +134,24 @@ def render_pdf_mapping_section(
         key="pdf_mapping_download",
         width="stretch",
     )
+    # Off by default, and nothing with names is built unless it is switched on.
+    if st.toggle(
+        "Also prepare a mapping with names (Confidential)",
+        key=PDF_NAMES_TOGGLE_KEY,
+        help="For when you need to read the mapping without the master list. "
+        "The default file above stays names-free.",
+    ):
+        st.warning(_CROSSWALK_WARNING)
+        st.download_button(
+            label="Download name mapping (CSV, Confidential)",
+            data=pdf_mapping_with_names_dataframe(crosswalk, master_list_fingerprint)
+            .to_csv(index=False)
+            .encode("utf-8"),
+            file_name=f"{base_name}_crosswalk.csv",
+            mime="text/csv",
+            key="pdf_names_mapping_download",
+            width="stretch",
+        )
 
 
 def render_crosswalk_section(

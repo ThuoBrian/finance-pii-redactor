@@ -26,6 +26,7 @@ from finance_redactor.presentation.presenters import (
     excluded_terms,
     findings_dataframe,
     pdf_mapping_dataframe,
+    pdf_mapping_with_names_dataframe,
     pdf_review_dataframe,
     plural,
     preview_hidden_count,
@@ -356,3 +357,56 @@ def test_excel_findings_dataframe_names_the_sheet_for_every_finding() -> None:
     assert table.loc[0, "Row"] == 5
     assert table.loc[1, "Column"] == "(tab name)"
     assert pd.isna(table.loc[1, "Row"])
+
+
+def test_the_default_pdf_mapping_header_is_pinned_without_any_name_column() -> None:
+    """A name column cannot be added to the Internal file by accident."""
+    df = pdf_mapping_dataframe([_assignment()])
+
+    assert list(df.columns) == [
+        "Label",
+        "Internal ID",
+        "Category",
+        "Entity type",
+        "Flagged",
+        "Master list",
+    ]
+
+
+def test_the_opt_in_mapping_adds_the_name_and_keeps_the_same_rows() -> None:
+    assignment = _assignment(ordinal=3)
+    default = pdf_mapping_dataframe([assignment], "list@1")
+
+    named = pdf_mapping_with_names_dataframe([assignment], "list@1")
+
+    assert list(named.columns) == [
+        "Label",
+        "Original name",
+        "Internal ID",
+        "Category",
+        "Entity type",
+        "Flagged",
+        "Possible match",
+        "Master list",
+    ]
+    assert named.loc[0, "Original name"] == _DISTINCTIVE
+    for column in default.columns:
+        assert named.loc[0, column] == default.loc[0, column]
+
+
+def test_the_opt_in_mapping_shows_unresolved_rows_and_the_possible_match() -> None:
+    assignment = _assignment(
+        pseudonym="CST-AUTO-3F9A1",
+        auto=True,
+        internal_id=None,
+        category="",
+        suggested_pseudonym="STF-12345",
+        suggested_name="Michael Sample",
+        suggested_score=0.92,
+    )
+
+    named = pdf_mapping_with_names_dataframe([assignment])
+
+    assert named.loc[0, "Internal ID"] == "CST-AUTO-3F9A1"
+    assert named.loc[0, "Flagged"] == "not in master list"
+    assert named.loc[0, "Possible match"] == "Michael Sample (STF-12345, 92% match)"
