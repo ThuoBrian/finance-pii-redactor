@@ -14,7 +14,12 @@ from collections.abc import Callable, Mapping
 import pandas as pd
 
 from finance_redactor.application.ports import PiiDetector
-from finance_redactor.application.results import CellFinding, ExcelScanResult
+from finance_redactor.application.results import (
+    CellFinding,
+    ExcelScanResult,
+    RedactedSheet,
+    WorkbookScanResult,
+)
 from finance_redactor.domain.entities import PiiDetection
 from finance_redactor.domain.pseudonyms import (
     Assignment,
@@ -73,27 +78,59 @@ class RedactExcelService:
         value is analyzed, letting the caller drive a progress bar without this
         layer depending on any UI framework.
         """
-        cells: list[tuple[int, str, str]] = []  # (row, column, cell text)
-        for col in columns:
-            if col not in df.columns:
-                continue
-            for row_idx, value in enumerate(df[col]):
-                cells.append((row_idx, col, _cell_text(value)))
+        cells = _cells(df, columns)
+        cache = self._analyze(
+            list(dict.fromkeys(text for _, _, text in cells)),
+            entities,
+            threshold,
+            on_progress,
+        )
+        return ExcelScanResult(_findings(cells, cache))
 
-        unique_texts = list(dict.fromkeys(text for _, _, text in cells))
-        total = len(unique_texts)
+    def scan_workbook(
+        self,
+        sheets: Mapping[str, pd.DataFrame],
+        columns_by_sheet: Mapping[str, list[str]],
+        entities: list[str],
+        threshold: float,
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> WorkbookScanResult:
+        """Scan the chosen columns of every tab, plus the tab names themselves.
+
+        One cache spans the whole workbook, so a name repeated across tabs is
+        analyzed once. ``columns_by_sheet`` lists the columns to scan per tab.
+        """
+        sheet_cells = {
+            name: _cells(df, columns_by_sheet.get(name, []))
+            for name, df in sheets.items()
+        }
+        unique_texts = dict.fromkeys(
+            [text for cells in sheet_cells.values() for _, _, text in cells]
+            + list(sheets)
+        )
+        cache = self._analyze(list(unique_texts), entities, threshold, on_progress)
+        return WorkbookScanResult(
+            sheets={
+                name: ExcelScanResult(_findings(cells, cache))
+                for name, cells in sheet_cells.items()
+            },
+            tab_names={name: cache[name] for name in sheets if cache[name]},
+        )
+
+    def _analyze(
+        self,
+        texts: list[str],
+        entities: list[str],
+        threshold: float,
+        on_progress: Callable[[int, int], None] | None,
+    ) -> dict[str, list[PiiDetection]]:
+        total = len(texts)
         cache: dict[str, list[PiiDetection]] = {}
-        for done, text in enumerate(unique_texts, start=1):
+        for done, text in enumerate(texts, start=1):
             cache[text] = self._detector.analyze(text, entities, threshold)
             if on_progress is not None:
                 on_progress(done, total)
-
-        findings = [
-            CellFinding(row_idx, col, cache[text])
-            for row_idx, col, text in cells
-            if cache[text]
-        ]
-        return ExcelScanResult(findings)
+        return cache
 
     def redact(
         self,
@@ -118,9 +155,82 @@ class RedactExcelService:
         :class:`ExcelScanResult` and never re-runs detection, so changing a
         tick box costs nothing and never reloads the spaCy model.
         """
-        pseudonymizer = Pseudonymizer(
+        pseudonymizer = self._new_pseudonymizer()
+        redacted = self._redact_sheet(df, scan_result, columns, exclude, pseudonymizer)
+        return redacted, pseudonymizer.crosswalk()
+
+    def redact_workbook(
+        self,
+        sheets: Mapping[str, pd.DataFrame],
+        scan_result: WorkbookScanResult,
+        columns_by_sheet: Mapping[str, list[str]],
+        exclude: frozenset[str] = frozenset(),
+    ) -> tuple[list[RedactedSheet], list[Assignment]]:
+        """Redact every tab and its name; one pseudonym space and one crosswalk.
+
+        A single :class:`Pseudonymizer` spans the workbook, so a name appearing
+        on several tabs maps to one pseudonym and one crosswalk row. Tabs come
+        back as a list in tab order, not a dict: two tab names can redact to
+        the same text, and a dict would silently drop one of the tabs.
+        ``exclude`` applies to cells and tab names alike.
+        """
+        pseudonymizer = self._new_pseudonymizer()
+        redacted_sheets = []
+        for name, df in sheets.items():
+            sheet_scan = scan_result.sheets[name]
+            redacted_sheets.append(
+                RedactedSheet(
+                    name=self._replace(
+                        name,
+                        scan_result.tab_names.get(name, []),
+                        exclude,
+                        pseudonymizer,
+                    ),
+                    data=self._redact_sheet(
+                        df,
+                        sheet_scan,
+                        columns_by_sheet.get(name, []),
+                        exclude,
+                        pseudonymizer,
+                    ),
+                    highlighted=sheet_scan.cell_keys(),
+                )
+            )
+        return redacted_sheets, pseudonymizer.crosswalk()
+
+    def _new_pseudonymizer(self) -> Pseudonymizer:
+        return Pseudonymizer(
             self._master_map, self._auto_prefixes, fuzzy_threshold=self._fuzzy_threshold
         )
+
+    def _replace(
+        self,
+        text: str,
+        detections: list[PiiDetection],
+        exclude: frozenset[str],
+        pseudonymizer: Pseudonymizer,
+    ) -> str:
+        """``text`` with each non-excluded detection swapped for its pseudonym or mask."""
+        kept = [d for d in detections if normalize(d.text) not in exclude]
+        if not kept:
+            return text
+        return apply_replacements(
+            text,
+            kept,
+            lambda d: (
+                self._fixed_masks.get(d.entity_type)
+                or pseudonymizer.assign(d.entity_type, d.text).pseudonym
+            ),
+        )
+
+    def _redact_sheet(
+        self,
+        df: pd.DataFrame,
+        scan_result: ExcelScanResult,
+        columns: list[str],
+        exclude: frozenset[str],
+        pseudonymizer: Pseudonymizer,
+    ) -> pd.DataFrame:
         redacted = df.copy()
         # A mask is a string, and pandas refuses to write one into an int or
         # float column (an account-number column read as numbers).
@@ -130,20 +240,31 @@ class RedactExcelService:
         for cell in scan_result.findings:
             if cell.column not in columns:
                 continue
-            detections = [
-                d for d in cell.detections if normalize(d.text) not in exclude
-            ]
-            if not detections:
-                continue
-            redacted.at[cell.row, cell.column] = apply_replacements(
-                _cell_text(df.at[cell.row, cell.column]),
-                detections,
-                lambda d: (
-                    self._fixed_masks.get(d.entity_type)
-                    or pseudonymizer.assign(d.entity_type, d.text).pseudonym
-                ),
-            )
-        return redacted, pseudonymizer.crosswalk()
+            text = _cell_text(df.at[cell.row, cell.column])
+            replaced = self._replace(text, cell.detections, exclude, pseudonymizer)
+            if replaced != text:
+                redacted.at[cell.row, cell.column] = replaced
+        return redacted
+
+
+def _cells(df: pd.DataFrame, columns: list[str]) -> list[tuple[int, str, str]]:
+    """``(row, column, text)`` for every cell of the named columns."""
+    return [
+        (row_idx, col, _cell_text(value))
+        for col in columns
+        if col in df.columns
+        for row_idx, value in enumerate(df[col])
+    ]
+
+
+def _findings(
+    cells: list[tuple[int, str, str]], cache: dict[str, list[PiiDetection]]
+) -> list[CellFinding]:
+    return [
+        CellFinding(row_idx, col, cache[text])
+        for row_idx, col, text in cells
+        if cache[text]
+    ]
 
 
 def _cell_text(value: object) -> str:

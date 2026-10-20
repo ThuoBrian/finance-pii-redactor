@@ -5,7 +5,11 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from finance_redactor.application.results import CellFinding, ExcelScanResult
+from finance_redactor.application.results import (
+    CellFinding,
+    ExcelScanResult,
+    WorkbookScanResult,
+)
 from finance_redactor.domain.entities import (
     DetectionSource,
     Finding,
@@ -18,6 +22,7 @@ from finance_redactor.presentation.presenters import (
     HIGHLIGHT_HEX,
     crosswalk_dataframe,
     detection_editor_dataframe,
+    excel_findings_dataframe,
     excluded_terms,
     findings_dataframe,
     pdf_mapping_dataframe,
@@ -313,21 +318,41 @@ def test_empty_inputs_exclude_nothing() -> None:
     ]
 
 
-def test_scan_result_findings_flattens_excel_cells() -> None:
-    """Excel shares the editor, so its cell findings become Findings."""
-    detection = PiiDetection(
+def _detection(text: str = "Jane Doe") -> PiiDetection:
+    return PiiDetection(
         entity_type="PERSON",
-        span=Span(0, 8),
+        span=Span(0, len(text)),
         score=0.9,
-        text="Jane Doe",
+        text=text,
         source=DetectionSource.MASTER_LIST,
     )
-    scan = ExcelScanResult(
-        findings=[CellFinding(row=4, column="notes", detections=[detection])]
+
+
+def _workbook_scan() -> WorkbookScanResult:
+    return WorkbookScanResult(
+        sheets={
+            "Jan": ExcelScanResult(
+                findings=[CellFinding(row=4, column="notes", detections=[_detection()])]
+            ),
+            "Feb": ExcelScanResult(findings=[]),
+        },
+        tab_names={"Feb": [_detection("Acme Ltd")]},
     )
 
-    flattened = scan_result_findings(scan)
 
-    assert len(flattened) == 1
-    assert flattened[0].detected_text == "Jane Doe"
+def test_scan_result_findings_flattens_excel_cells_and_tab_names() -> None:
+    """Excel shares the editor, so cell and tab-name findings become Findings."""
+    flattened = scan_result_findings(_workbook_scan())
+
+    assert [f.detected_text for f in flattened] == ["Jane Doe", "Acme Ltd"]
     assert flattened[0].page == 4
+    assert flattened[1].page == -1
+
+
+def test_excel_findings_dataframe_names_the_sheet_for_every_finding() -> None:
+    table = excel_findings_dataframe(_workbook_scan())
+
+    assert list(table["Sheet"]) == ["Jan", "Feb"]
+    assert table.loc[0, "Row"] == 5
+    assert table.loc[1, "Column"] == "(tab name)"
+    assert pd.isna(table.loc[1, "Row"])

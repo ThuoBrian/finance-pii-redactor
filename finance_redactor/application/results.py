@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import pandas as pd
+
 from finance_redactor.domain.entities import Finding, PiiDetection
 from finance_redactor.domain.pseudonyms import Assignment
 
@@ -41,6 +43,40 @@ class ExcelScanResult:
     def cell_keys(self) -> set[tuple[int, str]]:
         """Return the (row, column) keys of every cell that was changed."""
         return {(cell.row, cell.column) for cell in self.findings}
+
+
+@dataclass(frozen=True)
+class WorkbookScanResult:
+    """Outcome of scanning every selected tab of a workbook.
+
+    ``sheets`` is keyed by the original tab name. ``tab_names`` holds the
+    detections found in the tab names themselves (a tab called after a vendor
+    or a person is PII too), keyed by the original tab name.
+    """
+
+    sheets: dict[str, ExcelScanResult]
+    tab_names: dict[str, list[PiiDetection]]
+
+    @property
+    def cell_count(self) -> int:
+        """Number of cells, across all tabs, containing at least one detection."""
+        return sum(result.cell_count for result in self.sheets.values())
+
+    @property
+    def entity_count(self) -> int:
+        """Total detections across all tabs, including those in tab names."""
+        return sum(result.entity_count for result in self.sheets.values()) + sum(
+            len(found) for found in self.tab_names.values()
+        )
+
+
+@dataclass(frozen=True)
+class RedactedSheet:
+    """One redacted tab: its (already redacted) name, data and changed cells."""
+
+    name: str
+    data: pd.DataFrame
+    highlighted: set[tuple[int, str]]
 
 
 @dataclass(frozen=True)

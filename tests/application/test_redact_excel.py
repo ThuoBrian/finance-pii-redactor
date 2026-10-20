@@ -190,3 +190,83 @@ def test_float_column_with_a_blank_is_scanned_without_a_trailing_dot_zero() -> N
 
     assert redacted.at[0, "Account"] == "[ACCOUNT]"
     assert scan.cell_count == 1  # the blank is not scanned as "nan"
+
+
+def test_scan_workbook_analyzes_a_value_repeated_across_tabs_once():
+    detector = CountingDetector()
+    sheets = {
+        "Jan": pd.DataFrame({"notes": ["John paid", "no name"]}),
+        "Feb": pd.DataFrame({"notes": ["John paid"]}),
+    }
+
+    _service(detector).scan_workbook(
+        sheets, {"Jan": ["notes"], "Feb": ["notes"]}, ["PERSON"], 0.35
+    )
+
+    # The two tab names are analyzed too; "John paid" runs once, not twice.
+    assert sorted(detector.calls) == sorted(["John paid", "no name", "Jan", "Feb"])
+
+
+def test_workbook_gives_one_pseudonym_and_one_crosswalk_row_across_tabs():
+    service = _service(CountingDetector())
+    sheets = {
+        "Jan": pd.DataFrame({"notes": ["John paid"]}),
+        "Feb": pd.DataFrame({"notes": ["paid John again"]}),
+    }
+    columns = {"Jan": ["notes"], "Feb": ["notes"]}
+    scan = service.scan_workbook(sheets, columns, ["PERSON"], 0.35)
+
+    redacted, crosswalk = service.redact_workbook(sheets, scan, columns)
+
+    assert len(crosswalk) == 1
+    pseudonym = crosswalk[0].pseudonym
+    assert redacted[0].data.loc[0, "notes"] == f"{pseudonym} paid"
+    assert redacted[1].data.loc[0, "notes"] == f"paid {pseudonym} again"
+    assert "John" not in redacted[0].data.loc[0, "notes"]
+    assert redacted[0].highlighted == {(0, "notes")}
+
+
+def test_workbook_redacts_a_tab_name_and_keeps_both_tabs_if_names_collide():
+    service = _service(CountingDetector())
+    sheets = {
+        "John": pd.DataFrame({"notes": ["a"]}),
+        "John ": pd.DataFrame({"notes": ["b"]}),
+        "Summary": pd.DataFrame({"notes": ["c"]}),
+    }
+    columns = {name: ["notes"] for name in sheets}
+    scan = service.scan_workbook(sheets, columns, ["PERSON"], 0.35)
+
+    redacted, crosswalk = service.redact_workbook(sheets, scan, columns)
+
+    assert len(redacted) == 3  # a list, so no tab is lost to a name clash
+    assert redacted[0].name == crosswalk[0].pseudonym
+    assert "John" not in redacted[0].name
+    assert redacted[2].name == "Summary"
+    assert scan.entity_count == 2  # the two tab names; no cell holds a hit
+
+
+def test_workbook_exclusion_applies_to_cells_and_tab_names():
+    service = _service(CountingDetector())
+    sheets = {"John": pd.DataFrame({"notes": ["John paid"]})}
+    columns = {"John": ["notes"]}
+    scan = service.scan_workbook(sheets, columns, ["PERSON"], 0.35)
+
+    redacted, crosswalk = service.redact_workbook(
+        sheets, scan, columns, exclude=frozenset({"john"})
+    )
+
+    assert redacted[0].name == "John"
+    assert redacted[0].data.loc[0, "notes"] == "John paid"
+    assert crosswalk == []
+
+
+def test_workbook_skips_columns_not_chosen_for_a_tab():
+    service = _service(CountingDetector())
+    sheets = {"Jan": pd.DataFrame({"notes": ["John paid"], "other": ["John"]})}
+    columns = {"Jan": ["notes"]}
+    scan = service.scan_workbook(sheets, columns, ["PERSON"], 0.35)
+
+    redacted, _ = service.redact_workbook(sheets, scan, columns)
+
+    assert redacted[0].data.loc[0, "other"] == "John"
+    assert "John" not in redacted[0].data.loc[0, "notes"]
