@@ -276,3 +276,29 @@ def test_write_makes_tab_names_valid_and_unique_without_dropping_a_tab():
     assert "Crosswalk (2)" in names
     assert "Sheet6" in names
     assert all(len(n) <= 31 for n in names)
+
+
+def test_source_workbook_properties_never_reach_the_output():
+    """Output is rebuilt from cell values, so the source's author and title are gone."""
+    from openpyxl import Workbook
+
+    source = Workbook()
+    source.active["A1"] = "notes"
+    source.active["A2"] = "Paid to someone"
+    source.properties.creator = "Pat Example"
+    source.properties.lastModifiedBy = "Sam Example"
+    source.properties.title = "Payroll Review"
+    buffer = BytesIO()
+    source.save(buffer)
+    buffer.seek(0)
+
+    gateway = OpenpyxlExcelGateway()
+    ((name, df),) = gateway.read_sheets(buffer).items()
+    output = gateway.write([(name, df, set())], _crosswalk_df([]))
+
+    import zipfile
+
+    with zipfile.ZipFile(BytesIO(output)) as archive:
+        everything = b"".join(archive.read(n) for n in archive.namelist())
+    for leaked in (b"Pat Example", b"Sam Example", b"Payroll Review"):
+        assert leaked not in everything

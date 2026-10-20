@@ -15,6 +15,7 @@ without this a link's *visible* text was never scanned either.
 from __future__ import annotations
 
 import zipfile
+from datetime import datetime
 from io import BytesIO
 from typing import cast
 
@@ -29,6 +30,28 @@ from docx.text.paragraph import Paragraph
 
 from finance_redactor.domain.entities import Span
 from finance_redactor.domain.errors import UnreadableFileError
+
+# Package-level parts that describe the author or the document, not its text:
+# app properties (company, manager, template), custom properties and the
+# first-page thumbnail (a small picture of the unredacted page). Dropping the
+# relationship drops the part when the package is saved.
+_METADATA_RELATIONSHIPS = frozenset(
+    {RT.EXTENDED_PROPERTIES, RT.CUSTOM_PROPERTIES, RT.THUMBNAIL}
+)
+_CORE_TEXT_FIELDS = (
+    "author",
+    "category",
+    "comments",
+    "content_status",
+    "identifier",
+    "keywords",
+    "language",
+    "last_modified_by",
+    "subject",
+    "title",
+    "version",
+)
+_NEUTRAL_DATE = datetime(1970, 1, 1)
 
 
 def _table_paragraphs(table: Table) -> list[Paragraph]:
@@ -274,9 +297,30 @@ class PythonDocxDocument:
 
     def to_bytes(self) -> bytes:
         """Render the pseudonymized document to bytes."""
+        self._strip_metadata()
         output = BytesIO()
         self._document.save(output)
         return output.getvalue()
+
+    def _strip_metadata(self) -> None:
+        """Blank the document properties and drop the parts that describe the author.
+
+        Author, last-modified-by, title and the rest of the core properties are
+        emptied and the dates set to a neutral one; app properties, custom
+        properties and the thumbnail are removed. The text is untouched.
+        """
+        core = self._document.core_properties
+        for field in _CORE_TEXT_FIELDS:
+            setattr(core, field, "")
+        core.created = core.modified = core.last_printed = _NEUTRAL_DATE
+        core.revision = 1
+        rels = self._document.part.package.rels
+        for rel_id in [
+            rel_id
+            for rel_id, rel in rels.items()
+            if rel.reltype in _METADATA_RELATIONSHIPS
+        ]:
+            rels.pop(rel_id)
 
     def close(self) -> None:
         """Release underlying resources (no-op: python-docx holds nothing open)."""

@@ -100,3 +100,12 @@ def test_scales_with_text_length_not_dictionary_size():
         rec.analyze(text, ["ORGANIZATION"], None)
     elapsed_per_call = (time.perf_counter() - start) / 20
     assert elapsed_per_call < 0.02
+
+
+def test_master_list_name_does_not_fire_inside_a_longer_word() -> None:
+    recognizer = CustomNameRecognizer("ORGANIZATION", ["IPA"], score=0.9)
+    text = "IPA approved the principal participant list."
+
+    results = recognizer.analyze(text, ["ORGANIZATION"])
+
+    assert [(r.start, r.end) for r in results] == [(0, 3)]

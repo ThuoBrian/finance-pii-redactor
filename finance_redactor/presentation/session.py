@@ -1,27 +1,37 @@
 """Shared per-upload session-state helpers for the Excel/PDF/Word flows.
 
 Each flow keys its cached results on the uploaded file's name and a
-``file_type`` tag, and derives a filesystem-safe base name for download
-filenames from that same upload. Collected here so the three flows don't each
-hand-roll their own copy of this bookkeeping.
+``file_type`` tag, and gets a neutral download name per upload. Collected here
+so the three flows don't each hand-roll their own copy of this bookkeeping.
 """
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable
+from datetime import datetime
 from typing import Any
 
 import streamlit as st
 
 
-def sanitize_base_name(filename: str) -> str:
-    """Return ``filename``'s stem with anything but word chars/hyphens as '_'.
+def neutral_stem(now: datetime) -> str:
+    """Return ``redacted-YYYYMMDD-HHMM``: a download name with nothing from the upload.
 
-    Used to build safe download filenames (e.g. ``My File.xlsx`` ->
-    ``My_File``) from a user-supplied upload name.
+    The upload's own name can be a person's or a vendor's, so no part of it is
+    reused for the redacted file or its mapping CSV.
     """
-    return re.sub(r"[^\w\-]", "_", filename.rsplit(".", 1)[0])
+    return f"redacted-{now:%Y%m%d-%H%M}"
+
+
+def output_stem() -> str:
+    """Return this upload's download-name stem, fixed until the next upload.
+
+    Kept in session state so every rerun, and both the redacted file and its
+    mapping CSV, share one name. It is cleared by :func:`reset_on_new_upload`.
+    """
+    if "output_stem" not in st.session_state:
+        st.session_state.output_stem = neutral_stem(datetime.now())
+    return str(st.session_state.output_stem)
 
 
 def reset_on_new_upload(
@@ -47,6 +57,7 @@ def reset_on_new_upload(
         or st.session_state.get("file_type") != file_type
     )
     if is_new:
+        st.session_state.pop("output_stem", None)
         st.session_state.uploaded_name = uploaded.name
         st.session_state.file_type = file_type
         for key in clear_keys:
