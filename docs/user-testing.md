@@ -167,6 +167,15 @@ what happened instead — then file it.
   un-redacted.
 - [ ] Re-tick it and click **Apply changes** again. The file goes back to
   fully redacted.
+- [ ] With a mix of terms (a few ordinary words, an ALL-CAPS heading, a
+  curated name), the likeliest false positives are at the top and the curated
+  name is last. The summary line above the table matches what you see.
+- [ ] **Show** narrows the table to one source. Untick a row, switch the
+  filter so it is hidden, switch back: it is still unticked, and the pending
+  count never changed.
+- [ ] **Untick all shown** and **Untick N ordinary words** state their counts,
+  change nothing until clicked, and **Apply changes** still has to be clicked.
+  A curated master-list name is never swept up by the ordinary-word button.
 - [ ] Try the same in all three formats. All three rebuild from the already-
   cached scan (no re-run of spaCy), so none should pause noticeably longer
   than another - the old "Word re-runs the language model" pause no longer

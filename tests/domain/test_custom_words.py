@@ -91,3 +91,17 @@ def test_accent_insensitive_matching_still_respects_word_boundaries() -> None:
     detections = find_custom_words("Muñoznik signed the form.", ["Munoz"], 1.0)
 
     assert detections == []
+
+
+def test_a_short_word_is_whole_word_only_but_survives_punctuation() -> None:
+    text = "IPA approved the principal participant list. (IPA), IPA's, IPA-funded."
+
+    detections = find_custom_words(text, ["IPA"], 1.0)
+
+    starts = [d.span.start for d in detections]
+    assert starts == [
+        0,
+        text.index("(IPA") + 1,
+        text.index("IPA's"),
+        text.index("IPA-"),
+    ]

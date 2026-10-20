@@ -8,6 +8,7 @@ import pytest
 from finance_redactor.domain.errors import EncryptedPdfError, UnreadableFileError
 from finance_redactor.infrastructure.documents.pdf_gateway import (
     PyMuPdfDocument,
+    _drop_embedded_hits,
     _search_variants,
     _tighten_to_line,
 )
@@ -260,3 +261,59 @@ def test_to_bytes_strips_document_properties_and_xmp():
     )
     for leaked in (b"Pat Example", b"Payroll Review", b"Example PDF Tool", b"xmpmeta"):
         assert leaked not in out
+def _text_pdf_bytes(*lines: str) -> bytes:
+    doc = fitz.open()
+    page = doc.new_page()
+    for i, line in enumerate(lines):
+        page.insert_text((72, 100 + 20 * i), line)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def _redacted_text(data: bytes, redactions: list) -> str:
+    document = PyMuPdfDocument.open(data)
+    document.redact_page(0, redactions)
+    redacted = PyMuPdfDocument.open(document.to_bytes())
+    document.close()
+    text = redacted.page_text(0)
+    redacted.close()
+    return text
+
+
+def test_redact_page_leaves_a_short_word_alone_inside_longer_words():
+    """Detection is whole-word, so the locate step must be too: redacting the
+    word "IPA" must not black out the same letters inside "principal".
+    """
+    data = _text_pdf_bytes(
+        "IPA approved the principal participant list.",
+        "Also (IPA) and IPA's and IPA-funded work, municipal.",
+    )
+
+    text = _redacted_text(data, [(["IPA"], "[001]")])
+
+    assert "principal" in text
+    assert "participant" in text
+    assert "municipal" in text
+    assert text.count("[001]") == 4  # IPA, (IPA), IPA's, IPA-funded
+    assert "IPA " not in text.replace("[001]", "")
+
+
+def test_drop_embedded_hits_keeps_every_hit_when_they_cannot_be_lined_up():
+    """Fail safe: if the hit count and the text-occurrence count differ, nothing
+    is dropped - a stray extra redaction beats a name left showing.
+    """
+    rects = [fitz.Rect(0, 0, 1, 1), fitz.Rect(2, 0, 3, 1)]
+
+    # 3 occurrences in the text but only 2 hits: cannot be matched up.
+    assert _drop_embedded_hits(rects, "IPA and principal and IPA", "IPA") == rects
+
+    assert _drop_embedded_hits(rects, "IPA", "IPA") == rects  # 1 occurrence, 2 hits
+
+
+def test_drop_embedded_hits_ignores_a_non_word_edge():
+    """A candidate that ends in punctuation is not "inside" a word because of it."""
+    rects = [fitz.Rect(0, 0, 1, 1)]
+
+    assert _drop_embedded_hits(rects, "Acme Ltd.x", "Acme Ltd.") == rects
+    assert _drop_embedded_hits(rects, "xIPA", "IPA") == []
