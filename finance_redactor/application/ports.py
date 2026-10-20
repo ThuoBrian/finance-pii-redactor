@@ -9,7 +9,7 @@ Presidio, openpyxl, and PyMuPDF.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Protocol, runtime_checkable
 
 import pandas as pd
@@ -28,12 +28,29 @@ class PiiDetector(Protocol):
         ...
 
 
+class SheetFormatting(Protocol):
+    """The look of one source sheet, opaque to the application layer.
+
+    Only what was left behind is visible here, so the UI can say so: a count
+    per kind of content that is not carried over (formulas, comments, ...).
+    """
+
+    @property
+    def dropped(self) -> Mapping[str, int]:
+        """Count of items per kind that the redacted copy does not keep."""
+        ...
+
+
 @runtime_checkable
 class ExcelGateway(Protocol):
     """Reads and writes Excel workbooks."""
 
     def read_sheets(self, source: object) -> dict[str, pd.DataFrame]:
         """Load every sheet of a workbook, in tab order, keyed by tab name."""
+        ...
+
+    def read_formatting(self, source: object) -> Mapping[str, SheetFormatting]:
+        """Read each sheet's look, keyed by tab name; ``{}`` if it cannot be read."""
         ...
 
     def text_columns(self, df: pd.DataFrame) -> list[str]:
@@ -44,11 +61,13 @@ class ExcelGateway(Protocol):
         self,
         sheets: Sequence[tuple[str, pd.DataFrame, set[tuple[int, str]]]],
         crosswalk_df: pd.DataFrame,
+        formats: Sequence[SheetFormatting | None] | None = None,
     ) -> bytes:
         """Serialize ``(tab name, data, highlighted (row, column) cells)`` to xlsx.
 
         ``crosswalk_df`` is written as a final, unhighlighted "Crosswalk"
-        sheet alongside the redacted data.
+        sheet alongside the redacted data. ``formats`` gives each sheet's
+        look, in the same order as ``sheets``.
         """
         ...
 

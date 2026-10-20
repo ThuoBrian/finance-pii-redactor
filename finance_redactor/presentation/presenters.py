@@ -8,11 +8,12 @@ Collected here, they are the presentation layer's single rendering vocabulary.
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import pandas as pd
 from pandas.io.formats.style import Styler
 
+from finance_redactor.application.ports import SheetFormatting
 from finance_redactor.application.results import WorkbookScanResult
 from finance_redactor.domain.entities import DetectionSource, Finding
 from finance_redactor.domain.pseudonyms import Assignment, normalize
@@ -513,3 +514,27 @@ def excluded_terms(edited: pd.DataFrame) -> frozenset[str]:
         return frozenset()
     unticked = edited.loc[~edited[REDACT_COLUMN].fillna(True).astype(bool)]
     return frozenset(normalize(str(term)) for term in unticked[_TERM_COLUMN])
+
+
+def formatting_note(formats: Mapping[str, SheetFormatting], n_tabs: int) -> str:
+    """Say what the redacted workbook does not carry over from the source.
+
+    Empty ``formats`` for a workbook that has tabs means the formatting could
+    not be read at all, so every sheet comes out plain.
+    """
+    if n_tabs and not formats:
+        return (
+            "The formatting of this workbook could not be read, so the "
+            "download is plain: values only, no fonts, colours or widths."
+        )
+    totals: Counter[str] = Counter()
+    for sheet in formats.values():
+        totals.update(sheet.dropped)
+    if not totals:
+        return ""
+    parts = [
+        f"{kind}: {count:,}"
+        + (" (their values are kept)" if kind == "formulas" else "")
+        for kind, count in totals.items()
+    ]
+    return "Not carried over from the original: " + ", ".join(parts) + "."

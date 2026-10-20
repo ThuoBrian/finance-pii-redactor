@@ -35,6 +35,7 @@ This file records known errors, edge cases, and their solutions when developing 
   - [Why doesn't the tool touch dates/times?](#why-doesnt-the-tool-touch-datestimes)
   - [A town or country name is not redacted](#a-town-or-country-name-is-not-redacted)
   - [A link no longer works in the redacted file](#a-link-no-longer-works-in-the-redacted-file)
+  - [What Excel formatting is kept, and what is not](#what-excel-formatting-is-kept-and-what-is-not)
 - [Testing and linting](#testing-and-linting)
   - [`ruff` flags `E402` for the Streamlit context guard import](#ruff-flags-e402-for-the-streamlit-context-guard-import)
   - [`codespell` flags HTML variable names like `thead` or `ws`](#codespell-flags-html-variable-names-like-thead-or-ws)
@@ -262,6 +263,16 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Cause:** Deliberate. A link's destination can name a person (`mailto:jane.doe@example.org` behind "click here") or a private file path, and nothing on the page shows it. So every link that leaves the document is removed: web and email links, file launches, and links into other PDFs. Links to another page of the same PDF stay. The visible text stays and goes through detection like any other text. The download section says how many were removed.
 - **Word detail:** python-docx does not include hyperlinked runs in `paragraph.runs`, so before this change the visible text of a Word hyperlink was never scanned at all. `docx_gateway.py` now unwraps hyperlinks (and `HYPERLINK` field codes) when the file is opened, before any text is read.
 - **Not covered:** other PDF annotations, bookmarks and metadata, and Word document properties. These are still open.
+
+### What Excel formatting is kept, and what is not
+
+- **Kept:** column widths and hidden columns, row heights and hidden rows, each cell's font, fill, border, alignment and number format, merged cells, frozen panes, tab colour, zoom, gridlines and the filter range (`finance_redactor/infrastructure/documents/excel_formatting.py`).
+- **Not carried over:** formulas (the value is kept), comments, images and charts, data validation and conditional-formatting rules, defined names, print headers/footers and hyperlinks. The Download step says how many formulas, comments, images or charts and rules were left behind.
+- **Why:** deliberate. The redacted workbook is rebuilt from cell values so that nothing from the source but cell text can reach it. A comment can hold a name and its author, a formula can contain a literal name and points at cells whose contents were just replaced, and a validation list or format rule can hold readable text. Formatting is copied through an allow-list, so anything not on it is dropped by default.
+- **Changed cells are yellow** and replace the source fill on those cells, so reviewers can find what was touched.
+- **A number format shows as General:** a custom format with readable text in it (more than 4 characters in quotes, or several escaped letters) is not copied, because the text could be a name.
+- **"The formatting could not be read":** the workbook loaded for scanning but openpyxl could not read its styles. The download is plain, with values only. Open it in Excel and save a fresh copy, then upload that.
+- **Not fixed by this:** a sheet with a title row above the table still shows `Unnamed: N` in the column picker, and IDs like `0041` still come out as `41`. Both come from how the sheet is first read.
 
 ## Testing and linting
 

@@ -49,6 +49,18 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **The redacted Excel workbook keeps the original's formatting.** Column
+  widths and row heights, fonts, fills, borders, alignment, number formats
+  (currency, dates), merged cells, freeze panes, tab colour, zoom, gridlines
+  and the filter range now carry over. The output is still rebuilt from cell
+  values, so nothing but cell text can come through: formatting is copied
+  through an allow-list and anything not on it is dropped. Formulas stay as
+  their values; comments, images and charts, data validation and
+  conditional-formatting rules are not carried over, and the Download step
+  says how many of each were left behind. A custom number format that holds
+  readable text (such as `"Paid to ..." @`) falls back to General. Changed
+  cells are still yellow, replacing the source fill. A blank header cell is no
+  longer written as "Unnamed: N".
 - **The false-positive review table is quicker to get through.** Terms the
   model guessed come first, lowest confidence leading, with your curated
   master-list names last, so the likeliest mistakes are at the top. The table

@@ -159,6 +159,11 @@ is always safe.
 In Excel, every cell the tool changed is highlighted in yellow, so you can
 see at a glance what was touched.
 
+The Excel copy keeps your formatting (column widths, fonts, colours, number
+formats, merged cells, frozen rows). Formulas become their values, and
+comments, charts, images and validation rules are not carried over; the
+download step tells you how many were left behind.
+
 Alongside the redacted file you get a **mapping**: what each code or label
 stands for.
 
