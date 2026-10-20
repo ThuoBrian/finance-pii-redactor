@@ -77,7 +77,7 @@ class OpenpyxlExcelGateway:
     def write(
         self,
         sheets: Sequence[tuple[str, pd.DataFrame, set[tuple[int, str]]]],
-        crosswalk_df: pd.DataFrame,
+        crosswalk_df: pd.DataFrame | None,
         formats: Sequence[object | None] | None = None,
     ) -> bytes:
         """Serialize ``sheets`` to xlsx bytes, highlighting the given cells yellow.
@@ -85,9 +85,11 @@ class OpenpyxlExcelGateway:
         Each sheet is ``(tab name, data, highlighted (row, column) cells)``.
         Tab names are made valid for Excel (31 characters at most, none of the
         characters Excel forbids) and unique, so two tabs that were redacted to the same name both survive.
-        ``crosswalk_df`` is written as a final "Crosswalk" sheet alongside the
-        redacted data, so the name-to-pseudonym mapping travels with the file
-        it describes. A source tab already called "Crosswalk" is renamed.
+        ``crosswalk_df``, when given, is written as a final "Crosswalk" sheet.
+        The app passes ``None``: the crosswalk holds real names, so it leaves
+        as its own Confidential CSV and the workbook stays Internal. A source
+        tab already called "Crosswalk" is still renamed, so the name stays
+        free for the sheet.
 
         ``formats`` (one per sheet, in order; ``None`` for no formatting) is
         what :meth:`read_formatting` returned for the source tab, applied
@@ -98,7 +100,10 @@ class OpenpyxlExcelGateway:
         with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
             for title, (_, df, _) in zip(titles, sheets, strict=True):
                 df.to_excel(writer, index=False, sheet_name=title)
-            crosswalk_df.to_excel(writer, index=False, sheet_name=_CROSSWALK_SHEET_NAME)
+            if crosswalk_df is not None:
+                crosswalk_df.to_excel(
+                    writer, index=False, sheet_name=_CROSSWALK_SHEET_NAME
+                )
         buffer.seek(0)
 
         workbook = load_workbook(buffer)
@@ -121,9 +126,9 @@ class OpenpyxlExcelGateway:
                         row=row_idx + 2, column=col_index[col_name]
                     ).fill = _HIGHLIGHT_FILL
 
-        crosswalk_sheet = workbook[_CROSSWALK_SHEET_NAME]
-        for cell in crosswalk_sheet[1]:
-            cell.font = _HEADER_FONT
+        if crosswalk_df is not None:
+            for cell in workbook[_CROSSWALK_SHEET_NAME][1]:
+                cell.font = _HEADER_FONT
 
         out = BytesIO()
         workbook.save(out)

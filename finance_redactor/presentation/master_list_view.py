@@ -1,13 +1,11 @@
-"""Shared rendering of the master-list status panel.
+"""The master-list card in the sidebar.
 
-Both the Excel and PDF flows show the same panel above their Advanced settings
-expander: a one-line summary of loaded entries plus a warning for each data-quality
-issue found in the workbook (duplicate names, conflicting or reused IDs, blank IDs).
-The warnings are actionable — they tell the user what to fix, at whichever path
-the workbook is actually being read from (``Settings.master_list_file`` -
-normally the local ``data/`` folder, but ``FPR_MASTER_LIST_DIR`` can point it at
-a shared location instead - see ``data/README.md``), so the IDs the tool emits
-are trustworthy.
+Every format depends on the master list, so its state sits in the sidebar on
+every step instead of inside each format's options: how many names are loaded,
+by category, when the workbook last changed, how many data-quality issues it
+has, and a Refresh button. The issues themselves open from a badge that says
+how many there are, so a list that needs tidying is visible at a glance even
+with the details folded away.
 """
 
 from __future__ import annotations
@@ -21,15 +19,19 @@ from finance_redactor.domain.quality import SEVERITY_WARNING, QualityIssue
 from finance_redactor.presentation.presenters import plural
 
 
-def _name_list_help(counts: Mapping[str, int], master_list_path: Path) -> str:
-    total = sum(counts.values())
-    by_cat = ", ".join(f"{n:,} {cat}" for cat, n in sorted(counts.items())) or "none"
-    return (
-        f"Loaded {plural(total, 'master-list entry', 'master-list entries')}: "
-        f"{by_cat}. Edit "
-        f"`{master_list_path}` "
-        "and refresh the page to update it."
-    )
+def _counts_line(counts: Mapping[str, int]) -> str:
+    """Return e.g. ``"1 Funder · 3 Staff · 2 Vendor"``, or ``"none"``."""
+    return " · ".join(f"{n:,} {cat}" for cat, n in sorted(counts.items())) or "none"
+
+
+def time_ago(seconds: float) -> str:
+    """Return a rough, plain age such as ``"just now"`` or ``"3 hours ago"``."""
+    if seconds < 90:
+        return "just now"
+    for unit, size in (("day", 86400), ("hour", 3600), ("minute", 60)):
+        if seconds >= size:
+            return f"{plural(int(seconds // size), unit)} ago"
+    return "just now"  # unreachable, keeps mypy happy
 
 
 def _render_issue(issue: QualityIssue) -> None:
@@ -45,38 +47,48 @@ def _render_issue(issue: QualityIssue) -> None:
         st.info(body)
 
 
-def render_master_list_status(
+def render_master_list_card(
     name_counts: Mapping[str, int],
     issues: Sequence[QualityIssue] | None,
     master_list_path: Path,
     *,
+    age_seconds: float | None = None,
     on_refresh: Callable[[], None] | None = None,
 ) -> None:
-    """Render the master-list summary line plus any data-quality warnings.
+    """Render the master-list card: size, freshness, issues, Refresh.
 
-    ``on_refresh``, when given, renders a "Refresh master list" button that
-    calls it (expected to clear the cached master-list bundle - see
-    ``app.py``'s ``_get_master_list_bundle``) and reruns the page. This is
-    needed for anything *other* than the app's own first load: Streamlit only
-    re-checks the workbook's modification time on a rerun (a widget
-    interaction or a browser refresh), so editing the workbook - or fixing
-    its location via the "Set up your shared master list" dialog - has no
-    visible effect until something triggers one. Clearing the cache outright
-    (rather than just rerunning) also covers the edge case where the
-    modification time hasn't actually changed yet (e.g. a Box Drive sync
-    still in flight), which a bare rerun would not catch.
+    ``on_refresh`` clears the cached master-list bundle (see ``app.py``'s
+    ``_get_master_list_bundle``) and reruns. Streamlit only re-checks the
+    workbook's modification time on a rerun, and a Box Drive sync can land
+    the new version without changing it yet, so an explicit clear is the
+    reliable way to pick up an edit.
     """
-    st.markdown("**Master list**")
-    st.caption(_name_list_help(name_counts, master_list_path))
-    for issue in issues or ():
-        _render_issue(issue)
-    if on_refresh is not None and st.button(
-        "🔄 Refresh master list",
-        help=(
-            "Re-check the master list for changes - use this after editing "
-            "the workbook, or after fixing its location, instead of "
-            "reloading the whole page."
-        ),
-    ):
-        on_refresh()
-        st.rerun()
+    total = sum(name_counts.values())
+    issues = list(issues or ())
+    with st.container(border=True):
+        st.markdown("**Master list**")
+        if total:
+            st.markdown(f"**{plural(total, 'name')}** :green-badge[ready]")
+        else:
+            st.markdown(":red-badge[no names loaded]")
+        line = _counts_line(name_counts)
+        if age_seconds is not None:
+            line += f" · updated {time_ago(age_seconds)}"
+        st.caption(line)
+        if issues:
+            n_warn = sum(1 for i in issues if i.severity == SEVERITY_WARNING)
+            badge = ":orange-badge" if n_warn else ":blue-badge"
+            with st.expander(f"{badge}[{plural(len(issues), 'thing')} to tidy]"):
+                for issue in issues:
+                    _render_issue(issue)
+        with st.expander("Where is it?"):
+            st.caption(f"`{master_list_path}`")
+            st.caption("Save and close the workbook in Excel, then Refresh.")
+        if on_refresh is not None and st.button(
+            "Refresh",
+            key="master_list_refresh",
+            width="stretch",
+            help="Re-read the master list after editing it or changing its folder.",
+        ):
+            on_refresh()
+            st.rerun()

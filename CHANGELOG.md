@@ -58,6 +58,31 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **The app shows one step at a time.** Upload, Options, Review and Download
+  each get their own screen, with **Back** and **Continue** buttons and the
+  step tracker on top; choices made under Options are kept when you go back.
+  Before, all four steps stacked on one long page, and the review started
+  well below the fold after a scan.
+- **A master-list card in the sidebar**, on every step: how many names, by
+  category, when the workbook last changed, a badge when there are things to
+  tidy (the data-quality details open from it), where the file is, and
+  **Refresh**. It replaces the master-list block inside each format's options.
+  The sidebar also has **Start over** (empties the file and results from
+  memory), **Help and troubleshooting**, and **Close the app**.
+- **Options is one button for most people.** **Redact my file** runs with the
+  recommended settings; everything else (tabs and columns, words to add,
+  labels or black boxes, images, kinds of information, confidence) sits under
+  **Customize**, in the same place for every format.
+- **The Download step sorts files by who may see them**, in two cards: **Safe
+  to share** (Internal) and **Keep private** (Confidential).
+- **The Excel workbook no longer contains a Crosswalk sheet.** The name
+  mapping is now its own CSV in the Keep private card, like Word's, so the
+  redacted workbook is **Internal** on its own instead of Confidential as a
+  whole.
+- **Blue for actions, red for caution.** The accent colour is now blue
+  (#2563EB, 5.17:1 against white button text), so red is left for the
+  Confidential card and real warnings. Streamlit's developer toolbar (the
+  "Deploy" button) is hidden.
 - **The review step leads with the review.** "3. Review the results" now opens
   on a **Review** tab, labelled with how many model guesses there are to check
   (PDF and Word used to open on Mapping, with the review hidden in a tab

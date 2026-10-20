@@ -11,6 +11,7 @@ effect on the next rerun.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import streamlit as st
@@ -31,17 +32,20 @@ from finance_redactor.infrastructure.documents.pdf_gateway import PyMuPdfDocumen
 from finance_redactor.infrastructure.names.master_list_repository import (
     MasterListRepository,
 )
+from finance_redactor.presentation import wizard
 from finance_redactor.presentation.docx_view import run_docx_flow
 from finance_redactor.presentation.excel_view import run_excel_flow
 from finance_redactor.presentation.master_list_setup import (
     render_master_list_setup_dialog,
 )
+from finance_redactor.presentation.master_list_view import render_master_list_card
 from finance_redactor.presentation.pdf_view import run_pdf_flow
 from finance_redactor.presentation.shutdown import render_quit_control
 from finance_redactor.presentation.steps import show_step
 
 # Resolved from this file, not the CWD - run.bat launches from anywhere.
 _LOGO = Path(__file__).parent / "assets" / "data-privacy-ai-dark-nobg.svg"
+_HELP_URL = "https://github.com/ThuoBrian/finance-pii-redactor/blob/main/docs/troubleshooting.md"
 
 
 def _main() -> None:
@@ -52,7 +56,9 @@ def _main() -> None:
     st.set_page_config(
         page_title="Finance PII Redactor", page_icon=":shield:", layout="wide"
     )
-    render_quit_control()
+    # Before any widget is drawn: keeps the Options choices alive on the
+    # steps where those widgets are not shown (see presentation/wizard.py).
+    wizard.keep_option_choices()
 
     # Re-resolved fresh (not DEFAULT_SETTINGS) so a folder saved via the in-app
     # "Set up shared master list" dialog takes effect on the next rerun - see
@@ -129,30 +135,56 @@ def _main() -> None:
     ):
         render_master_list_setup_dialog(settings.names_dir)
 
-    # Middle of three columns centers the logo and caps its width on wide layouts.
-    _, logo_col, _ = st.columns([1, 1, 1])
-    logo_col.image(str(_LOGO))
-    st.title("Finance PII Redactor", text_alignment="center")
-    st.caption(
-        "Upload an Excel, PDF, or Word file. Pick what you want pseudonymized, "
-        "and instantly download a clean copy with names replaced by stable ID codes. "
-        "Everything runs locally on your laptop, no data ever leaves your device.",
-        text_alignment="center",
-    )
-    steps = st.empty()
-    show_step(steps, 1)
+    with st.sidebar:
+        st.logo(str(_LOGO), size="large")
+        st.markdown("### Finance PII Redactor")
+        render_master_list_card(
+            name_counts,
+            quality_issues,
+            settings.master_list_file,
+            age_seconds=(
+                time.time() - master_list_mtime if master_list_mtime else None
+            ),
+            on_refresh=_get_master_list_bundle.clear,
+        )
+        st.caption(":green[●] Everything stays on this computer")
+        if st.button("Start over", width="stretch", key="sidebar_start_over"):
+            wizard.start_over()
+        st.link_button("Help and troubleshooting", _HELP_URL, width="stretch")
+    render_quit_control()
 
-    with st.container(border=True):
-        st.subheader("1. Upload your file")
+    steps = st.empty()
+    on_upload_step = wizard.current() == wizard.UPLOAD
+    if on_upload_step:
+        show_step(steps, 1)
+        st.subheader("Upload a file")
+        st.caption(
+            "Excel, PDF or Word. Names become stable codes, and you check the "
+            "result before you download."
+        )
+    # Drawn on every step: the uploaded file lives in this widget and would be
+    # dropped if it were not. After step 1 it folds away under the file name.
+    current_file = st.session_state.get(wizard.upload_key())
+    holder = (
+        st.container()
+        if on_upload_step or current_file is None
+        else st.expander(f"File: {current_file.name} (change)")
+    )
+    with holder:
         uploaded = st.file_uploader(
             "Upload a file (.xlsx, .xls, .pdf, or .docx)",
             type=["xlsx", "xls", "pdf", "docx"],
             help="The file is processed entirely on your machine.",
+            key=wizard.upload_key(),
+            label_visibility="collapsed" if not on_upload_step else "visible",
         )
-
-        if uploaded is None:
-            st.info("Upload a file above to get started.")
-            st.stop()
+    if uploaded is None:
+        wizard.set_step(wizard.UPLOAD)
+        if not on_upload_step:
+            st.rerun()
+        st.stop()
+    if on_upload_step:
+        wizard.go(wizard.OPTIONS)
 
     extension = uploaded.name.rsplit(".", 1)[-1].lower()
 
@@ -168,9 +200,6 @@ def _main() -> None:
             ),
             excel_gateway=OpenpyxlExcelGateway(),
             settings=settings,
-            name_counts=name_counts,
-            quality_issues=quality_issues,
-            on_refresh_master_list=_get_master_list_bundle.clear,
             steps=steps,
         )
     elif extension == "pdf":
@@ -188,10 +217,6 @@ def _main() -> None:
                 settings.custom_words_score,
                 fixed_masks=settings.fixed_masks,
             ),
-            settings=settings,
-            name_counts=name_counts,
-            quality_issues=quality_issues,
-            on_refresh_master_list=_get_master_list_bundle.clear,
             master_list_fingerprint=master_list_fingerprint,
             steps=steps,
         )
@@ -208,9 +233,6 @@ def _main() -> None:
                 fixed_masks=settings.fixed_masks,
             ),
             settings=settings,
-            name_counts=name_counts,
-            quality_issues=quality_issues,
-            on_refresh_master_list=_get_master_list_bundle.clear,
             steps=steps,
         )
     else:

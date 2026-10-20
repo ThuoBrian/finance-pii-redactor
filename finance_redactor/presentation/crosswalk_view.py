@@ -1,24 +1,22 @@
 """Rendering of the mapping between what was redacted and what replaced it.
 
-Two schemes live here, because PDF and Excel/Word now differ in what they
-write into a document. (PDF can also offer a separate, opt-in, Confidential
-mapping with names; the default PDF download never has any.)
+Two schemes live here, because PDF and Excel/Word differ in what they write
+into a document. Each has a review table (the Review step's Mapping tab) and
+downloads (the Download step, sorted into an Internal and a Confidential card).
 
-:func:`render_pdf_mapping_section` serves PDF, which stamps a document-local
-``[001]`` label. Its download carries ``label -> Internal ID`` and **no
-names**, which is what makes that file Internal rather than Confidential.
+PDF stamps a document-local ``[001]`` label. :func:`render_pdf_mapping_download`
+gives ``label -> Internal ID`` with **no names**, which is what makes that file
+Internal. :func:`render_pdf_names_download` is the opt-in, Confidential file
+with names, off by default.
 
-:func:`render_crosswalk_section` serves Excel and Word, which still stamp
-``STF-10010``-style pseudonyms. Their crosswalk maps real names to those
-pseudonyms, so it remains the re-identification key and Confidential. Excel's
-workbook already embeds it as a "Crosswalk" sheet (see
-``OpenpyxlExcelGateway.write``), so it passes ``download_separately=False``
-to skip a redundant CSV and point the warning at the sheet already in the
-file; Word passes the default and gets its own guarded CSV.
+Excel and Word stamp ``STF-10010``-style codes. Their crosswalk maps real names
+to those codes, so it is the re-identification key and Confidential; it always
+leaves the app as its own CSV (:func:`render_crosswalk_download`), never inside
+the redacted file.
 
-The two are separate functions on purpose. They disagree about whether a name
-may reach a file, and that is not a difference to express as a flag on one
-shared code path.
+The names-free and names-bearing paths are separate functions on purpose. They
+disagree about whether a name may reach a file, and that is not a difference to
+express as a flag on one shared code path.
 """
 
 from __future__ import annotations
@@ -39,26 +37,15 @@ from finance_redactor.presentation.presenters import (
 PDF_NAMES_TOGGLE_KEY = "pdf_names_mapping_toggle"
 
 _PDF_MAPPING_NOTICE = (
-    "This file contains **no names** - only `[001] = 17728` style rows. On its "
-    "own it cannot identify anyone, so it is **Internal**, and it is safe to "
-    "keep with the redacted PDF. Turning an Internal ID back into a name needs "
-    "the master list, which stays access-controlled in Box. Keep this file: "
-    "without it the labels in the PDF cannot be decoded at all."
+    "No names inside, only rows like `[001] = 17728`, so it is safe to keep "
+    "with the PDF. Keep it: without it the labels cannot be decoded. Decoding "
+    "also needs the master list, which stays access-controlled."
 )
 
 _CROSSWALK_WARNING = (
-    "This crosswalk maps real names to their pseudonyms - it is the "
-    "**re-identification key**. Store it separately and securely, and **never** "
-    "share it alongside the pseudonymized file. It is **Confidential** under "
-    "IPA's data classification policy."
-)
-
-_CROSSWALK_EMBEDDED_NOTICE = (
-    "This review table matches the **Crosswalk** sheet already included in "
-    "your downloaded Excel file - there is no separate CSV to keep track of "
-    "for this file. The workbook as a whole is **Confidential** under IPA's "
-    "data classification policy because it now carries the re-identification "
-    "key; see the warning above the download button."
+    "Lists real names next to their codes, so it can re-identify everyone in "
+    "the file. Store it somewhere secure, apart from the redacted file, and "
+    "never send the two together."
 )
 
 
@@ -88,31 +75,17 @@ def render_pdf_mapping_warnings(crosswalk: list[Assignment]) -> None:
             "Ambiguous master-list match: "
             f"{plural(len(ambiguous), 'redacted item')}. Each matched more than "
             "one master-list row with conflicting IDs, so no Internal ID was "
-            "recorded rather than guessing one. Fix the duplicate rows (see the "
-            "master-list data-quality panel above the options) and re-run."
+            "recorded rather than guessing one. Fix the duplicate rows (the "
+            "master-list card in the sidebar lists them) and re-run."
         )
 
 
-def render_pdf_mapping_section(
-    crosswalk: list[Assignment],
-    base_name: str,
-    *,
-    master_list_fingerprint: str = "",
-) -> None:
-    """Render the PDF label->Internal ID mapping: review on screen, names-free download.
-
-    Kept separate from :func:`render_crosswalk_section` rather than added to it
-    as a flag. The two differ in the one way that matters - what ends up in a
-    file - and a shared function with a switch is exactly how a name
-    eventually reaches a download that promised not to have any.
-    """
+def render_pdf_mapping_section(crosswalk: list[Assignment]) -> None:
+    """Render the PDF label mapping for review on screen (names shown, never saved)."""
     if not crosswalk:
         st.caption("Nothing was replaced with a label, so there is no mapping.")
         return
-
     n_suggested = sum(1 for a in crosswalk if a.suggested_pseudonym)
-    mapping_df = pdf_mapping_dataframe(crosswalk, master_list_fingerprint)
-
     st.markdown(f"**Label -> Internal ID mapping ({plural(len(crosswalk), 'item')})**")
     if n_suggested:
         st.info(
@@ -121,11 +94,19 @@ def render_pdf_mapping_section(
             "This is a hint only; it was **not** applied automatically."
         )
     st.caption(
-        "Names are shown here for your review only. The downloaded file "
-        "below contains no names."
+        "Names are shown here for your review only. The mapping file on the "
+        "Download step contains no names."
     )
     st.dataframe(pdf_review_dataframe(crosswalk), width="stretch", hide_index=True)
-    st.info(_PDF_MAPPING_NOTICE)
+
+
+def render_pdf_mapping_download(
+    crosswalk: list[Assignment], base_name: str, master_list_fingerprint: str
+) -> None:
+    """Offer the names-free label mapping (Internal). Nothing to offer if empty."""
+    if not crosswalk:
+        return
+    mapping_df = pdf_mapping_dataframe(crosswalk, master_list_fingerprint)
     st.download_button(
         label="Download label mapping (CSV, no names)",
         data=mapping_df.to_csv(index=False).encode("utf-8"),
@@ -134,16 +115,25 @@ def render_pdf_mapping_section(
         key="pdf_mapping_download",
         width="stretch",
     )
+    st.caption(_PDF_MAPPING_NOTICE)
+
+
+def render_pdf_names_download(
+    crosswalk: list[Assignment], base_name: str, master_list_fingerprint: str
+) -> None:
+    """Offer the opt-in mapping with names (Confidential), off by default."""
+    if not crosswalk:
+        st.caption("Nothing was replaced with a label, so there is no mapping.")
+        return
     # Off by default, and nothing with names is built unless it is switched on.
     if st.toggle(
-        "Also prepare a mapping with names (Confidential)",
+        "Also prepare a mapping with names",
         key=PDF_NAMES_TOGGLE_KEY,
         help="For when you need to read the mapping without the master list. "
-        "The default file above stays names-free.",
+        "The label mapping stays names-free.",
     ):
-        st.warning(_CROSSWALK_WARNING)
         st.download_button(
-            label="Download name mapping (CSV, Confidential)",
+            label="Download name mapping (CSV)",
             data=pdf_mapping_with_names_dataframe(crosswalk, master_list_fingerprint)
             .to_csv(index=False)
             .encode("utf-8"),
@@ -152,33 +142,21 @@ def render_pdf_mapping_section(
             key="pdf_names_mapping_download",
             width="stretch",
         )
+        st.caption(_CROSSWALK_WARNING)
+    else:
+        st.caption(
+            "Not needed in most cases: the label mapping and the master list decode every label."
+        )
 
 
-def render_crosswalk_section(
-    crosswalk: list[Assignment],
-    base_name: str,
-    *,
-    key_prefix: str,
-    download_separately: bool = True,
-) -> None:
-    """Render the crosswalk review table, plus a guarded CSV download.
-
-    ``download_separately`` is True for flows (Word) where the crosswalk only
-    ever leaves the app as its own CSV file, so it must stay separate from
-    the pseudonymized output. Excel passes ``download_separately=False``: the
-    crosswalk is already embedded as a sheet in the downloaded workbook (see
-    ``OpenpyxlExcelGateway.write``), so no second download button is offered
-    here and the warning instead points at the sheet that's already there.
-    """
+def render_crosswalk_section(crosswalk: list[Assignment]) -> None:
+    """Render the Excel/Word name -> code mapping for review on screen."""
     if not crosswalk:
         st.caption("No names were replaced, so there is no mapping.")
         return
-
     n_flagged = sum(1 for a in crosswalk if a.auto)
     n_suggested = sum(1 for a in crosswalk if a.suggested_pseudonym)
-    df = crosswalk_dataframe(crosswalk)
-
-    st.markdown(f"**Name -> pseudonym mapping ({plural(len(crosswalk), 'name')})**")
+    st.markdown(f"**Name -> code mapping ({plural(len(crosswalk), 'name')})**")
     if n_flagged:
         st.info(
             f"Not in the master list: {plural(n_flagged, 'name')}. Each received "
@@ -192,16 +170,22 @@ def render_crosswalk_section(
             "hint only; it was **not** applied automatically. Fix the source "
             "document or add an alias, then re-run."
         )
-    st.dataframe(df, width="stretch", hide_index=True)
-    if download_separately:
-        st.warning(_CROSSWALK_WARNING)
-        st.download_button(
-            label="Download name mapping (CSV)",
-            data=df.to_csv(index=False).encode("utf-8"),
-            file_name=f"{base_name}_crosswalk.csv",
-            mime="text/csv",
-            key=f"{key_prefix}_crosswalk_download",
-            width="stretch",
-        )
-    else:
-        st.info(_CROSSWALK_EMBEDDED_NOTICE)
+    st.dataframe(crosswalk_dataframe(crosswalk), width="stretch", hide_index=True)
+
+
+def render_crosswalk_download(
+    crosswalk: list[Assignment], base_name: str, *, key_prefix: str
+) -> None:
+    """Offer the Excel/Word crosswalk (real names, Confidential) as its own CSV."""
+    if not crosswalk:
+        st.caption("No names were replaced, so there is no mapping file.")
+        return
+    st.download_button(
+        label="Download name mapping (CSV)",
+        data=crosswalk_dataframe(crosswalk).to_csv(index=False).encode("utf-8"),
+        file_name=f"{base_name}_crosswalk.csv",
+        mime="text/csv",
+        key=f"{key_prefix}_crosswalk_download",
+        width="stretch",
+    )
+    st.caption(_CROSSWALK_WARNING)

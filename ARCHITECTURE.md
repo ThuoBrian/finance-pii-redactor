@@ -46,6 +46,17 @@ Streamlit rerun it:
    `run_docx_flow`, handing each one a service built from the matching
    adapters.
 
+## Steps
+
+The UI shows one step at a time: Upload, Options, Review, Download
+(`presentation/wizard.py`). Session state holds the current step. Two
+Streamlit behaviours shape it: a widget that is not drawn loses its value, so
+the option widgets' values are re-stored on every run
+(`wizard.keep_option_choices`) and each flow saves the settings a result was
+built with; and the uploaded file lives in the uploader, so the uploader is
+drawn on every step. The master-list card sits in the sidebar on every step
+(`presentation/master_list_view.py`).
+
 ## Caching
 
 Streamlit reruns the whole script on every interaction, so expensive objects
@@ -56,7 +67,8 @@ are cached with `@st.cache_resource`:
   keyed on the workbook's path and modification time. Editing the workbook,
   or pointing at a different folder, rebuilds it. Streamlit only re-checks
   the key on a rerun, never on a timer, so an edit shows up after the next
-  widget interaction or page reload. The **Refresh master list** button
+  widget interaction or page reload. The **Refresh** button on the sidebar's
+  master-list card
   clears the cache outright, for the case where the modification time has not
   changed yet (for example a Box Drive sync still copying the file down).
   The key arguments of `_get_master_list_bundle` must not start with an
@@ -66,8 +78,8 @@ are cached with `@st.cache_resource`:
 ## Outputs and sensitivity
 
 Each flow returns the redacted file plus a mapping back to the originals: a
-Crosswalk sheet inside the Excel output, a separate crosswalk CSV of real
-names for Word, and for PDF a mapping of labels to internal IDs that holds
+separate crosswalk CSV of real names for Excel and Word (never inside the
+redacted file, so that file stays Internal), and for PDF a mapping of labels to internal IDs that holds
 no names (plus, only if the user switches it on, a second Confidential CSV
 with names, built by a separate function so the default file can never gain a
 name column). The "Which file is safe to share" section of the README gives the data

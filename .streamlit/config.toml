@@ -2,15 +2,12 @@
 # The logo (assets/data-privacy-ai-dark-nobg.svg) is white-on-transparent and
 # needs a dark background to be visible.
 base = "dark"
-# Streamlit's default primary red (#FF4B4B) only clears 3.30:1 against white
-# button-label text, below WCAG AA's 4.5:1 for normal text - this is a
-# meaningful gap here since most of the app's primary actions (Pseudonymize,
-# Download, Close the app) rely on white-on-primaryColor buttons. #D32F2F
-# clears 4.98:1 there. Trade-off: it reads a touch darker as plain
-# text/accents against the dark background (3.80:1, vs. 5.72:1 for the
-# original) - still fine for large/UI-component uses, just worth knowing if
-# this ever gets revisited.
-primaryColor = "#D32F2F"
+# Blue for actions; red is kept for the Confidential download card and real
+# warnings, so it still means "careful". #2563EB clears 5.17:1 against white
+# button-label text (WCAG AA needs 4.5:1) and 3.66:1 as an accent on the dark
+# background (3:1 for UI components). The previous red, #D32F2F, was 4.98:1
+# and 3.80:1.
+primaryColor = "#2563EB"
 # Explicit so the contrast figures in this file stay checkable. All pairs below
 # clear WCAG AA (text >= 4.5:1, borders/UI >= 3:1) - see the checks in the
 # CHANGELOG entry. Fonts stay on Streamlit's bundled default: no web fonts, so
@@ -18,12 +15,17 @@ primaryColor = "#D32F2F"
 backgroundColor = "#0E1117"
 secondaryBackgroundColor = "#1A1D27"
 textColor = "#FAFAFA"
-# Lighter than primaryColor: red text on the dark background only reaches 3.80:1.
-linkColor = "#FF8A80"
+# Lighter than primaryColor for text: 10.48:1 on the dark background.
+linkColor = "#93C5FD"
 borderColor = "#6B7280"
 dataframeHeaderBackgroundColor = "#1E222D"
 baseRadius = "0.75rem"
 buttonRadius = "0.5rem"
+
+[client]
+# Hides Streamlit's developer toolbar (the "Deploy" button and its menu),
+# which means nothing to the people using this tool.
+toolbarMode = "minimal"
 
 [browser]
 # Streamlit sends anonymous usage statistics by default. This app promises that
