@@ -57,7 +57,14 @@ def reset_on_new_upload(
         or st.session_state.get("file_type") != file_type
     )
     if is_new:
+        # A new file always starts at Options (see presentation/wizard.py).
+        st.session_state["wizard_step"] = 2
         st.session_state.pop("output_stem", None)
+        # Tab and column choices belong to the old file; typed words and
+        # settings carry over, as they always have.
+        for key in [k for k in st.session_state if str(k).startswith("excel_cols_")]:
+            del st.session_state[key]
+        st.session_state.pop("excel_tabs", None)
         st.session_state.uploaded_name = uploaded.name
         st.session_state.file_type = file_type
         for key in clear_keys:

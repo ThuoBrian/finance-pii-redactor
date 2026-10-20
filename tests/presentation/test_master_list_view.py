@@ -1,39 +1,22 @@
-"""Unit tests for the master-list status panel's pure text helper."""
+"""Unit tests for the master-list card's pure text helpers."""
 
 from __future__ import annotations
 
-from pathlib import Path
-
-from finance_redactor.presentation.master_list_view import _name_list_help
+from finance_redactor.presentation.master_list_view import _counts_line, time_ago
 
 
-def test_help_text_shows_the_actual_resolved_path():
-    # Must reflect wherever Settings.master_list_file actually resolved to
-    # (the local data/ folder by default, or a shared FPR_MASTER_LIST_DIR
-    # location) - never a hardcoded string that could point at the wrong file.
-    shared_path = Path("C:/Users/Someone/Box/Team/Master List Folder") / (
-        "Names List - Organized.xlsx"
+def test_counts_line_lists_each_category_sorted() -> None:
+    assert _counts_line({"Staff": 5639, "Vendor": 14797, "Funder": 6093}) == (
+        "6,093 Funder · 5,639 Staff · 14,797 Vendor"
     )
 
-    text = _name_list_help({"Staff": 2, "Vendor": 1}, shared_path)
 
-    assert str(shared_path) in text
-    assert "data/Names List - Organized.xlsx" not in text
-
-
-def test_help_text_reports_total_and_per_category_counts():
-    text = _name_list_help(
-        {"Staff": 5639, "Vendor": 14797, "Funder": 6093},
-        Path("data/Names List - Organized.xlsx"),
-    )
-
-    assert "26,529" in text
-    assert "5,639 Staff" in text
-    assert "14,797 Vendor" in text
-    assert "6,093 Funder" in text
+def test_counts_line_handles_no_names() -> None:
+    assert _counts_line({}) == "none"
 
 
-def test_help_text_handles_empty_counts():
-    text = _name_list_help({}, Path("data/Names List - Organized.xlsx"))
-
-    assert "Loaded 0 master-list entries: none." in text
+def test_time_ago_is_rough_and_plain() -> None:
+    assert time_ago(5) == "just now"
+    assert time_ago(5 * 60) == "5 minutes ago"
+    assert time_ago(2 * 3600 + 120) == "2 hours ago"
+    assert time_ago(86400) == "1 day ago"

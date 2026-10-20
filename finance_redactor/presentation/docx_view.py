@@ -8,21 +8,22 @@ stays fully editable, matching the Excel flow rather than the PDF flow.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
-from typing import Any, Literal
+from typing import Any
 
 import streamlit as st
 
 from finance_redactor.application.redact_docx import RedactDocxService
 from finance_redactor.config import Settings
 from finance_redactor.domain.errors import UnreadableFileError
-from finance_redactor.domain.quality import QualityIssue
-from finance_redactor.presentation.crosswalk_view import render_crosswalk_section
+from finance_redactor.presentation import wizard
+from finance_redactor.presentation.crosswalk_view import (
+    render_crosswalk_download,
+    render_crosswalk_section,
+)
 from finance_redactor.presentation.exclusion_view import (
     render_deselect_editor,
     render_exclusion_warning,
 )
-from finance_redactor.presentation.master_list_view import render_master_list_status
 from finance_redactor.presentation.presenters import (
     ENTITY_HELP,
     THRESHOLD_HELP,
@@ -43,12 +44,9 @@ def run_docx_flow(
     *,
     docx_service: RedactDocxService,
     settings: Settings,
-    name_counts: Mapping[str, int],
-    quality_issues: Sequence[QualityIssue] | None = None,
-    on_refresh_master_list: Callable[[], None] | None = None,
     steps: Any,
 ) -> None:
-    """Render the Word (.docx) pseudonymization flow in Streamlit."""
+    """Render the Word flow: Options, Review and Download (see ``wizard``)."""
     reset_on_new_upload(
         uploaded,
         "docx",
@@ -65,15 +63,41 @@ def run_docx_flow(
             "docx_all_findings",
             "docx_excluded_applied",
             "docx_scan_result",
+            "docx_run_words",
             "excel_bytes",
         ),
     )
+    if (
+        wizard.current() == wizard.OPTIONS
+        or st.session_state.get("docx_buffer") is None
+    ):
+        _options_step(uploaded, docx_service, settings, steps)
+        return
+    if wizard.current() == wizard.REVIEW:
+        _review_step(uploaded, docx_service, steps)
+        return
+    _download_step(steps)
 
+
+def _options_step(
+    uploaded: Any, docx_service: RedactDocxService, settings: Settings, steps: Any
+) -> None:
     show_step(steps, 2)
-    with st.container(border=True):
-        st.subheader("2. Set options")
-        custom_words_input = st.text_area(
-            "Additional words/phrases to redact (optional)",
+    st.subheader("Options")
+    st.caption(
+        "Names, organizations, emails, websites, bank details and addresses "
+        "are found automatically."
+    )
+    # Values live in session state (seeded here, kept by wizard.keep_option_
+    # choices), never in a widget default: passing both raises a warning.
+    state = st.session_state
+    state.setdefault("docx_custom_words", "")
+    state.setdefault("docx_threshold", settings.default_threshold)
+    state.setdefault("docx_entities", list(settings.supported_entities))
+
+    with st.expander("Customize: words to add, kinds of information, confidence"):
+        st.text_area(
+            "Words or phrases to add (optional)",
             help=(
                 "One per line. Redacted in addition to detected "
                 "names/organizations/emails, even if not in the master list - "
@@ -82,171 +106,160 @@ def run_docx_flow(
             ),
             key="docx_custom_words",
         )
-        # Above the expander so a master-list data-quality warning is never
-        # hidden behind a collapsed panel.
-        render_master_list_status(
-            name_counts,
-            quality_issues,
-            settings.master_list_file,
-            on_refresh=on_refresh_master_list,
+        st.slider(
+            "Confidence threshold",
+            min_value=0.1,
+            max_value=1.0,
+            step=0.05,
+            help=THRESHOLD_HELP,
+            key="docx_threshold",
         )
-        with st.expander("Advanced settings"):
-            threshold = st.slider(
-                "Confidence threshold",
-                min_value=0.1,
-                max_value=1.0,
-                value=settings.default_threshold,
-                step=0.05,
-                help=THRESHOLD_HELP,
-                key="docx_threshold",
-            )
-            entity_options = st.multiselect(
-                "Kinds of information to hide",
-                options=list(settings.supported_entities),
-                default=list(settings.supported_entities),
-                format_func=entity_label,
-                help=ENTITY_HELP,
-                key="docx_entities",
-            )
-
-        custom_words = [w.strip() for w in custom_words_input.splitlines() if w.strip()]
-
-        # Red/primary only before the first run - once a result exists, the
-        # download button below becomes the one action that matters.
-        main_button_type: Literal["primary", "secondary"] = (
-            "secondary"
-            if st.session_state.get("docx_buffer") is not None
-            else "primary"
+        st.multiselect(
+            "Kinds of information to hide",
+            options=list(settings.supported_entities),
+            format_func=entity_label,
+            help=ENTITY_HELP,
+            key="docx_entities",
         )
-        if st.button(
-            "Pseudonymize Word document", type=main_button_type, width="stretch"
-        ):
-            uploaded.seek(0)
-            try:
-                with st.status(
-                    "Scanning document for PII...", expanded=False
-                ) as status:
-                    scan_result = docx_service.scan(uploaded, entity_options, threshold)
-                    uploaded.seek(0)
-                    status.update(label="Applying pseudonyms...")
-                    result = docx_service.redact(uploaded, scan_result, custom_words)
-                    status.update(label="Scan complete", state="complete")
-            except UnreadableFileError:
-                st.error(
-                    "This file could not be read as a Word document. It may be "
-                    "corrupted, or not really a .docx file despite its name. "
-                    "Open it in Word, save a fresh copy, and upload that "
-                    "instead."
+
+    custom_words = [
+        w.strip() for w in state["docx_custom_words"].splitlines() if w.strip()
+    ]
+    if st.button("Redact my file", type="primary", width="stretch"):
+        uploaded.seek(0)
+        try:
+            with st.status("Scanning the document...", expanded=False) as status:
+                scan_result = docx_service.scan(
+                    uploaded,
+                    list(state["docx_entities"]),
+                    float(state["docx_threshold"]),
                 )
-                st.stop()
-            st.session_state.docx_scan_result = scan_result
-            st.session_state.docx_buffer = result.data
-            st.session_state.docx_findings = result.findings
-            st.session_state.docx_blocks = result.block_count
-            st.session_state.docx_crosswalk = result.crosswalk
-            st.session_state.docx_links = result.removed_links
-            # Unfiltered baseline for the deselect editor - see pdf_view for
-            # why this must not be refiltered on a re-run.
-            st.session_state.docx_all_findings = result.findings
-            st.session_state.docx_excluded_applied = frozenset()
-
-        if (
-            "docx_buffer" not in st.session_state
-            or st.session_state.docx_buffer is None
-        ):
-            st.caption(
-                "Click the button above to run it. Your results and download "
-                "will appear here."
+                uploaded.seek(0)
+                status.update(label="Replacing names with codes...")
+                result = docx_service.redact(uploaded, scan_result, custom_words)
+        except UnreadableFileError:
+            st.error(
+                "This file could not be read as a Word document. It may be "
+                "corrupted, or not really a .docx file despite its name. "
+                "Open it in Word, save a fresh copy, and upload that "
+                "instead."
             )
-            st.stop()
+            return
+        state.docx_scan_result = scan_result
+        state.docx_buffer = result.data
+        state.docx_findings = result.findings
+        state.docx_blocks = result.block_count
+        state.docx_crosswalk = result.crosswalk
+        state.docx_links = result.removed_links
+        # Unfiltered baseline for the deselect editor - see pdf_view for
+        # why this must not be refiltered on a re-run.
+        state.docx_all_findings = result.findings
+        state.docx_excluded_applied = frozenset()
+        # The words this result was built with; the later steps read these,
+        # not the text box, which is only drawn on Options.
+        state.docx_run_words = custom_words
+        wizard.go(wizard.REVIEW)
 
-    docx_findings = st.session_state.docx_findings
+
+def _review_step(uploaded: Any, docx_service: RedactDocxService, steps: Any) -> None:
+    state = st.session_state
+    docx_findings = state.docx_findings
     n_entities = len(docx_findings)
-    removed_links = st.session_state.get("docx_links", 0)
-    base_name = output_stem()
+    removed_links = state.get("docx_links", 0)
 
     show_step(steps, 3)
-    with st.container(border=True):
-        st.subheader("3. Review the results")
-        if n_entities == 0 and not removed_links:
-            st.info("No PII was detected in this document. The file is already clean.")
-            st.stop()
-
-        found_col, links_col = st.columns(2)
-        found_col.metric("PII instances found", f"{n_entities:,}")
-        links_col.metric("Hyperlink targets removed", f"{removed_links:,}")
-        if n_entities == 0:
-            # The original still carries the link targets, so it is not clean.
-            st.info(
-                "No PII was detected in the text, but the document had "
-                f"{plural(removed_links, 'hyperlink target')}. Download the "
-                "copy below, which has them removed."
-            )
-
-        review_findings = st.session_state.get("docx_all_findings", [])
-        tab_review, tab_mapping, tab_occurrences = st.tabs(
-            review_tab_labels(review_findings)
+    st.subheader("Review what was found")
+    st.caption(
+        f"{plural(n_entities, 'term')} found"
+        + (
+            f" · {plural(removed_links, 'hyperlink target')} removed"
+            if removed_links
+            else ""
         )
-        with tab_mapping:
-            render_crosswalk_section(
-                st.session_state.docx_crosswalk, base_name, key_prefix="docx"
+    )
+    if n_entities == 0:
+        st.info(
+            "Nothing was detected in the text."
+            + (
+                " The download still has the hyperlink targets removed."
+                if removed_links
+                else ""
             )
-        with tab_review:
-            excluded = render_deselect_editor(
-                review_findings,
-                key_prefix="docx",
-                excluded=st.session_state.get("docx_excluded_applied", frozenset()),
-            )
-        with tab_occurrences:
-            st.markdown(f"**All detections ({plural(n_entities, 'finding')})**")
-            st.dataframe(
-                findings_dataframe(docx_findings, "Paragraph"),
-                width="stretch",
-                hide_index=True,
-            )
+        )
 
-        if excluded != st.session_state.get("docx_excluded_applied", frozenset()):
-            # Now the cheap case: the scan/redact split (see redact_docx.py)
-            # means this never re-runs spaCy - only the per-block
-            # dedupe/exclude/assign/apply step reruns, over the cached
-            # DocxScanResult from the button handler above.
-            uploaded.seek(0)
-            with st.spinner("Re-scanning the document without those terms..."):
-                rerun = docx_service.redact(
-                    uploaded,
-                    st.session_state.docx_scan_result,
-                    custom_words,
-                    exclude=excluded,
-                )
-            st.session_state.docx_buffer = rerun.data
-            st.session_state.docx_findings = rerun.findings
-            st.session_state.docx_crosswalk = rerun.crosswalk
-            st.session_state.docx_excluded_applied = excluded
-            st.rerun()
+    review_findings = state.get("docx_all_findings", [])
+    tab_review, tab_mapping, tab_occurrences = st.tabs(
+        review_tab_labels(review_findings)
+    )
+    with tab_mapping:
+        render_crosswalk_section(state.docx_crosswalk)
+    with tab_review:
+        excluded = render_deselect_editor(
+            review_findings,
+            key_prefix="docx",
+            excluded=state.get("docx_excluded_applied", frozenset()),
+        )
+    with tab_occurrences:
+        st.markdown(f"**All detections ({plural(n_entities, 'finding')})**")
+        st.dataframe(
+            findings_dataframe(docx_findings, "Paragraph"),
+            width="stretch",
+            hide_index=True,
+        )
+
+    if excluded != state.get("docx_excluded_applied", frozenset()):
+        # The scan/redact split (see redact_docx.py) means this never re-runs
+        # spaCy - only the per-block dedupe/exclude/assign/apply step reruns,
+        # over the cached DocxScanResult from the Redact click.
+        uploaded.seek(0)
+        with st.spinner("Rebuilding without those terms..."):
+            rerun = docx_service.redact(
+                uploaded,
+                state.docx_scan_result,
+                state.docx_run_words,
+                exclude=excluded,
+            )
+        state.docx_buffer = rerun.data
+        state.docx_findings = rerun.findings
+        state.docx_crosswalk = rerun.crosswalk
+        state.docx_excluded_applied = excluded
+        st.rerun()
+
+    wizard.nav(
+        back=("Back to options", wizard.OPTIONS),
+        forward=("Continue to download", wizard.DOWNLOAD),
+    )
+
+
+def _download_step(steps: Any) -> None:
+    state = st.session_state
+    removed_links = state.get("docx_links", 0)
+    base_name = output_stem()
 
     show_step(steps, 4)
-    with st.container(border=True):
-        st.subheader("4. Download")
-        render_exclusion_warning(
-            st.session_state.get("docx_excluded_applied", frozenset())
-        )
+    st.subheader("Download")
+    render_exclusion_warning(state.get("docx_excluded_applied", frozenset()))
+    safe, private = wizard.download_cards()
+    with safe:
         st.download_button(
-            label="Download pseudonymized Word document",
-            data=st.session_state.docx_buffer,
+            label="Download redacted Word document",
+            data=state.docx_buffer,
             file_name=f"{base_name}.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             type="primary",
             width="stretch",
         )
         caption = (
-            "Detected names and organizations are replaced with their "
-            "pseudonyms (e.g. STF-10010) directly in the document text. Bank "
-            "and payment details and addresses show as a fixed mask such as "
-            "[ACCOUNT] or [ADDRESS], with nothing to decode."
+            "Names are replaced with codes such as STF-10010. Bank and payment "
+            "details and addresses show as a mask such as [ACCOUNT]."
         )
         if removed_links:
             caption += (
                 f" {plural(removed_links, 'hyperlink target')} removed; the "
-                "link text stays, pseudonymized where it matched."
+                "link text stays, redacted where it matched."
             )
         st.caption(caption)
+    with private:
+        render_crosswalk_download(state.docx_crosswalk, base_name, key_prefix="docx")
+
+    wizard.nav(back=("Back to review", wizard.REVIEW), finish=True)

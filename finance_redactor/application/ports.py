@@ -60,13 +60,13 @@ class ExcelGateway(Protocol):
     def write(
         self,
         sheets: Sequence[tuple[str, pd.DataFrame, set[tuple[int, str]]]],
-        crosswalk_df: pd.DataFrame,
+        crosswalk_df: pd.DataFrame | None,
         formats: Sequence[SheetFormatting | None] | None = None,
     ) -> bytes:
         """Serialize ``(tab name, data, highlighted (row, column) cells)`` to xlsx.
 
-        ``crosswalk_df`` is written as a final, unhighlighted "Crosswalk"
-        sheet alongside the redacted data. ``formats`` gives each sheet's
+        ``crosswalk_df``, when not ``None``, is written as a final,
+        unhighlighted "Crosswalk" sheet. ``formats`` gives each sheet's
         look, in the same order as ``sheets``.
         """
         ...

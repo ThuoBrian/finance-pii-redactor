@@ -2,8 +2,8 @@
 
 A :class:`QualityIssue` is one actionable problem (or advisory) detected in the master
 list workbook at load time — duplicate names, conflicting IDs, blank IDs, reused IDs.
-The repository produces them; the presentation layer renders them as warnings in the
-Advanced settings panel so the IDs the tool emits are trustworthy.
+The repository produces them; the presentation layer renders them as warnings on the
+sidebar's master-list card so the IDs the tool emits are trustworthy.
 
 Framework-free: a plain frozen dataclass, unit-testable without pandas or Streamlit.
 """

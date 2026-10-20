@@ -80,7 +80,11 @@ what happened instead — then file it.
 - [ ] The **Preview** tab shows a table you can scroll and sort. Changed
   cells are yellow and start with `»`. It stops at 500 rows and says how many
   highlighted cells it hid.
-- [ ] Downloaded file has a last **Crosswalk** sheet mapping names to IDs.
+- [ ] The downloaded workbook has **no** Crosswalk sheet. The name mapping is a
+  separate CSV in the **Keep private** card.
+- [ ] The app opens one step at a time: Upload, Options, Review, Download.
+  **Back** keeps your choices (open Customize, change something, go to
+  Review, come back). **Start over** empties the file and the results.
 - [ ] Build a made-up formatted workbook (bold coloured header, a title row
   with merged cells, a currency column, a date column, a frozen header row,
   wide first column). The download looks the same in Excel, apart from yellow
@@ -122,7 +126,7 @@ what happened instead — then file it.
   toggle is off again.
 - [ ] A link in the PDF (for example a `mailto:` behind someone's name) no
   longer opens anything in the downloaded file.
-- [ ] The master-list summary appears in PDF's options step, showing
+- [ ] The master-list card in the sidebar shows
   the same row counts as Excel and Word. If it shows 0 names, curated names
   will silently not be redacted — that is the check that catches it.
 - [ ] Typing a name into that box redacts every occurrence, case-insensitive.
@@ -144,7 +148,7 @@ what happened instead — then file it.
 - [ ] Redact a PDF that already contains bracketed numbers of its own (e.g.
   a footnote marker `[4]`) — a warning says labels may be ambiguous in the
   output.
-- [ ] Switching **Pseudonymize** vs **Black out** changes the output as
+- [ ] Switching **Replace with labels** vs **Black out** (under Customize) changes the output as
   described in each option's help text. Blackout produces no mapping, since
   there is nothing to decode.
 - [ ] With "Also black out images/logos" checked (default), an embedded
@@ -213,7 +217,7 @@ what happened instead — then file it.
   accented text in the document.
 - [ ] Deliberately create a data-quality issue in your test master list (two
   rows with the same name in different categories, or two names sharing one
-  `Internal ID`) — a warning banner appears above **Advanced settings** the
+  `Internal ID`) — the master-list card shows a **things to tidy** badge the
   next time you load a file.
 - [ ] Put the **same name in two categories with different `Internal ID`s**,
   then type it into a PDF's words box. It should still redact, but its

@@ -141,66 +141,62 @@ is always safe.
 
 ## Using it
 
-1. Upload your Excel, PDF, or Word file.
-2. Choose what you want redacted, then look over what the tool found. If
-   there's something specific you want covered that it wouldn't know about,
-   like a codename or a case number, type it into **Additional words/phrases** in the options step.
-3. Look over **Check what was detected** (Review step, **Review** tab, the first one) and untick anything that isn't
-   really a name. The likeliest mistakes are listed first, and the **Show**
-   filter and bulk buttons clear whole groups at once. Ordinary words sometimes get caught, usually because
-   someone added one to the master list as a payee. The **Source** column
-   says why it matched. Tick or untick as many rows as you like, then click
-   **Apply changes** to rebuild the file without them - everything else
-   stays redacted.
-4. Download the redacted copy. It is named `redacted-` plus the date and
-   time, never after your original file, and its document properties (author,
-   title and the like) are cleared.
+The app walks you through four steps, one screen at a time. **Back** takes
+you to the step before, and your choices are kept.
+
+1. **Upload** your Excel, PDF, or Word file.
+2. **Options.** Click **Redact my file**. The recommended settings are
+   already chosen; open **Customize** only if you need to, for example to
+   pick tabs and columns, or to add something the tool wouldn't know about,
+   like a codename or a case number.
+3. **Review.** The **Review** tab lists what was found, likeliest mistakes
+   first. Untick anything that isn't really a name, then click **Apply
+   changes** to rebuild the file without them; everything else stays
+   redacted. The **Source** column says why each term matched. Ordinary words
+   sometimes get caught, usually because someone added one to the master list
+   as a payee.
+4. **Download.** Two cards: **Safe to share** (Internal) and **Keep private**
+   (Confidential). Files are named `redacted-` plus the date and time, never
+   after your original file, and their document properties (author, title
+   and the like) are cleared.
+
+The sidebar shows your master list (how many names, when it last changed,
+anything to tidy), **Start over**, **Help and troubleshooting**, and **Close
+the app**. To change which names get which codes, edit the master list
+(`Names List - Organized.xlsx`) and click **Refresh** on that card.
 
 In Excel, every cell the tool changed is highlighted in yellow, so you can
-see at a glance what was touched.
-
-The Excel copy keeps your formatting (column widths, fonts, colours, number
-formats, merged cells, frozen rows). Formulas become their values, and
-comments, charts, images and validation rules are not carried over; the
-download step tells you how many were left behind.
+see at a glance what was touched. The Excel copy keeps your formatting
+(column widths, fonts, colours, number formats, merged cells, frozen rows).
+Formulas become their values, and comments, charts, images and validation
+rules are not carried over; the Download step tells you how many were left
+behind.
 
 Alongside the redacted file you get a **mapping**: what each code or label
 stands for.
 
-- **Excel:** included in the workbook as a last sheet named "Crosswalk". It
-  lists the real names.
-- **Word:** a separate CSV you can download. It lists the real names.
+- **Excel** and **Word:** a separate CSV that lists the real names next to
+  their codes.
 - **PDF:** a separate CSV that contains **no names at all**, only
   `[001] = 10010` rows. You need the master list as well to get from there to
-  a person or organization.
-
-To change which names get which codes, edit the master list
-(`Names List - Organized.xlsx`) and click **🔄 Refresh master list** in
-the master-list panel in the options step.
+  a person or organization. A second CSV with names is available if you
+  switch it on.
 
 ## Which file is safe to share
 
-A redacted file on its own is approved for **Internal** data. Not
-Confidential, not Highly Confidential.
+The Download step sorts the files for you: everything in **Safe to share** is
+**Internal**, everything in **Keep private** is **Confidential**. Internal
+means approved for Internal data: not Confidential, not Highly Confidential.
 
-The mapping is where it gets more careful, and the three formats differ:
-
-- **PDF:** the mapping has no names in it, so it cannot identify anyone on
-  its own. It is **Internal**, and you can keep it with the redacted PDF.
-  What has to stay locked down is the master list, which is the only thing
-  that turns an ID number back into a name. If you switch on **Also prepare a
-  mapping with names**, you get a second CSV that lists real names. That one
-  is **Confidential**, like Word's, so keep it apart from the redacted PDF.
-- **Word:** the mapping is a separate CSV listing real names, so it is
-  **Confidential**. Store it somewhere else, securely, and don't send it with
-  the redacted file.
-- **Excel:** the mapping is inside the workbook as a last sheet, so the file
-  you download is **Confidential as a whole**, not Internal. Delete the
-  "Crosswalk" sheet before sharing if the recipient shouldn't have it.
-
-The safest thing to hand someone is therefore a redacted PDF, with or without
-its mapping. A redacted Excel workbook needs a look at the Crosswalk sheet
-first.
+- **The redacted file** (Excel, Word or PDF) is **Internal**. It holds codes
+  or labels, not names.
+- **PDF label mapping:** no names in it, so it cannot identify anyone on its
+  own. It is **Internal**, and you can keep it with the redacted PDF. What has
+  to stay locked down is the master list, which is the only thing that turns
+  an ID number back into a name.
+- **Excel and Word name mapping, and the optional PDF mapping with names:**
+  real names next to their codes, so **Confidential**. Store them somewhere
+  else, securely, and never send them with the redacted file.
 
 ## If something goes wrong
 
