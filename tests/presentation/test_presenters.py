@@ -417,6 +417,8 @@ def test_the_opt_in_mapping_shows_unresolved_rows_and_the_possible_match() -> No
     assert named.loc[0, "Internal ID"] == "CST-AUTO-3F9A1"
     assert named.loc[0, "Flagged"] == "not in master list"
     assert named.loc[0, "Possible match"] == "Michael Sample (STF-12345, 92% match)"
+
+
 class _Fmt:
     def __init__(self, dropped: dict[str, int]) -> None:
         self.dropped = dropped
@@ -442,6 +444,8 @@ def test_formatting_note_is_empty_when_nothing_was_left_behind() -> None:
 
 def test_formatting_note_says_so_when_formatting_could_not_be_read() -> None:
     assert "could not be read" in formatting_note({}, 2)
+
+
 def _model(text: str, score: float = 0.85, entity: str = "ORGANIZATION") -> Finding:
     return Finding(
         page=0,
