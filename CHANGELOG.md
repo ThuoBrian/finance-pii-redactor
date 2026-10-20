@@ -82,6 +82,14 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **A short word redacted in a PDF no longer blacks out the same letters inside
+  longer words.** Redacting "IPA" also covered the "ipa" in "principal",
+  "participant" and "municipal", because the PDF step located each detection
+  with a plain substring search. Detection was already whole-word (and Excel
+  and Word redact by position), so only the PDF output was affected. Hits that
+  sit inside a longer word are now dropped. If a hit cannot be lined up with
+  the page text (a name wrapped across lines, an unusual layout) it is kept
+  redacted, so the fix never leaves a name showing.
 - **Editing the master list, or choosing a different master-list folder, now
   takes effect on the next rerun.** The cache arguments in `app.py`'s
   `_get_master_list_bundle` started with an underscore, which Streamlit leaves
