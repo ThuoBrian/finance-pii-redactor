@@ -11,12 +11,15 @@ import re
 import zipfile
 from collections.abc import Sequence
 from io import BytesIO
+from typing import Any, cast
 
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill
 
 from finance_redactor.domain.errors import UnreadableFileError
+from finance_redactor.infrastructure.documents import excel_formatting
+from finance_redactor.infrastructure.documents.excel_formatting import SheetFormat
 
 _HIGHLIGHT_FILL = PatternFill(fill_type="solid", fgColor="FFFF00")
 _HEADER_FONT = Font(bold=True)
@@ -43,6 +46,19 @@ class OpenpyxlExcelGateway:
         except (zipfile.BadZipFile, KeyError) as e:
             raise UnreadableFileError from e
 
+    def read_formatting(self, source: object) -> dict[str, SheetFormat]:
+        """Read each sheet's look (see :mod:`excel_formatting`), keyed by tab name.
+
+        Best effort: formatting is a nicety, so a workbook openpyxl cannot
+        fully load gives ``{}`` and a plain output rather than an error.
+        """
+        if hasattr(source, "seek"):
+            source.seek(0)
+        try:
+            return excel_formatting.capture(load_workbook(cast(Any, source)))
+        except Exception:  # noqa: BLE001 - any load failure just means no formatting
+            return {}
+
     def text_columns(self, df: pd.DataFrame) -> list[str]:
         """Return free-text (string dtype) columns, used as the scan default.
 
@@ -62,6 +78,7 @@ class OpenpyxlExcelGateway:
         self,
         sheets: Sequence[tuple[str, pd.DataFrame, set[tuple[int, str]]]],
         crosswalk_df: pd.DataFrame,
+        formats: Sequence[object | None] | None = None,
     ) -> bytes:
         """Serialize ``sheets`` to xlsx bytes, highlighting the given cells yellow.
 
@@ -71,6 +88,10 @@ class OpenpyxlExcelGateway:
         ``crosswalk_df`` is written as a final "Crosswalk" sheet alongside the
         redacted data, so the name-to-pseudonym mapping travels with the file
         it describes. A source tab already called "Crosswalk" is renamed.
+
+        ``formats`` (one per sheet, in order; ``None`` for no formatting) is
+        what :meth:`read_formatting` returned for the source tab, applied
+        before the yellow highlight so the highlight wins on changed cells.
         """
         titles = _sheet_titles([name for name, _, _ in sheets])
         buffer = BytesIO()
@@ -81,8 +102,17 @@ class OpenpyxlExcelGateway:
         buffer.seek(0)
 
         workbook = load_workbook(buffer)
-        for title, (_, df, highlighted_cells) in zip(titles, sheets, strict=True):
+        sheet_formats = list(formats) if formats is not None else [None] * len(sheets)
+        for title, (_, df, highlighted_cells), fmt in zip(
+            titles, sheets, sheet_formats, strict=True
+        ):
             worksheet = workbook[title]
+            for index, column in enumerate(df.columns, start=1):
+                # pandas names a blank header cell "Unnamed: N"; don't write that.
+                if re.fullmatch(r"Unnamed: \d+", str(column)):
+                    worksheet.cell(row=1, column=index).value = None
+            if isinstance(fmt, SheetFormat):
+                excel_formatting.apply(worksheet, fmt, len(df), len(df.columns))
             col_index = {col: idx + 1 for idx, col in enumerate(df.columns)}
             for row_idx, col_name in highlighted_cells:
                 if col_name in col_index:

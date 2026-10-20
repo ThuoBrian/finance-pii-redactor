@@ -25,6 +25,7 @@ from finance_redactor.presentation.presenters import (
     excel_findings_dataframe,
     excluded_terms,
     findings_dataframe,
+    formatting_note,
     pdf_mapping_dataframe,
     pdf_review_dataframe,
     plural,
@@ -356,3 +357,30 @@ def test_excel_findings_dataframe_names_the_sheet_for_every_finding() -> None:
     assert table.loc[0, "Row"] == 5
     assert table.loc[1, "Column"] == "(tab name)"
     assert pd.isna(table.loc[1, "Row"])
+
+
+class _Fmt:
+    def __init__(self, dropped: dict[str, int]) -> None:
+        self.dropped = dropped
+
+
+def test_formatting_note_totals_what_was_left_behind_across_tabs() -> None:
+    formats = {
+        "Jan": _Fmt({"formulas": 3, "comments": 1}),
+        "Feb": _Fmt({"formulas": 2}),
+    }
+
+    note = formatting_note(formats, 2)
+
+    assert note == (
+        "Not carried over from the original: formulas: 5 (their values are kept), "
+        "comments: 1."
+    )
+
+
+def test_formatting_note_is_empty_when_nothing_was_left_behind() -> None:
+    assert formatting_note({"Jan": _Fmt({})}, 1) == ""
+
+
+def test_formatting_note_says_so_when_formatting_could_not_be_read() -> None:
+    assert "could not be read" in formatting_note({}, 2)

@@ -81,6 +81,13 @@ what happened instead — then file it.
   cells are yellow and start with `»`. It stops at 500 rows and says how many
   highlighted cells it hid.
 - [ ] Downloaded file has a last **Crosswalk** sheet mapping names to IDs.
+- [ ] Build a made-up formatted workbook (bold coloured header, a title row
+  with merged cells, a currency column, a date column, a frozen header row,
+  wide first column). The download looks the same in Excel, apart from yellow
+  cells where a name was replaced.
+- [ ] Add a comment, a formula and a dropdown list to that workbook. None of
+  them is in the download, the formula cell shows its value, and the Download
+  step says how many were left behind.
 - [ ] A workbook with several tabs: every tab is offered under **Tabs to scan**
   (hidden ones too), the download keeps each tab in order, and the same name
   gets the same ID on every tab.
