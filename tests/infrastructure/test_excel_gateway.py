@@ -36,7 +36,7 @@ def test_read_rejects_a_file_that_is_not_really_a_workbook():
     not openpyxl's own ``BadZipFile``/``KeyError``.
     """
     with pytest.raises(UnreadableFileError):
-        OpenpyxlExcelGateway().read(BytesIO(b"not a workbook file at all"))
+        OpenpyxlExcelGateway().read_sheets(BytesIO(b"not a workbook file at all"))
 
 
 def test_write_produces_redacted_and_crosswalk_sheets():
@@ -54,7 +54,7 @@ def test_write_produces_redacted_and_crosswalk_sheets():
         ]
     )
 
-    result = OpenpyxlExcelGateway().write(df, set(), crosswalk_df)
+    result = OpenpyxlExcelGateway().write([("Redacted", df, set())], crosswalk_df)
 
     workbook = load_workbook(BytesIO(result))
     assert workbook.sheetnames == ["Redacted", "Crosswalk"]
@@ -63,7 +63,9 @@ def test_write_produces_redacted_and_crosswalk_sheets():
 def test_redacted_sheet_content_and_highlighting_are_preserved():
     df = pd.DataFrame({"notes": ["Paid to STF-10010", "no name here"]})
 
-    result = OpenpyxlExcelGateway().write(df, {(0, "notes")}, _crosswalk_df([]))
+    result = OpenpyxlExcelGateway().write(
+        [("Redacted", df, {(0, "notes")})], _crosswalk_df([])
+    )
 
     workbook = load_workbook(BytesIO(result))
     sheet = workbook["Redacted"]
@@ -99,7 +101,7 @@ def test_crosswalk_sheet_matches_the_passed_dataframe():
         ]
     )
 
-    result = OpenpyxlExcelGateway().write(df, set(), crosswalk_df)
+    result = OpenpyxlExcelGateway().write([("Redacted", df, set())], crosswalk_df)
 
     read_back = pd.read_excel(BytesIO(result), sheet_name="Crosswalk")
     assert list(read_back.columns) == _CROSSWALK_COLUMNS
@@ -113,7 +115,7 @@ def test_crosswalk_sheet_matches_the_passed_dataframe():
 def test_write_handles_an_empty_crosswalk_without_crashing():
     df = pd.DataFrame({"notes": ["no PII here"]})
 
-    result = OpenpyxlExcelGateway().write(df, set(), _crosswalk_df([]))
+    result = OpenpyxlExcelGateway().write([("Redacted", df, set())], _crosswalk_df([]))
 
     read_back = pd.read_excel(BytesIO(result), sheet_name="Crosswalk")
     assert list(read_back.columns) == _CROSSWALK_COLUMNS
@@ -142,20 +144,20 @@ def test_text_columns_includes_string_columns_from_a_real_upload():
     # legacy "object" dtype - a `dtype == object` check silently matched
     # nothing, so no column was ever pre-selected for a real uploaded file.
     gateway = OpenpyxlExcelGateway()
-    df = gateway.read(
+    df = gateway.read_sheets(
         BytesIO(
             _round_tripped_workbook_bytes(
                 {"Description": ["Consulting payment"], "Payee": ["Jane Doe"]}
             )
         )
-    )
+    )["Sheet1"]
 
     assert set(gateway.text_columns(df)) == {"Description", "Payee"}
 
 
 def test_text_columns_excludes_numeric_and_date_columns_from_a_real_upload():
     gateway = OpenpyxlExcelGateway()
-    df = gateway.read(
+    df = gateway.read_sheets(
         BytesIO(
             _round_tripped_workbook_bytes(
                 {
@@ -165,7 +167,7 @@ def test_text_columns_excludes_numeric_and_date_columns_from_a_real_upload():
                 }
             )
         )
-    )
+    )["Sheet1"]
 
     assert gateway.text_columns(df) == ["Payee"]
 
@@ -188,14 +190,89 @@ def test_hyperlink_targets_never_reach_the_output():
     buffer.seek(0)
 
     gateway = OpenpyxlExcelGateway()
-    df = gateway.read(buffer)
-    output = gateway.write(df, set(), _crosswalk_df([]))
+    ((name, df),) = gateway.read_sheets(buffer).items()
+    output = gateway.write([(name, df, set())], _crosswalk_df([]))
 
     workbook = load_workbook(BytesIO(output))
-    assert workbook["Redacted"]["A2"].value == "Contact"
+    assert workbook[name]["A2"].value == "Contact"
     assert all(
         not sheet_cell.hyperlink
         for sheet in workbook.worksheets
         for row in sheet.iter_rows()
         for sheet_cell in row
     )
+
+
+def _workbook_bytes(
+    tabs: dict[str, pd.DataFrame], hidden: tuple[str, ...] = ()
+) -> bytes:
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        for name, df in tabs.items():
+            df.to_excel(writer, index=False, sheet_name=name)
+    workbook = load_workbook(BytesIO(buffer.getvalue()))
+    for name in hidden:
+        workbook[name].sheet_state = "hidden"
+    out = BytesIO()
+    workbook.save(out)
+    return out.getvalue()
+
+
+def test_read_sheets_returns_every_tab_in_order_including_hidden_ones():
+    data = _workbook_bytes(
+        {
+            "First": pd.DataFrame({"a": ["x"]}),
+            "Second": pd.DataFrame({"a": ["y"]}),
+            "Third": pd.DataFrame({"a": ["z"]}),
+        },
+        hidden=("Second",),
+    )
+
+    sheets = OpenpyxlExcelGateway().read_sheets(BytesIO(data))
+
+    assert list(sheets) == ["First", "Second", "Third"]
+    assert sheets["Second"].loc[0, "a"] == "y"
+
+
+def test_write_keeps_every_tab_and_highlights_the_right_cells_per_tab():
+    first = pd.DataFrame({"notes": ["one", "two"]})
+    second = pd.DataFrame({"notes": ["three", "four"]})
+
+    result = OpenpyxlExcelGateway().write(
+        [("Jan", first, {(0, "notes")}), ("Feb", second, {(1, "notes")})],
+        _crosswalk_df([]),
+    )
+
+    workbook = load_workbook(BytesIO(result))
+    assert workbook.sheetnames == ["Jan", "Feb", "Crosswalk"]
+    assert workbook["Jan"]["A2"].fill.fgColor.rgb == "00FFFF00"
+    assert workbook["Jan"]["A3"].fill.fgColor.rgb in (None, "00000000")
+    assert workbook["Feb"]["A2"].fill.fgColor.rgb in (None, "00000000")
+    assert workbook["Feb"]["A3"].fill.fgColor.rgb == "00FFFF00"
+
+
+def test_write_makes_tab_names_valid_and_unique_without_dropping_a_tab():
+    df = pd.DataFrame({"notes": ["x"]})
+    long_name = "L" * 40
+    tabs = [
+        ("VND-10011", df, set()),
+        ("VND-10011", df, set()),  # two tabs redacted to the same name
+        ("[ACCOUNT]", df, set()),  # a mask holds characters Excel forbids
+        (long_name, df, set()),
+        ("Crosswalk", df, set()),  # collides with the tool's own sheet
+        ("", df, set()),
+    ]
+
+    result = OpenpyxlExcelGateway().write(tabs, _crosswalk_df([]))
+
+    names = load_workbook(BytesIO(result)).sheetnames
+    assert len(names) == len(tabs) + 1
+    assert len({n.lower() for n in names}) == len(names)
+    assert names[-1] == "Crosswalk"
+    assert "VND-10011" in names
+    assert "VND-10011 (2)" in names
+    assert "_ACCOUNT_" in names
+    assert long_name[:31] in names
+    assert "Crosswalk (2)" in names
+    assert "Sheet6" in names
+    assert all(len(n) <= 31 for n in names)

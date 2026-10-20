@@ -80,7 +80,12 @@ what happened instead — then file it.
 - [ ] The **Preview** tab shows a table you can scroll and sort. Changed
   cells are yellow and start with `»`. It stops at 500 rows and says how many
   highlighted cells it hid.
-- [ ] Downloaded file has a second **Crosswalk** sheet mapping names to IDs.
+- [ ] Downloaded file has a last **Crosswalk** sheet mapping names to IDs.
+- [ ] A workbook with several tabs: every tab is offered under **Tabs to scan**
+  (hidden ones too), the download keeps each tab in order, and the same name
+  gets the same ID on every tab.
+- [ ] A tab named after a made-up person or vendor is renamed in the download.
+  A tab you untick is **not** in the download.
 - [ ] Editing the master list workbook, saving, and clicking **🔄 Refresh
   master list** picks up the change without restarting the app.
 

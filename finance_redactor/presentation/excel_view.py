@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, Literal
 
+import pandas as pd
 import streamlit as st
 
 from finance_redactor.application.ports import ExcelGateway
@@ -59,7 +60,9 @@ def run_excel_flow(
         "excel",
         (
             "findings",
-            "redacted_df",
+            "redacted_sheets",
+            "scan_sheets",
+            "scan_columns",
             "crosswalk",
             "pdf_buffer",
             "pdf_findings",
@@ -68,11 +71,11 @@ def run_excel_flow(
             "excel_excluded_applied",
             "excel_bytes",
         ),
-        force="df" not in st.session_state,
+        force="sheets" not in st.session_state,
     )
     if is_new:
         try:
-            st.session_state.df = excel_gateway.read(uploaded)
+            st.session_state.sheets = excel_gateway.read_sheets(uploaded)
         except UnreadableFileError:
             st.error(
                 "This file could not be read as an Excel workbook. It may be "
@@ -82,21 +85,29 @@ def run_excel_flow(
             )
             st.stop()
 
-    df = st.session_state.df
-    text_cols = excel_gateway.text_columns(df)
+    sheets: dict[str, pd.DataFrame] = st.session_state.sheets
+    tab_names = list(sheets)
 
     show_step(steps, 2)
     with st.container(border=True):
         st.subheader("2. Set options")
-        selected_cols = st.multiselect(
-            "Columns to scan for PII",
-            options=list(df.columns),
-            default=text_cols,
-            help=(
-                "Numeric and date columns are excluded by default. Add a "
-                "numeric column here if it holds account or M-Pesa numbers."
-            ),
-        )
+        if len(tab_names) > 1:
+            selected_tabs = st.multiselect(
+                "Tabs to scan for PII",
+                options=tab_names,
+                default=tab_names,
+                help=(
+                    "Tabs you leave out are not scanned, and they are not in "
+                    "the downloaded file either."
+                ),
+            )
+        else:
+            selected_tabs = tab_names
+        if not selected_tabs:
+            st.warning("Select at least one tab to scan.")
+            st.stop()
+
+        columns_by_sheet = _choose_columns(selected_tabs, sheets, excel_gateway)
 
         # Above the expander, not inside it: a data-quality warning about the
         # master list changes how far the IDs can be trusted, so it must not
@@ -125,7 +136,7 @@ def run_excel_flow(
                 help=ENTITY_HELP,
             )
 
-        if not selected_cols:
+        if not any(columns_by_sheet.values()):
             st.warning("Select at least one column to scan.")
             st.stop()
 
@@ -144,20 +155,23 @@ def run_excel_flow(
                         text=f"{done:,} of {total:,} unique values checked",
                     )
 
-                scan_result = excel_service.scan(
-                    df,
-                    selected_cols,
+                to_scan = {name: sheets[name] for name in selected_tabs}
+                scan_result = excel_service.scan_workbook(
+                    to_scan,
+                    columns_by_sheet,
                     entity_options,
                     threshold,
                     on_progress=_on_progress,
                 )
                 status.update(label="Applying pseudonyms...")
-                redacted_df, crosswalk = excel_service.redact(
-                    df, scan_result, selected_cols
+                redacted_sheets, crosswalk = excel_service.redact_workbook(
+                    to_scan, scan_result, columns_by_sheet
                 )
                 status.update(label="Scan complete", state="complete", expanded=False)
             st.session_state.findings = scan_result
-            st.session_state.redacted_df = redacted_df
+            st.session_state.scan_sheets = to_scan
+            st.session_state.scan_columns = columns_by_sheet
+            st.session_state.redacted_sheets = redacted_sheets
             st.session_state.crosswalk = crosswalk
             st.session_state.excel_excluded_applied = frozenset()
             st.session_state.excel_bytes = None
@@ -170,11 +184,12 @@ def run_excel_flow(
             st.stop()
 
     scan_result = st.session_state.findings
-    redacted_df = st.session_state.redacted_df
+    scan_sheets: dict[str, pd.DataFrame] = st.session_state.scan_sheets
+    scan_columns: dict[str, list[str]] = st.session_state.scan_columns
+    redacted_sheets = st.session_state.redacted_sheets
     crosswalk = st.session_state.crosswalk
     n_cells = scan_result.cell_count
     n_entities = scan_result.entity_count
-    cell_keys = scan_result.cell_keys()
     base_name = sanitize_base_name(uploaded.name)
 
     show_step(steps, 3)
@@ -192,6 +207,16 @@ def run_excel_flow(
                 "Cells with PII are filled yellow and start with », the "
                 "same yellow as in the downloaded Excel file."
             )
+            shown = 0
+            if len(scan_sheets) > 1:
+                shown = st.selectbox(
+                    "Tab to preview",
+                    options=range(len(scan_sheets)),
+                    format_func=lambda i: list(scan_sheets)[i],
+                )
+            df = list(scan_sheets.values())[shown]
+            redacted_df = redacted_sheets[shown].data
+            cell_keys = redacted_sheets[shown].highlighted
             col_orig, col_redacted = st.columns(2)
             with col_orig:
                 st.markdown("**Original**")
@@ -238,10 +263,10 @@ def run_excel_flow(
             # session state. No re-detection, and the spaCy model is never
             # touched.
             with st.spinner("Reapplying pseudonyms without those terms..."):
-                redacted_df, crosswalk = excel_service.redact(
-                    df, scan_result, selected_cols, exclude=excluded
+                redacted_sheets, crosswalk = excel_service.redact_workbook(
+                    scan_sheets, scan_result, scan_columns, exclude=excluded
                 )
-            st.session_state.redacted_df = redacted_df
+            st.session_state.redacted_sheets = redacted_sheets
             st.session_state.crosswalk = crosswalk
             st.session_state.excel_excluded_applied = excluded
             st.session_state.excel_bytes = None
@@ -253,6 +278,13 @@ def run_excel_flow(
         render_exclusion_warning(
             st.session_state.get("excel_excluded_applied", frozenset())
         )
+        left_out = [name for name in sheets if name not in scan_sheets]
+        if left_out:
+            st.warning(
+                f"{plural(len(left_out), 'tab')} you did not select "
+                f"({', '.join(left_out)}) {'is' if len(left_out) == 1 else 'are'} "
+                "not in the download."
+            )
         if n_entities == 0:
             st.info("No PII was detected. The file is already clean.")
             return
@@ -269,7 +301,8 @@ def run_excel_flow(
         # or crosswalk change (the scan and the exclusion re-apply above).
         if st.session_state.get("excel_bytes") is None:
             st.session_state.excel_bytes = excel_gateway.write(
-                redacted_df, cell_keys, crosswalk_dataframe(crosswalk)
+                [(s.name, s.data, s.highlighted) for s in redacted_sheets],
+                crosswalk_dataframe(crosswalk),
             )
         st.download_button(
             label="Download pseudonymized Excel file",
@@ -281,8 +314,36 @@ def run_excel_flow(
         )
         st.caption(
             "Yellow-highlighted cells indicate where a name was replaced with "
-            'its pseudonym; the workbook\'s second sheet, "Crosswalk", lists '
-            "the full name-to-pseudonym mapping. Bank and payment details "
+            'its pseudonym; the workbook\'s last sheet, "Crosswalk", lists '
+            "the full name-to-pseudonym mapping. Tab names are checked too, "
+            "so a tab named after someone is renamed. Bank and payment details "
             "show as a fixed mask such as [ACCOUNT] or [CARD], with nothing "
             "to decode."
         )
+
+
+def _choose_columns(
+    selected_tabs: list[str],
+    sheets: Mapping[str, pd.DataFrame],
+    excel_gateway: ExcelGateway,
+) -> dict[str, list[str]]:
+    """One column picker per tab, defaulting to its free-text columns."""
+    help_text = (
+        "Numeric and date columns are excluded by default. Add a "
+        "numeric column here if it holds account or M-Pesa numbers."
+    )
+
+    def pick(name: str, label: str) -> list[str]:
+        df = sheets[name]
+        return st.multiselect(
+            label,
+            options=list(df.columns),
+            default=excel_gateway.text_columns(df),
+            key=f"excel_cols_{name}",
+            help=help_text,
+        )
+
+    if len(selected_tabs) == 1:
+        return {selected_tabs[0]: pick(selected_tabs[0], "Columns to scan for PII")}
+    with st.expander(f"Columns to scan, tab by tab ({len(selected_tabs)} tabs)"):
+        return {name: pick(name, name) for name in selected_tabs}

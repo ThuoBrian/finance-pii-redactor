@@ -159,7 +159,7 @@ see at a glance what was touched.
 Alongside the redacted file you get a **mapping**: what each code or label
 stands for.
 
-- **Excel:** included in the workbook as a second sheet named "Crosswalk". It
+- **Excel:** included in the workbook as a last sheet named "Crosswalk". It
   lists the real names.
 - **Word:** a separate CSV you can download. It lists the real names.
 - **PDF:** a separate CSV that contains **no names at all**, only
@@ -184,7 +184,7 @@ The mapping is where it gets more careful, and the three formats differ:
 - **Word:** the mapping is a separate CSV listing real names, so it is
   **Confidential**. Store it somewhere else, securely, and don't send it with
   the redacted file.
-- **Excel:** the mapping is inside the workbook as a second sheet, so the file
+- **Excel:** the mapping is inside the workbook as a last sheet, so the file
   you download is **Confidential as a whole**, not Internal. Delete the
   "Crosswalk" sheet before sharing if the recipient shouldn't have it.
 

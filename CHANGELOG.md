@@ -8,6 +8,16 @@ the `version` field in `pyproject.toml`.
 
 ### Added
 
+- **Excel workbooks with several tabs are now processed in full.** Before,
+  only the first tab was read, scanned and written out; every other tab was
+  silently dropped. Now every tab is scanned (hidden ones too), you can pick
+  which tabs and which columns per tab, and the download has each tab redacted
+  in its original order. One name gets one code across all tabs, with a single
+  Crosswalk sheet at the end. **Tab names are redacted too**, since a tab named
+  after a vendor or person is PII; a tab you leave unselected is left out of
+  the download rather than copied unredacted. Output tabs keep their source
+  names instead of the old single "Redacted" tab, and a source tab called
+  "Crosswalk" is renamed to "Crosswalk (2)".
 - **The Windows installer adds a "Finance PII Redactor" shortcut** to the
   Desktop and Start menu, so reopening the tool is a double-click instead of
   finding `run.bat`. Updating refreshes it. If a managed machine blocks

@@ -13,11 +13,12 @@ from collections.abc import Sequence
 import pandas as pd
 from pandas.io.formats.style import Styler
 
-from finance_redactor.application.results import ExcelScanResult
+from finance_redactor.application.results import WorkbookScanResult
 from finance_redactor.domain.entities import Finding
 from finance_redactor.domain.pseudonyms import Assignment, normalize
 
 _EXCEL_COLUMNS = [
+    "Sheet",
     "Row",
     "Column",
     "Detected text",
@@ -146,10 +147,15 @@ def preview_styler(
     return text.style.apply(lambda _: css, axis=None)
 
 
-def excel_findings_dataframe(scan_result: ExcelScanResult) -> pd.DataFrame:
-    """Flatten an Excel scan result into a per-detection findings table."""
-    rows = [
+# Shown in the Column field of a finding that sits in a tab's name, not a cell.
+TAB_NAME_LABEL = "(tab name)"
+
+
+def excel_findings_dataframe(scan_result: WorkbookScanResult) -> pd.DataFrame:
+    """Flatten a workbook scan result into a per-detection findings table."""
+    rows: list[dict[str, object]] = [
         {
+            "Sheet": sheet,
             "Row": cell.row + 1,
             "Column": cell.column,
             "Detected text": detection.text,
@@ -157,30 +163,54 @@ def excel_findings_dataframe(scan_result: ExcelScanResult) -> pd.DataFrame:
             "Confidence": round(detection.score, 2),
             "Source": detection.source.value,
         }
-        for cell in scan_result.findings
+        for sheet, sheet_result in scan_result.sheets.items()
+        for cell in sheet_result.findings
         for detection in cell.detections
+    ]
+    rows += [
+        {
+            "Sheet": sheet,
+            "Row": None,
+            "Column": TAB_NAME_LABEL,
+            "Detected text": detection.text,
+            "Entity type": detection.entity_type,
+            "Confidence": round(detection.score, 2),
+            "Source": detection.source.value,
+        }
+        for sheet, detections in scan_result.tab_names.items()
+        for detection in detections
     ]
     return pd.DataFrame(rows, columns=_EXCEL_COLUMNS)
 
 
-def scan_result_findings(scan_result: ExcelScanResult) -> list[Finding]:
-    """Flatten an Excel scan result into :class:`Finding` objects.
+def scan_result_findings(scan_result: WorkbookScanResult) -> list[Finding]:
+    """Flatten a workbook scan result into :class:`Finding` objects.
 
     Only so Excel can share :func:`detection_editor_dataframe` with the PDF
     and Word flows, which already work in ``Finding``. ``page`` carries the
     row index here, the same way it carries a paragraph ordinal in the Word
-    flow - see :func:`findings_dataframe`.
+    flow - see :func:`findings_dataframe` - and ``-1`` for a tab name.
     """
+    cell_detections = [
+        (cell.row, detection)
+        for sheet_result in scan_result.sheets.values()
+        for cell in sheet_result.findings
+        for detection in cell.detections
+    ]
+    name_detections = [
+        (-1, detection)
+        for detections in scan_result.tab_names.values()
+        for detection in detections
+    ]
     return [
         Finding(
-            page=cell.row,
+            page=page,
             detected_text=detection.text,
             entity_type=detection.entity_type,
             score=detection.score,
             source=detection.source,
         )
-        for cell in scan_result.findings
-        for detection in cell.detections
+        for page, detection in cell_detections + name_detections
     ]
 
 

@@ -9,6 +9,7 @@ Presidio, openpyxl, and PyMuPDF.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
 import pandas as pd
@@ -31,8 +32,8 @@ class PiiDetector(Protocol):
 class ExcelGateway(Protocol):
     """Reads and writes Excel workbooks."""
 
-    def read(self, source: object) -> pd.DataFrame:
-        """Load a workbook into a DataFrame."""
+    def read_sheets(self, source: object) -> dict[str, pd.DataFrame]:
+        """Load every sheet of a workbook, in tab order, keyed by tab name."""
         ...
 
     def text_columns(self, df: pd.DataFrame) -> list[str]:
@@ -41,13 +42,12 @@ class ExcelGateway(Protocol):
 
     def write(
         self,
-        df: pd.DataFrame,
-        highlighted_cells: set[tuple[int, str]],
+        sheets: Sequence[tuple[str, pd.DataFrame, set[tuple[int, str]]]],
         crosswalk_df: pd.DataFrame,
     ) -> bytes:
-        """Serialize ``df`` to xlsx, highlighting the given (row, column) cells.
+        """Serialize ``(tab name, data, highlighted (row, column) cells)`` to xlsx.
 
-        ``crosswalk_df`` is written as a second, unhighlighted "Crosswalk"
+        ``crosswalk_df`` is written as a final, unhighlighted "Crosswalk"
         sheet alongside the redacted data.
         """
         ...
