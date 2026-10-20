@@ -261,6 +261,8 @@ def test_to_bytes_strips_document_properties_and_xmp():
     )
     for leaked in (b"Pat Example", b"Payroll Review", b"Example PDF Tool", b"xmpmeta"):
         assert leaked not in out
+
+
 def _text_pdf_bytes(*lines: str) -> bytes:
     doc = fitz.open()
     page = doc.new_page()
