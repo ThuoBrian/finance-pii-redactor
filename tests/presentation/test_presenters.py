@@ -20,6 +20,7 @@ from finance_redactor.domain.pseudonyms import Assignment
 from finance_redactor.presentation.presenters import (
     CHANGED_MARKER,
     HIGHLIGHT_HEX,
+    apply_notice,
     crosswalk_dataframe,
     detection_editor_dataframe,
     excel_findings_dataframe,
@@ -35,8 +36,11 @@ from finance_redactor.presentation.presenters import (
     plural,
     preview_hidden_count,
     preview_styler,
+    review_status,
     review_summary,
+    review_tab_labels,
     scan_result_findings,
+    search_editor_rows,
 )
 
 
@@ -539,3 +543,99 @@ def test_reticking_a_shown_row_removes_it_from_the_pending_set() -> None:
     merged = merge_pending(frozenset({"across"}), shown, shown)  # all ticked again
 
     assert merged == frozenset()
+
+
+def test_review_comes_first_and_counts_the_model_guesses() -> None:
+    findings = _mixed_findings()  # 4 model guesses among 7 terms
+
+    assert review_tab_labels(findings) == [
+        "Review (4 to check)",
+        "Mapping",
+        "Occurrences",
+    ]
+    assert review_tab_labels(findings, preview=True)[1] == "Preview"
+
+
+def test_review_tab_label_has_no_count_when_nothing_is_a_guess() -> None:
+    assert review_tab_labels([_finding("Care Organisation")])[0] == "Review"
+    assert review_tab_labels([])[0] == "Review"
+
+
+def test_review_tab_label_does_not_depend_on_the_ticks() -> None:
+    """Streamlit keys tabs by label; a label that moved would jump tabs."""
+    findings = _mixed_findings()
+
+    assert review_tab_labels(findings) == review_tab_labels(list(findings))
+
+
+def test_review_status_says_what_is_left_to_do() -> None:
+    table = detection_editor_dataframe(_mixed_findings())
+
+    assert review_status(table, frozenset(), frozenset()) == "4 model guesses to check"
+    assert review_status(
+        table, frozenset({"across"}), frozenset({"across", "salaries", "mary test"})
+    ) == ("4 model guesses to check · 1 term left visible · 2 changes not applied yet")
+
+
+def test_review_status_for_a_clean_run() -> None:
+    table = detection_editor_dataframe([_finding("Care Organisation")])
+
+    assert review_status(table, frozenset(), frozenset()) == (
+        "Every detected term will be hidden."
+    )
+
+
+def test_search_is_case_insensitive_and_blank_shows_everything() -> None:
+    table = detection_editor_dataframe(_mixed_findings())
+
+    assert len(search_editor_rows(table, "")) == 7
+    assert len(search_editor_rows(table, None)) == 7
+    assert list(search_editor_rows(table, "JANE")["Detected text"]) == [
+        "Jane Doe",
+        "jane@example.org",
+    ]
+
+
+def test_search_combines_with_the_source_filter() -> None:
+    table = detection_editor_dataframe(_mixed_findings())
+
+    shown = search_editor_rows(filter_editor_rows(table, "Model guesses"), "jane")
+
+    assert list(shown["Detected text"]) == ["Jane Doe"]
+
+
+def test_apply_notice_says_what_was_left_visible() -> None:
+    assert (
+        apply_notice(frozenset()) == "Rebuilt the file. Every detected term is hidden."
+    )
+    assert apply_notice(frozenset({"across"})) == (
+        "Rebuilt the file. 1 term is left visible; they are listed above the download."
+    )
+
+
+def test_findings_from_before_a_module_reload_still_sort_and_hint() -> None:
+    """Streamlit re-imports changed modules, so a finding kept in session state
+    can hold a member of an older copy of ``DetectionSource``. It is equal in
+    value but not the same object; the review table must not crash on it.
+    """
+    from enum import Enum
+
+    reloaded = Enum(  # type: ignore[misc]
+        "DetectionSource", {m.name: m.value for m in DetectionSource}, type=str
+    )
+    findings = [
+        Finding(
+            page=0,
+            detected_text=text,
+            entity_type="ORGANIZATION",
+            score=0.85,
+            source=reloaded[name],
+        )
+        for text, name in (("Across", "MODEL"), ("Care Organisation", "MASTER_LIST"))
+    ]
+
+    table = detection_editor_dataframe(findings)
+
+    assert list(table["Detected text"]) == ["Across", "Care Organisation"]
+    assert table.loc[0, "Hint"] == "ordinary word"
+    assert review_tab_labels(findings)[0] == "Review (1 to check)"

@@ -473,9 +473,13 @@ def detection_editor_dataframe(
 
     def tier_and_hint(finding: Finding) -> tuple[int, str]:
         hint = review_hint(finding.detected_text, finding.entity_type, finding.source)
-        if finding.source is DetectionSource.MODEL:
+        # ``==``, not ``is``: Streamlit re-imports changed modules on a rerun,
+        # so findings kept in session state can hold members of an older copy
+        # of the enum. Those compare and hash equal but are not the same
+        # object. An unknown source sorts with the guesses, the safe end.
+        if finding.source == DetectionSource.MODEL:
             return (_MODEL_WITH_HINT if hint else _MODEL_PLAIN), hint
-        return _SOURCE_TIER[finding.source], hint
+        return _SOURCE_TIER.get(finding.source, _MODEL_PLAIN), hint
 
     ranked = sorted(
         (
@@ -516,6 +520,66 @@ def filter_editor_rows(table: pd.DataFrame, choice: str | None) -> pd.DataFrame:
     if source is None:
         return table
     return table[table["Source"] == source]
+
+
+def search_editor_rows(table: pd.DataFrame, text: str | None) -> pd.DataFrame:
+    """Rows whose term contains ``text`` (case-insensitive); all rows if blank.
+
+    Display only, like :func:`filter_editor_rows`: hidden rows keep their state.
+    """
+    needle = (text or "").strip().casefold()
+    if not needle:
+        return table
+    terms = table[_TERM_COLUMN].astype(str).str.casefold()
+    return table[terms.str.contains(needle, regex=False)]
+
+
+def model_guess_count(table: pd.DataFrame) -> int:
+    """Return how many terms in the review table are model guesses."""
+    return int((table["Source"] == DetectionSource.MODEL.value).sum())
+
+
+def review_tab_labels(
+    findings: Sequence[Finding], *, preview: bool = False
+) -> list[str]:
+    """Return the review step's tab labels, with the review tab first.
+
+    The count comes from the findings, not from the tick boxes, so the label
+    stays put while the reviewer works: Streamlit keys tabs by label, and a
+    label that changed on every tick would throw the reviewer back to the
+    first tab.
+    """
+    n = model_guess_count(detection_editor_dataframe(findings)) if findings else 0
+    review = f"Review ({n} to check)" if n else "Review"
+    return [review, *(["Preview"] if preview else []), "Mapping", "Occurrences"]
+
+
+def review_status(
+    table: pd.DataFrame, applied: frozenset[str], pending: frozenset[str]
+) -> str:
+    """One line on where the review stands: to check, left visible, not applied."""
+    parts = []
+    n_model = model_guess_count(table)
+    if n_model:
+        parts.append(f"{plural(n_model, 'model guess', 'model guesses')} to check")
+    if applied:
+        parts.append(f"{plural(len(applied), 'term')} left visible")
+    n_changes = len(pending ^ applied)
+    if n_changes:
+        parts.append(f"{plural(n_changes, 'change')} not applied yet")
+    return " · ".join(parts) if parts else "Every detected term will be hidden."
+
+
+def apply_notice(left_visible: frozenset[str]) -> str:
+    """Return the confirmation shown once after Apply rebuilds the file."""
+    if not left_visible:
+        return "Rebuilt the file. Every detected term is hidden."
+    n = len(left_visible)
+    verb = "is" if n == 1 else "are"
+    return (
+        f"Rebuilt the file. {plural(n, 'term')} {verb} left visible; "
+        "they are listed above the download."
+    )
 
 
 def review_summary(table: pd.DataFrame) -> str:

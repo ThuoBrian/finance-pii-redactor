@@ -29,6 +29,7 @@ from finance_redactor.presentation.presenters import (
     entity_label,
     findings_dataframe,
     plural,
+    review_tab_labels,
 )
 from finance_redactor.presentation.session import (
     output_stem,
@@ -182,17 +183,21 @@ def run_docx_flow(
                 "copy below, which has them removed."
             )
 
-        tab_mapping, tab_details = st.tabs(["Mapping", "Details"])
+        review_findings = st.session_state.get("docx_all_findings", [])
+        tab_review, tab_mapping, tab_occurrences = st.tabs(
+            review_tab_labels(review_findings)
+        )
         with tab_mapping:
             render_crosswalk_section(
                 st.session_state.docx_crosswalk, base_name, key_prefix="docx"
             )
-        with tab_details:
+        with tab_review:
             excluded = render_deselect_editor(
-                st.session_state.get("docx_all_findings", []),
+                review_findings,
                 key_prefix="docx",
                 excluded=st.session_state.get("docx_excluded_applied", frozenset()),
             )
+        with tab_occurrences:
             st.markdown(f"**All detections ({plural(n_entities, 'finding')})**")
             st.dataframe(
                 findings_dataframe(docx_findings, "Paragraph"),

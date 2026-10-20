@@ -35,6 +35,7 @@ from finance_redactor.presentation.presenters import (
     plural,
     preview_hidden_count,
     preview_styler,
+    review_tab_labels,
     scan_result_findings,
 )
 from finance_redactor.presentation.session import (
@@ -201,8 +202,9 @@ def run_excel_flow(
         found_col.metric("PII instances found", f"{n_entities:,}")
         cells_col.metric("Cells affected", f"{n_cells:,}")
 
-        tab_preview, tab_mapping, tab_details = st.tabs(
-            ["Preview", "Mapping", "Details"]
+        review_findings = scan_result_findings(scan_result)
+        tab_review, tab_preview, tab_mapping, tab_occurrences = st.tabs(
+            review_tab_labels(review_findings, preview=True)
         )
         with tab_preview:
             st.caption(
@@ -237,18 +239,19 @@ def run_excel_flow(
                 st.caption(
                     f"Showing the first {plural(PREVIEW_MAX_ROWS, 'row')} of "
                     f"{len(df):,}. Highlighted cells below that: {n_hidden:,} "
-                    "(listed under Details). The download has every row."
+                    "(listed under Occurrences). The download has every row."
                 )
         with tab_mapping:
             render_crosswalk_section(
                 crosswalk, base_name, key_prefix="excel", download_separately=False
             )
-        with tab_details:
+        with tab_review:
             excluded = render_deselect_editor(
-                scan_result_findings(scan_result),
+                review_findings,
                 key_prefix="excel",
                 excluded=st.session_state.get("excel_excluded_applied", frozenset()),
             )
+        with tab_occurrences:
             st.markdown(f"**All detections ({plural(n_entities, 'finding')})**")
             if n_entities == 0:
                 st.write("No PII detected.")
