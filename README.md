@@ -146,7 +146,8 @@ is always safe.
    there's something specific you want covered that it wouldn't know about,
    like a codename or a case number, type it into **Additional words/phrases** in the options step.
 3. Look over **Check what was detected** (Review step, **Details** tab) and untick anything that isn't
-   really a name. Ordinary words sometimes get caught, usually because
+   really a name. The likeliest mistakes are listed first, and the **Show**
+   filter and bulk buttons clear whole groups at once. Ordinary words sometimes get caught, usually because
    someone added one to the master list as a payee. The **Source** column
    says why it matched. Tick or untick as many rows as you like, then click
    **Apply changes** to rebuild the file without them - everything else

@@ -49,6 +49,17 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **The false-positive review table is quicker to get through.** Terms the
+  model guessed come first, lowest confidence leading, with your curated
+  master-list names last, so the likeliest mistakes are at the top. The table
+  gains **Confidence** and **Hint** columns (the hint says "ordinary word",
+  "ALL-CAPS" or "one-word organization" for model guesses; a blank hint does
+  not mean the term is right). A summary line says what is in the list, a
+  **Show** filter narrows it by source, and three bulk buttons ("Untick all
+  shown", "Tick all shown", "Untick N ordinary words") each state how many rows
+  they will touch. **Apply changes** also appears above the table. Nothing is
+  ever unticked automatically, filtering only changes what is shown (hidden
+  rows keep their state), and nothing is remembered between documents.
 - **"Apply changes" in the detection review lights up when there is
   something to apply.** It is a greyed-out button until you untick or re-tick
   a row, then turns solid red and shows how many changes are pending.
