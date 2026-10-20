@@ -37,8 +37,8 @@ from finance_redactor.presentation.presenters import (
     scan_result_findings,
 )
 from finance_redactor.presentation.session import (
+    output_stem,
     reset_on_new_upload,
-    sanitize_base_name,
 )
 from finance_redactor.presentation.steps import show_step
 
@@ -190,7 +190,7 @@ def run_excel_flow(
     crosswalk = st.session_state.crosswalk
     n_cells = scan_result.cell_count
     n_entities = scan_result.entity_count
-    base_name = sanitize_base_name(uploaded.name)
+    base_name = output_stem()
 
     show_step(steps, 3)
     with st.container(border=True):
@@ -307,7 +307,7 @@ def run_excel_flow(
         st.download_button(
             label="Download pseudonymized Excel file",
             data=st.session_state.excel_bytes,
-            file_name=f"{base_name}_pseudonymized.xlsx",
+            file_name=f"{base_name}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             type="primary",
             width="stretch",

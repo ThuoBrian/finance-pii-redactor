@@ -270,7 +270,14 @@ class PyMuPdfDocument:
         return removed
 
     def to_bytes(self) -> bytes:
-        """Render the redacted document to bytes."""
+        """Render the redacted document to bytes, without the original's metadata.
+
+        The Info dictionary (author, title, subject, keywords, creator,
+        producer, dates) and the XMP packet are removed first: they can name
+        the author or the document and survive text redaction untouched.
+        """
+        self._doc.set_metadata({})
+        self._doc.del_xml_metadata()
         output = BytesIO()
         self._doc.save(output, garbage=3, deflate=True)
         return output.getvalue()

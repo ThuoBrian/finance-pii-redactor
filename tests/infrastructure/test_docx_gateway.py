@@ -242,3 +242,45 @@ def test_document_without_links_reports_zero():
         _build_docx(lambda d: d.add_paragraph("No links here."))
     )
     assert gateway.remove_external_links() == 0
+
+
+def test_to_bytes_strips_document_properties_and_author_parts():
+    """Core properties are blanked and app props/thumbnail parts dropped; text stays."""
+
+    def build(document):
+        document.add_paragraph("Paid to Jane Doe")
+        core = document.core_properties
+        core.author = "Pat Example"
+        core.last_modified_by = "Sam Example"
+        core.title = "Payroll Review"
+        core.comments = "internal note"
+        core.keywords = "k1"
+
+    source = _build_docx(build)
+    assert b"Pat Example" in _all_zip_text(source)  # the fixture really carries it
+    gateway = PythonDocxDocument.open(source)
+    out = gateway.to_bytes()
+    gateway.close()
+
+    reopened = Document(BytesIO(out))
+    core = reopened.core_properties
+    assert core.author == ""
+    assert core.last_modified_by == ""
+    assert core.title == ""
+    assert core.comments == ""
+    assert core.keywords == ""
+    assert core.created.year == 1970
+    rel_types = {
+        rel.reltype.rsplit("/", 1)[-1] for rel in reopened.part.package.rels.values()
+    }
+    assert not rel_types & {"extended-properties", "custom-properties", "thumbnail"}
+    assert any(p.text == "Paid to Jane Doe" for p in reopened.paragraphs)
+    for leaked in (b"Pat Example", b"Sam Example", b"Payroll Review", b"internal note"):
+        assert leaked not in _all_zip_text(out)
+
+
+def _all_zip_text(data: bytes) -> bytes:
+    import zipfile
+
+    with zipfile.ZipFile(BytesIO(data)) as archive:
+        return b"".join(archive.read(name) for name in archive.namelist())
