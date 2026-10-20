@@ -29,11 +29,13 @@ This file records known errors, edge cases, and their solutions when developing 
   - [Can't type an accented name (`José`, `Muñoz`, `André`) into the "words to redact" box](#cant-type-an-accented-name-josé-muñoz-andré-into-the-words-to-redact-box)
   - [ALL-CAPS names and acronym false positives](#all-caps-names-and-acronym-false-positives)
   - [PDF text is not replaced, or a typed word/phrase isn't found](#pdf-text-is-not-replaced-or-a-typed-wordphrase-isnt-found)
+  - [A short word is redacted inside longer words in a PDF](#a-short-word-is-redacted-inside-longer-words-in-a-pdf)
   - [Redacting a name in a PDF also blacks out/deletes part of the line above it](#redacting-a-name-in-a-pdf-also-blacks-outdeletes-part-of-the-line-above-it)
   - [A name inside a Word text box, SmartArt, or embedded object is not detected](#a-name-inside-a-word-text-box-smartart-or-embedded-object-is-not-detected)
   - [Why doesn't the tool touch dates/times?](#why-doesnt-the-tool-touch-datestimes)
   - [A town or country name is not redacted](#a-town-or-country-name-is-not-redacted)
   - [A link no longer works in the redacted file](#a-link-no-longer-works-in-the-redacted-file)
+  - [What Excel formatting is kept, and what is not](#what-excel-formatting-is-kept-and-what-is-not)
 - [Testing and linting](#testing-and-linting)
   - [`ruff` flags `E402` for the Streamlit context guard import](#ruff-flags-e402-for-the-streamlit-context-guard-import)
   - [`codespell` flags HTML variable names like `thead` or `ws`](#codespell-flags-html-variable-names-like-thead-or-ws)
@@ -224,6 +226,13 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Cause 3:** PyMuPDF extracts text with artifacts that break exact matching — typographic ligatures (`ﬁ` instead of `fi`), line-break hyphenation (`Acme Sup-\nplies`), and irregular whitespace. Whatever is doing the matching (PDF's `find_custom_words`, or Word/Excel's master-list recognizer and spaCy) sees a different string than the one being searched for.
 - **Solution 3:** The PDF flow normalizes extracted text before matching: ligatures are expanded, soft line-break hyphens are removed, and whitespace is collapsed - this applies to a typed custom word/phrase exactly the same way it applies to a detected name. Match spans are mapped back to the original extracted text, and `page.search_for()` tries a small set of fallback variants (whitespace-collapsed, punctuation-stripped, `&`/`and` swapped, common suffix stripped) when the exact text is not found. The occurrence is still reported in the detection details and crosswalk even if it cannot be written.
 
+### A short word is redacted inside longer words in a PDF
+
+- **Symptom (fixed):** Redacting `IPA` in a PDF also blacked out the letters inside `principal`, `participant` or `municipal`.
+- **Cause:** Detection was already whole-word. The PDF step then located each detected string with `page.search_for()`, a plain substring search that returns every occurrence on the page, including ones inside longer words. Excel and Word redact by the detection's own position, so they were never affected.
+- **Solution:** `_drop_embedded_hits` (`finance_redactor/infrastructure/documents/pdf_gateway.py`) lines each search hit up with the same-numbered occurrence in the page text and drops hits that sit against a word character. Punctuation does not count as a word character, so `(IPA)`, `IPA's` and `IPA-funded` are still redacted.
+- **Deliberate limit:** if the number of hits differs from the number of occurrences in the page text (a match that wraps a line, an unusual layout), nothing is dropped. A stray extra redaction in such a layout is accepted over leaving a name visible. If it affects a specific document, tell the maintainer.
+
 ### Redacting a name in a PDF also blacks out/deletes part of the line above it
 
 - **Symptom (fixed):** In a tightly single-spaced PDF, blacking out (or pseudonymizing) a name also covers, and can even delete, part of an unrelated line directly above it.
@@ -255,6 +264,16 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Cause:** Deliberate. A link's destination can name a person (`mailto:jane.doe@example.org` behind "click here") or a private file path, and nothing on the page shows it. So every link that leaves the document is removed: web and email links, file launches, and links into other PDFs. Links to another page of the same PDF stay. The visible text stays and goes through detection like any other text. The download section says how many were removed.
 - **Word detail:** python-docx does not include hyperlinked runs in `paragraph.runs`, so before this change the visible text of a Word hyperlink was never scanned at all. `docx_gateway.py` now unwraps hyperlinks (and `HYPERLINK` field codes) when the file is opened, before any text is read.
 - **Not covered:** other PDF annotations, bookmarks and metadata, and Word document properties. These are still open.
+
+### What Excel formatting is kept, and what is not
+
+- **Kept:** column widths and hidden columns, row heights and hidden rows, each cell's font, fill, border, alignment and number format, merged cells, frozen panes, tab colour, zoom, gridlines and the filter range (`finance_redactor/infrastructure/documents/excel_formatting.py`).
+- **Not carried over:** formulas (the value is kept), comments, images and charts, data validation and conditional-formatting rules, defined names, print headers/footers and hyperlinks. The Download step says how many formulas, comments, images or charts and rules were left behind.
+- **Why:** deliberate. The redacted workbook is rebuilt from cell values so that nothing from the source but cell text can reach it. A comment can hold a name and its author, a formula can contain a literal name and points at cells whose contents were just replaced, and a validation list or format rule can hold readable text. Formatting is copied through an allow-list, so anything not on it is dropped by default.
+- **Changed cells are yellow** and replace the source fill on those cells, so reviewers can find what was touched.
+- **A number format shows as General:** a custom format with readable text in it (more than 4 characters in quotes, or several escaped letters) is not copied, because the text could be a name.
+- **"The formatting could not be read":** the workbook loaded for scanning but openpyxl could not read its styles. The download is plain, with values only. Open it in Excel and save a fresh copy, then upload that.
+- **Not fixed by this:** a sheet with a title row above the table still shows `Unnamed: N` in the column picker, and IDs like `0041` still come out as `41`. Both come from how the sheet is first read.
 
 ## Testing and linting
 

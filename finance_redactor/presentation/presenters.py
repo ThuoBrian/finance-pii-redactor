@@ -8,14 +8,16 @@ Collected here, they are the presentation layer's single rendering vocabulary.
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import pandas as pd
 from pandas.io.formats.style import Styler
 
+from finance_redactor.application.ports import SheetFormatting
 from finance_redactor.application.results import WorkbookScanResult
-from finance_redactor.domain.entities import Finding
+from finance_redactor.domain.entities import DetectionSource, Finding
 from finance_redactor.domain.pseudonyms import Assignment, normalize
+from finance_redactor.domain.review_hints import ORDINARY_WORD, review_hint
 
 _EXCEL_COLUMNS = [
     "Sheet",
@@ -414,8 +416,27 @@ _EDITOR_COLUMNS = [
     _TERM_COLUMN,
     "Entity type",
     "Source",
+    "Confidence",
+    "Hint",
     "Occurrences",
 ]
+
+# Review order: the guesses most likely to be wrong first, curated names last.
+_MODEL_WITH_HINT, _MODEL_PLAIN, _TYPED, _PATTERN, _CURATED = range(5)
+_SOURCE_TIER = {
+    DetectionSource.CUSTOM: _TYPED,
+    DetectionSource.PATTERN: _PATTERN,
+    DetectionSource.MASTER_LIST: _CURATED,
+}
+
+# Filter choices for the review table: label -> the Source values it shows.
+ALL_SOURCES = "All"
+SOURCE_FILTERS = {
+    "Model guesses": DetectionSource.MODEL.value,
+    "Typed words": DetectionSource.CUSTOM.value,
+    "Pattern matches": DetectionSource.PATTERN.value,
+    "Master list": DetectionSource.MASTER_LIST.value,
+}
 
 
 def detection_editor_dataframe(
@@ -438,27 +459,104 @@ def detection_editor_dataframe(
     compared in the redaction services, so a term ticked off here matches every
     casing and spacing of itself in the document.
     """
-    # Insertion-ordered, so rows read in order of first appearance. Counts are
-    # kept in their own dict rather than mutated inside the row dicts, which
-    # keeps both dicts singly typed.
+    # Insertion-ordered, so ties read in order of first appearance. Counts and
+    # scores are kept in their own dicts rather than mutated inside the row
+    # dicts, which keeps every dict singly typed.
     first_seen: dict[str, Finding] = {}
     counts: Counter[str] = Counter()
+    best_score: dict[str, float] = {}
     for finding in findings:
         key = normalize(finding.detected_text)
         first_seen.setdefault(key, finding)
         counts[key] += 1
+        best_score[key] = max(best_score.get(key, 0.0), finding.score)
 
+    def tier_and_hint(finding: Finding) -> tuple[int, str]:
+        hint = review_hint(finding.detected_text, finding.entity_type, finding.source)
+        if finding.source is DetectionSource.MODEL:
+            return (_MODEL_WITH_HINT if hint else _MODEL_PLAIN), hint
+        return _SOURCE_TIER[finding.source], hint
+
+    ranked = sorted(
+        (
+            (tier_and_hint(finding), best_score[key], position, key, finding)
+            for position, (key, finding) in enumerate(first_seen.items())
+        ),
+        # Lowest confidence first among plain model guesses; otherwise by
+        # first appearance.
+        key=lambda r: (r[0][0], r[1] if r[0][0] == _MODEL_PLAIN else 0.0, r[2]),
+    )
     rows = [
         {
             REDACT_COLUMN: key not in excluded,
             _TERM_COLUMN: finding.detected_text,
             "Entity type": finding.entity_type,
             "Source": finding.source.value,
+            "Confidence": round(score, 2),
+            "Hint": hint,
             "Occurrences": counts[key],
         }
-        for key, finding in first_seen.items()
+        for (_, hint), score, _, key, finding in ranked
     ]
     return pd.DataFrame(rows, columns=_EDITOR_COLUMNS)
+
+
+def term_key(term: object) -> str:
+    """Return the normalized form a row is compared by (matches ``exclude``)."""
+    return normalize(str(term))
+
+
+def filter_editor_rows(table: pd.DataFrame, choice: str | None) -> pd.DataFrame:
+    """Rows of the review table to show for a filter choice (display only).
+
+    ``None`` or :data:`ALL_SOURCES` shows everything. Filtering never changes
+    what is redacted: hidden rows keep their tick state.
+    """
+    source = SOURCE_FILTERS.get(choice or ALL_SOURCES)
+    if source is None:
+        return table
+    return table[table["Source"] == source]
+
+
+def review_summary(table: pd.DataFrame) -> str:
+    """One line saying what is in the table, so the reviewer knows the size of the job."""
+    n = len(table)
+    by_source = Counter(table["Source"])
+    hinted = int((table["Hint"] != "").sum())
+    parts = []
+    model = by_source[DetectionSource.MODEL.value]
+    if model:
+        guess = plural(model, "model guess", "model guesses")
+        parts.append(f"{guess} ({hinted} worth a closer look)" if hinted else guess)
+    for label, source in (
+        ("typed word", DetectionSource.CUSTOM.value),
+        ("pattern match", DetectionSource.PATTERN.value),
+        ("master-list name", DetectionSource.MASTER_LIST.value),
+    ):
+        count = by_source[source]
+        if count:
+            parts.append(
+                plural(count, label, label + "es" if label.endswith("h") else None)
+            )
+    return f"{plural(n, 'term')}: " + ", ".join(parts) + "."
+
+
+def ordinary_word_terms(table: pd.DataFrame) -> frozenset[str]:
+    """Return the normalized terms the hint calls plain English words."""
+    rows = table[table["Hint"] == ORDINARY_WORD]
+    return frozenset(term_key(t) for t in rows[_TERM_COLUMN])
+
+
+def merge_pending(
+    pending: frozenset[str], shown: pd.DataFrame, edited: pd.DataFrame
+) -> frozenset[str]:
+    """Combine the unticked terms of the visible rows with those of hidden ones.
+
+    A filter hides rows without touching them, so a hidden row that was
+    unticked stays unticked and a hidden row that was ticked stays ticked.
+    """
+    shown_keys = frozenset(term_key(t) for t in shown[_TERM_COLUMN])
+    return (pending - shown_keys) | excluded_terms(edited)
 
 
 def excluded_terms(edited: pd.DataFrame) -> frozenset[str]:
@@ -474,3 +572,27 @@ def excluded_terms(edited: pd.DataFrame) -> frozenset[str]:
         return frozenset()
     unticked = edited.loc[~edited[REDACT_COLUMN].fillna(True).astype(bool)]
     return frozenset(normalize(str(term)) for term in unticked[_TERM_COLUMN])
+
+
+def formatting_note(formats: Mapping[str, SheetFormatting], n_tabs: int) -> str:
+    """Say what the redacted workbook does not carry over from the source.
+
+    Empty ``formats`` for a workbook that has tabs means the formatting could
+    not be read at all, so every sheet comes out plain.
+    """
+    if n_tabs and not formats:
+        return (
+            "The formatting of this workbook could not be read, so the "
+            "download is plain: values only, no fonts, colours or widths."
+        )
+    totals: Counter[str] = Counter()
+    for sheet in formats.values():
+        totals.update(sheet.dropped)
+    if not totals:
+        return ""
+    parts = [
+        f"{kind}: {count:,}"
+        + (" (their values are kept)" if kind == "formulas" else "")
+        for kind, count in totals.items()
+    ]
+    return "Not carried over from the original: " + ", ".join(parts) + "."

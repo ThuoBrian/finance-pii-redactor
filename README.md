@@ -146,15 +146,23 @@ is always safe.
    there's something specific you want covered that it wouldn't know about,
    like a codename or a case number, type it into **Additional words/phrases** in the options step.
 3. Look over **Check what was detected** (Review step, **Details** tab) and untick anything that isn't
-   really a name. Ordinary words sometimes get caught, usually because
+   really a name. The likeliest mistakes are listed first, and the **Show**
+   filter and bulk buttons clear whole groups at once. Ordinary words sometimes get caught, usually because
    someone added one to the master list as a payee. The **Source** column
    says why it matched. Tick or untick as many rows as you like, then click
    **Apply changes** to rebuild the file without them - everything else
    stays redacted.
-4. Download the redacted copy.
+4. Download the redacted copy. It is named `redacted-` plus the date and
+   time, never after your original file, and its document properties (author,
+   title and the like) are cleared.
 
 In Excel, every cell the tool changed is highlighted in yellow, so you can
 see at a glance what was touched.
+
+The Excel copy keeps your formatting (column widths, fonts, colours, number
+formats, merged cells, frozen rows). Formulas become their values, and
+comments, charts, images and validation rules are not carried over; the
+download step tells you how many were left behind.
 
 Alongside the redacted file you get a **mapping**: what each code or label
 stands for.

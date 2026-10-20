@@ -81,6 +81,13 @@ what happened instead — then file it.
   cells are yellow and start with `»`. It stops at 500 rows and says how many
   highlighted cells it hid.
 - [ ] Downloaded file has a last **Crosswalk** sheet mapping names to IDs.
+- [ ] Build a made-up formatted workbook (bold coloured header, a title row
+  with merged cells, a currency column, a date column, a frozen header row,
+  wide first column). The download looks the same in Excel, apart from yellow
+  cells where a name was replaced.
+- [ ] Add a comment, a formula and a dropdown list to that workbook. None of
+  them is in the download, the formula cell shows its value, and the Download
+  step says how many were left behind.
 - [ ] A workbook with several tabs: every tab is offered under **Tabs to scan**
   (hidden ones too), the download keeps each tab in order, and the same name
   gets the same ID on every tab.
@@ -88,6 +95,15 @@ what happened instead — then file it.
   A tab you untick is **not** in the download.
 - [ ] Editing the master list workbook, saving, and clicking **🔄 Refresh
   master list** picks up the change without restarting the app.
+
+### File names and properties (all formats)
+
+- [ ] Upload a file whose name is a made-up person's name. The download is
+  called `redacted-<date>-<time>`, nothing from the original name, and the
+  mapping CSV (PDF, Word) has the same stem.
+- [ ] Set an author and title on your test PDF and Word file first. In the
+  download, right-click > Properties (or File > Info in Word) shows both
+  blank.
 
 ### PDF
 
@@ -163,6 +179,15 @@ what happened instead — then file it.
   un-redacted.
 - [ ] Re-tick it and click **Apply changes** again. The file goes back to
   fully redacted.
+- [ ] With a mix of terms (a few ordinary words, an ALL-CAPS heading, a
+  curated name), the likeliest false positives are at the top and the curated
+  name is last. The summary line above the table matches what you see.
+- [ ] **Show** narrows the table to one source. Untick a row, switch the
+  filter so it is hidden, switch back: it is still unticked, and the pending
+  count never changed.
+- [ ] **Untick all shown** and **Untick N ordinary words** state their counts,
+  change nothing until clicked, and **Apply changes** still has to be clicked.
+  A curated master-list name is never swept up by the ordinary-word button.
 - [ ] Try the same in all three formats. All three rebuild from the already-
   cached scan (no re-run of spaCy), so none should pause noticeably longer
   than another - the old "Word re-runs the language model" pause no longer

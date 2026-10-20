@@ -31,14 +31,15 @@ from finance_redactor.presentation.presenters import (
     crosswalk_dataframe,
     entity_label,
     excel_findings_dataframe,
+    formatting_note,
     plural,
     preview_hidden_count,
     preview_styler,
     scan_result_findings,
 )
 from finance_redactor.presentation.session import (
+    output_stem,
     reset_on_new_upload,
-    sanitize_base_name,
 )
 from finance_redactor.presentation.steps import show_step
 
@@ -76,6 +77,7 @@ def run_excel_flow(
     if is_new:
         try:
             st.session_state.sheets = excel_gateway.read_sheets(uploaded)
+            st.session_state.formats = excel_gateway.read_formatting(uploaded)
         except UnreadableFileError:
             st.error(
                 "This file could not be read as an Excel workbook. It may be "
@@ -190,7 +192,7 @@ def run_excel_flow(
     crosswalk = st.session_state.crosswalk
     n_cells = scan_result.cell_count
     n_entities = scan_result.entity_count
-    base_name = sanitize_base_name(uploaded.name)
+    base_name = output_stem()
 
     show_step(steps, 3)
     with st.container(border=True):
@@ -300,18 +302,23 @@ def run_excel_flow(
         # the workbook each time is wasted work. Cleared wherever redacted_df
         # or crosswalk change (the scan and the exclusion re-apply above).
         if st.session_state.get("excel_bytes") is None:
+            formats = st.session_state.get("formats", {})
             st.session_state.excel_bytes = excel_gateway.write(
                 [(s.name, s.data, s.highlighted) for s in redacted_sheets],
                 crosswalk_dataframe(crosswalk),
+                [formats.get(name) for name in scan_sheets],
             )
         st.download_button(
             label="Download pseudonymized Excel file",
             data=st.session_state.excel_bytes,
-            file_name=f"{base_name}_pseudonymized.xlsx",
+            file_name=f"{base_name}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             type="primary",
             width="stretch",
         )
+        note = formatting_note(st.session_state.get("formats", {}), len(sheets))
+        if note:
+            st.caption(note)
         st.caption(
             "Yellow-highlighted cells indicate where a name was replaced with "
             'its pseudonym; the workbook\'s last sheet, "Crosswalk", lists '

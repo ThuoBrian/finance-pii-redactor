@@ -58,6 +58,29 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **The redacted Excel workbook keeps the original's formatting.** Column
+  widths and row heights, fonts, fills, borders, alignment, number formats
+  (currency, dates), merged cells, freeze panes, tab colour, zoom, gridlines
+  and the filter range now carry over. The output is still rebuilt from cell
+  values, so nothing but cell text can come through: formatting is copied
+  through an allow-list and anything not on it is dropped. Formulas stay as
+  their values; comments, images and charts, data validation and
+  conditional-formatting rules are not carried over, and the Download step
+  says how many of each were left behind. A custom number format that holds
+  readable text (such as `"Paid to ..." @`) falls back to General. Changed
+  cells are still yellow, replacing the source fill. A blank header cell is no
+  longer written as "Unnamed: N".
+- **The false-positive review table is quicker to get through.** Terms the
+  model guessed come first, lowest confidence leading, with your curated
+  master-list names last, so the likeliest mistakes are at the top. The table
+  gains **Confidence** and **Hint** columns (the hint says "ordinary word",
+  "ALL-CAPS" or "one-word organization" for model guesses; a blank hint does
+  not mean the term is right). A summary line says what is in the list, a
+  **Show** filter narrows it by source, and three bulk buttons ("Untick all
+  shown", "Tick all shown", "Untick N ordinary words") each state how many rows
+  they will touch. **Apply changes** also appears above the table. Nothing is
+  ever unticked automatically, filtering only changes what is shown (hidden
+  rows keep their state), and nothing is remembered between documents.
 - **"Apply changes" in the detection review lights up when there is
   something to apply.** It is a greyed-out button until you untick or re-tick
   a row, then turns solid red and shows how many changes are pending.
@@ -91,6 +114,14 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **A short word redacted in a PDF no longer blacks out the same letters inside
+  longer words.** Redacting "IPA" also covered the "ipa" in "principal",
+  "participant" and "municipal", because the PDF step located each detection
+  with a plain substring search. Detection was already whole-word (and Excel
+  and Word redact by position), so only the PDF output was affected. Hits that
+  sit inside a longer word are now dropped. If a hit cannot be lined up with
+  the page text (a name wrapped across lines, an unusual layout) it is kept
+  redacted, so the fix never leaves a name showing.
 - **Editing the master list, or choosing a different master-list folder, now
   takes effect on the next rerun.** The cache arguments in `app.py`'s
   `_get_master_list_bundle` started with an underscore, which Streamlit leaves

@@ -24,13 +24,18 @@ from finance_redactor.presentation.presenters import (
     detection_editor_dataframe,
     excel_findings_dataframe,
     excluded_terms,
+    filter_editor_rows,
     findings_dataframe,
+    formatting_note,
+    merge_pending,
+    ordinary_word_terms,
     pdf_mapping_dataframe,
     pdf_mapping_with_names_dataframe,
     pdf_review_dataframe,
     plural,
     preview_hidden_count,
     preview_styler,
+    review_summary,
     scan_result_findings,
 )
 
@@ -315,6 +320,8 @@ def test_empty_inputs_exclude_nothing() -> None:
         "Detected text",
         "Entity type",
         "Source",
+        "Confidence",
+        "Hint",
         "Occurrences",
     ]
 
@@ -410,3 +417,121 @@ def test_the_opt_in_mapping_shows_unresolved_rows_and_the_possible_match() -> No
     assert named.loc[0, "Internal ID"] == "CST-AUTO-3F9A1"
     assert named.loc[0, "Flagged"] == "not in master list"
     assert named.loc[0, "Possible match"] == "Michael Sample (STF-12345, 92% match)"
+class _Fmt:
+    def __init__(self, dropped: dict[str, int]) -> None:
+        self.dropped = dropped
+
+
+def test_formatting_note_totals_what_was_left_behind_across_tabs() -> None:
+    formats = {
+        "Jan": _Fmt({"formulas": 3, "comments": 1}),
+        "Feb": _Fmt({"formulas": 2}),
+    }
+
+    note = formatting_note(formats, 2)
+
+    assert note == (
+        "Not carried over from the original: formulas: 5 (their values are kept), "
+        "comments: 1."
+    )
+
+
+def test_formatting_note_is_empty_when_nothing_was_left_behind() -> None:
+    assert formatting_note({"Jan": _Fmt({})}, 1) == ""
+
+
+def test_formatting_note_says_so_when_formatting_could_not_be_read() -> None:
+    assert "could not be read" in formatting_note({}, 2)
+def _model(text: str, score: float = 0.85, entity: str = "ORGANIZATION") -> Finding:
+    return Finding(
+        page=0,
+        detected_text=text,
+        entity_type=entity,
+        score=score,
+        source=DetectionSource.MODEL,
+    )
+
+
+def _mixed_findings() -> list[Finding]:
+    return [
+        _finding("Care Organisation"),  # master list
+        _model("Jane Doe", 0.6, "PERSON"),  # plain model guess
+        _model("Salaries"),  # one-word organization hint
+        _model("Across"),  # ordinary word hint
+        _finding("jane@example.org", source=DetectionSource.PATTERN),
+        _finding("Project Nightingale", source=DetectionSource.CUSTOM),
+        _model("Mary Test", 0.4, "PERSON"),  # plain model guess, lower score
+    ]
+
+
+def test_editor_puts_the_likely_false_positives_first_and_curated_names_last() -> None:
+    table = detection_editor_dataframe(_mixed_findings())
+
+    assert list(table["Detected text"]) == [
+        "Salaries",
+        "Across",
+        "Mary Test",
+        "Jane Doe",
+        "Project Nightingale",
+        "jane@example.org",
+        "Care Organisation",
+    ]
+
+
+def test_editor_reports_confidence_and_hint_per_term() -> None:
+    table = detection_editor_dataframe(
+        [_model("Across", 0.5), _model("across", 0.8), _finding("Care Organisation")]
+    )
+
+    across = table[table["Detected text"] == "Across"].iloc[0]
+    assert across["Confidence"] == 0.8  # strongest of its occurrences
+    assert across["Hint"] == "ordinary word"
+    assert across["Occurrences"] == 2
+    curated = table[table["Detected text"] == "Care Organisation"].iloc[0]
+    assert curated["Hint"] == ""
+
+
+def test_review_summary_counts_each_kind_and_the_hinted_ones() -> None:
+    summary = review_summary(detection_editor_dataframe(_mixed_findings()))
+
+    assert summary == (
+        "7 terms: 4 model guesses (2 worth a closer look), 1 typed word, "
+        "1 pattern match, 1 master-list name."
+    )
+
+
+def test_filter_shows_one_source_and_all_by_default() -> None:
+    table = detection_editor_dataframe(_mixed_findings())
+
+    assert len(filter_editor_rows(table, None)) == 7
+    assert len(filter_editor_rows(table, "All")) == 7
+    assert set(filter_editor_rows(table, "Model guesses")["Source"]) == {"model"}
+    assert len(filter_editor_rows(table, "Model guesses")) == 4
+
+
+def test_ordinary_word_terms_only_picks_the_plain_english_hint() -> None:
+    table = detection_editor_dataframe(_mixed_findings())
+
+    assert ordinary_word_terms(table) == frozenset({"across"})
+
+
+def test_a_filter_never_changes_a_hidden_rows_tick() -> None:
+    """Hidden rows keep their state: filtering is display only."""
+    table = detection_editor_dataframe(_mixed_findings())
+    shown = filter_editor_rows(table, "Model guesses")
+    edited = shown.copy()
+    edited.loc[edited["Detected text"] == "Across", "Hide in output?"] = False
+    already_unticked_but_hidden = frozenset({"care organisation"})
+
+    merged = merge_pending(already_unticked_but_hidden, shown, edited)
+
+    assert merged == frozenset({"care organisation", "across"})
+
+
+def test_reticking_a_shown_row_removes_it_from_the_pending_set() -> None:
+    table = detection_editor_dataframe(_mixed_findings())
+    shown = filter_editor_rows(table, "Model guesses")
+
+    merged = merge_pending(frozenset({"across"}), shown, shown)  # all ticked again
+
+    assert merged == frozenset()

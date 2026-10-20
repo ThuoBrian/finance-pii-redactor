@@ -73,6 +73,45 @@ def _search_variants(search_text: str) -> list[str]:
     return variants
 
 
+def _drop_embedded_hits(
+    rects: list[fitz.Rect], page_text: str, candidate: str
+) -> list[fitz.Rect]:
+    """Drop search hits that are only a fragment of a longer word.
+
+    ``page.search_for`` is a plain substring search, so redacting "IPA" would
+    also cover the letters inside "principal". Detection is already
+    whole-word; this applies the same rule to the hits. Each hit is lined up
+    with the same-numbered occurrence of ``candidate`` in ``page_text``, and
+    dropped when a word character sits right against a word-character edge of
+    the match. If the two counts differ (the match wraps a line, the layout is
+    unusual) the hits can't be lined up, so every one is kept: a stray extra
+    redaction is better than a name left showing.
+    """
+    word_edges = (
+        candidate[:1].isalnum() or candidate[:1] == "_",
+        (candidate[-1:].isalnum() or candidate[-1:] == "_"),
+    )
+    embedded: list[bool] = []
+    for match in re.finditer(re.escape(candidate), page_text, re.IGNORECASE):
+        before = page_text[match.start() - 1 : match.start()]
+        after = page_text[match.end() : match.end() + 1]
+        embedded.append(
+            (word_edges[0] and _is_word_char(before))
+            or (word_edges[1] and _is_word_char(after))
+        )
+    if len(embedded) != len(rects):
+        return rects
+    return [
+        rect
+        for rect, is_embedded in zip(rects, embedded, strict=True)
+        if not is_embedded
+    ]
+
+
+def _is_word_char(char: str) -> bool:
+    return bool(char) and (char.isalnum() or char == "_")
+
+
 class PyMuPdfDocument:
     """A single open PDF being redacted in place."""
 
@@ -193,6 +232,11 @@ class PyMuPdfDocument:
                     break
             if not rects:
                 continue
+            rects = _drop_embedded_hits(
+                rects, textpage.extractText(), matched_candidate
+            )
+            if not rects:
+                continue
             # A candidate containing a line break (e.g. the dehyphenated raw-text
             # fallback) matches one logical occurrence that PyMuPDF reports as one
             # rect per line it spans. Label only the first rect so the pseudonym
@@ -226,7 +270,14 @@ class PyMuPdfDocument:
         return removed
 
     def to_bytes(self) -> bytes:
-        """Render the redacted document to bytes."""
+        """Render the redacted document to bytes, without the original's metadata.
+
+        The Info dictionary (author, title, subject, keywords, creator,
+        producer, dates) and the XMP packet are removed first: they can name
+        the author or the document and survive text redaction untouched.
+        """
+        self._doc.set_metadata({})
+        self._doc.del_xml_metadata()
         output = BytesIO()
         self._doc.save(output, garbage=3, deflate=True)
         return output.getvalue()

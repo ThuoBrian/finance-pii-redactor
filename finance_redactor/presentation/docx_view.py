@@ -31,8 +31,8 @@ from finance_redactor.presentation.presenters import (
     plural,
 )
 from finance_redactor.presentation.session import (
+    output_stem,
     reset_on_new_upload,
-    sanitize_base_name,
 )
 from finance_redactor.presentation.steps import show_step
 
@@ -162,7 +162,7 @@ def run_docx_flow(
     docx_findings = st.session_state.docx_findings
     n_entities = len(docx_findings)
     removed_links = st.session_state.get("docx_links", 0)
-    base_name = sanitize_base_name(uploaded.name)
+    base_name = output_stem()
 
     show_step(steps, 3)
     with st.container(border=True):
@@ -228,7 +228,7 @@ def run_docx_flow(
         st.download_button(
             label="Download pseudonymized Word document",
             data=st.session_state.docx_buffer,
-            file_name=f"{base_name}_pseudonymized.docx",
+            file_name=f"{base_name}.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             type="primary",
             width="stretch",
