@@ -68,7 +68,9 @@ are cached with `@st.cache_resource`:
 Each flow returns the redacted file plus a mapping back to the originals: a
 Crosswalk sheet inside the Excel output, a separate crosswalk CSV of real
 names for Word, and for PDF a mapping of labels to internal IDs that holds
-no names. The "Which file is safe to share" section of the README gives the data
+no names (plus, only if the user switches it on, a second Confidential CSV
+with names, built by a separate function so the default file can never gain a
+name column). The "Which file is safe to share" section of the README gives the data
 classification for each. The master list is what turns an ID back into a
 name, so it and every real input document stay out of git (`data/*`,
 `*.xlsx`, `*.pdf`, `*.docx`, `*_crosswalk.csv` in `.gitignore`).

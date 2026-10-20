@@ -49,6 +49,19 @@ _PDF_MAPPING_COLUMNS = [
     "Master list",
 ]
 
+# The optional PDF mapping that carries names. A separate frame from the one
+# above, on purpose; see :func:`pdf_mapping_with_names_dataframe`.
+_PDF_MAPPING_WITH_NAMES_COLUMNS = [
+    "Label",
+    "Original name",
+    "Internal ID",
+    "Category",
+    "Entity type",
+    "Flagged",
+    "Possible match",
+    "Master list",
+]
+
 # The PDF on-screen review table. Shows names; never written to a file.
 _PDF_REVIEW_COLUMNS = [
     "Label",
@@ -303,6 +316,10 @@ def pdf_mapping_dataframe(
     against. With no names in the file there is nothing to cross-check a
     stale decode against, so an edited or reused ``Internal ID`` would
     otherwise mis-decode silently.
+
+    A user who needs names in the mapping gets them from
+    :func:`pdf_mapping_with_names_dataframe`, a separate, opt-in, Confidential
+    file. Do not add a name column here.
     """
     rows = [
         {
@@ -318,6 +335,47 @@ def pdf_mapping_dataframe(
         for a in crosswalk
     ]
     return pd.DataFrame(rows, columns=_PDF_MAPPING_COLUMNS)
+
+
+def pdf_mapping_with_names_dataframe(
+    crosswalk: list[Assignment], master_list_fingerprint: str = ""
+) -> pd.DataFrame:
+    """Render the PDF mapping *with* names, for the opt-in Confidential download.
+
+    **This frame holds names, so its file is Confidential** and must never be
+    kept with the redacted PDF; the warning beside its download button says so.
+    It exists for people who need to read a mapping without going to the master
+    list. It is deliberately not a flag on :func:`pdf_mapping_dataframe`: that
+    frame is Internal because it has no name column, and a shared code path
+    with a switch is how a name reaches a download that promised none. The
+    default download is unchanged and the names file is only built when the
+    user turns it on.
+
+    Same rows and order as the names-free mapping, plus ``Original name`` (as it
+    appeared in the document) and the ``Possible match`` hint the review table
+    shows.
+    """
+    rows = [
+        {
+            "Label": a.label,
+            "Original name": a.original_name,
+            "Internal ID": a.internal_id or a.pseudonym,
+            "Category": a.category or "(unknown)",
+            "Entity type": a.entity_type,
+            "Flagged": (
+                _FLAG_AMBIGUOUS if a.ambiguous else _FLAG_NOT_CURATED if a.auto else ""
+            ),
+            "Possible match": (
+                f"{a.suggested_name} ({a.suggested_pseudonym}, "
+                f"{a.suggested_score:.0%} match)"
+                if a.suggested_pseudonym
+                else ""
+            ),
+            "Master list": master_list_fingerprint,
+        }
+        for a in crosswalk
+    ]
+    return pd.DataFrame(rows, columns=_PDF_MAPPING_WITH_NAMES_COLUMNS)
 
 
 def findings_dataframe(findings: list[Finding], page_label: str) -> pd.DataFrame:

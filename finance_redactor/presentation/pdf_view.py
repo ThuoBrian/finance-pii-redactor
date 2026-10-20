@@ -27,6 +27,7 @@ from finance_redactor.config import Settings
 from finance_redactor.domain.errors import EncryptedPdfError, UnreadableFileError
 from finance_redactor.domain.quality import QualityIssue
 from finance_redactor.presentation.crosswalk_view import (
+    PDF_NAMES_TOGGLE_KEY,
     render_pdf_mapping_section,
     render_pdf_mapping_warnings,
 )
@@ -76,6 +77,7 @@ def run_pdf_flow(
             "pdf_findings",
             "pdf_pages",
             "pdf_crosswalk",
+            PDF_NAMES_TOGGLE_KEY,
             "pdf_bracketed",
             "pdf_links",
             "pdf_all_findings",
