@@ -15,6 +15,7 @@ from typing import Protocol, runtime_checkable
 import pandas as pd
 
 from finance_redactor.domain.entities import PiiDetection, Span
+from finance_redactor.domain.ocr import Box, OcrLine
 
 
 @runtime_checkable
@@ -114,12 +115,44 @@ class PdfDocument(Protocol):
         """
         ...
 
+    def render_page(self, page_index: int, dpi: int) -> bytes:
+        """Render one page to a PNG at ``dpi`` (for OCR)."""
+        ...
+
+    def rebuild_scanned_page(
+        self,
+        page_index: int,
+        dpi: int,
+        *,
+        keep: Sequence[Box],
+        names: Sequence[tuple[Box, str]],
+        blackout_names: bool,
+        blackout_other_ink: bool,
+    ) -> None:
+        """Replace a scanned page with a cleaned picture of itself.
+
+        Boxes are in the pixels of the page rendered at ``dpi``. Each name box
+        is cleared and labelled (or blacked out with ``blackout_names``). With
+        ``blackout_other_ink``, every mark outside the ``keep`` boxes
+        (signatures, handwriting, stamps, text OCR was unsure of) is blacked
+        out. Nothing of the original page survives except that picture.
+        """
+        ...
+
     def to_bytes(self) -> bytes:
         """Render the redacted document to bytes."""
         ...
 
     def close(self) -> None:
         """Release underlying resources."""
+        ...
+
+
+class OcrEngine(Protocol):
+    """Reads the printed text in a picture of a page."""
+
+    def read(self, png: bytes) -> list[OcrLine]:
+        """Return the lines read from ``png``, with boxes in its pixels."""
         ...
 
 

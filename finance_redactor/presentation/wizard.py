@@ -31,6 +31,7 @@ _OPTION_KEYS = (
     "pdf_style",
     "pdf_custom_words",
     "pdf_redact_images",
+    "pdf_read_scans",
     "docx_custom_words",
     "docx_threshold",
     "docx_entities",

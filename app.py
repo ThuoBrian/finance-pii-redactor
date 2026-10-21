@@ -70,6 +70,19 @@ def _main() -> None:
         """Load the heavy spaCy model once and reuse it across reruns."""
         return PresidioEngine._create_nlp_engine(settings)
 
+    @st.cache_resource(show_spinner=False)
+    def _get_ocr_engine():
+        """Return the OCR engine for scanned PDF pages, or None if not installed.
+
+        The model itself loads on first use, so this is cheap until a scanned
+        page actually needs reading.
+        """
+        try:
+            from finance_redactor.infrastructure.ocr.rapid_ocr import RapidOcrEngine
+        except ImportError:
+            return None
+        return RapidOcrEngine()
+
     @st.cache_resource(show_spinner="Loading master list...")
     def _get_master_list_bundle(path: str, mtime: float | None):
         """Parse the master list and build its detection engine, cached by path+mtime.
@@ -216,6 +229,7 @@ def _main() -> None:
                 settings.fuzzy_match_threshold,
                 settings.custom_words_score,
                 fixed_masks=settings.fixed_masks,
+                ocr=_get_ocr_engine(),
             ),
             master_list_fingerprint=master_list_fingerprint,
             steps=steps,

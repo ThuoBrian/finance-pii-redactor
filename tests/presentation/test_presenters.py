@@ -647,3 +647,13 @@ def test_scanned_pages_warning_says_what_happens_to_the_pages() -> None:
     assert "fully black" in on
     assert off.startswith("**2 of 3 pages are scans** (page 1, 3)")
     assert "unredacted" in off
+
+
+def test_scanned_pages_warning_for_pages_read_with_ocr() -> None:
+    text = scanned_pages_warning([0, 1], 2, images_blacked_out=True, read=[0])
+
+    read_part, unread_part = text.split("\n\n")
+    assert read_part.startswith("**1 of 2 pages is a scan, read with OCR** (page 1)")
+    assert "signatures, handwriting, stamps" in read_part
+    assert "check that page" in read_part
+    assert unread_part.startswith("**1 of 2 pages is a scan** (page 2)")

@@ -20,7 +20,7 @@ app.py  wires concrete infrastructure into the application services
 | --- | --- | --- | --- |
 | Domain | `finance_redactor/domain/` | Pure logic: entities, pseudonymization, name variants, fuzzy suggestions, overlap rules, PDF text normalization, master-list quality findings | standard library only |
 | Application | `finance_redactor/application/` | One use case per format (`redact_excel.py`, `redact_pdf.py`, `redact_docx.py`), the `Protocol` ports they depend on (`ports.py`), and result DTOs (`results.py`) | domain, pandas |
-| Infrastructure | `finance_redactor/infrastructure/` | Adapters: `detection/` (Presidio, spaCy, pattern matching), `documents/` (openpyxl, PyMuPDF, python-docx), `names/` (master-list workbook reader) | domain, `config`, third-party libraries |
+| Infrastructure | `finance_redactor/infrastructure/` | Adapters: `detection/` (Presidio, spaCy, pattern matching), `documents/` (openpyxl, PyMuPDF, python-docx), `ocr/` (RapidOCR, for scanned PDF pages), `names/` (master-list workbook reader) | domain, `config`, third-party libraries |
 | Presentation | `finance_redactor/presentation/` | Streamlit flows per format, shared widgets, session state, presenters that turn results into UI-ready tables and files | application, domain, `config`, Streamlit, pandas |
 
 `finance_redactor/config.py` holds `Settings`, the single source of tunable

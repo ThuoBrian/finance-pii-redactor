@@ -30,6 +30,7 @@ This file records known errors, edge cases, and their solutions when developing 
   - [ALL-CAPS names and acronym false positives](#all-caps-names-and-acronym-false-positives)
   - [PDF text is not replaced, or a typed word/phrase isn't found](#pdf-text-is-not-replaced-or-a-typed-wordphrase-isnt-found)
   - [A short word is redacted inside longer words in a PDF](#a-short-word-is-redacted-inside-longer-words-in-a-pdf)
+  - [A scanned PDF page comes out as a picture with black boxes](#a-scanned-pdf-page-comes-out-as-a-picture-with-black-boxes)
   - [A blacked-out image or signature could be pulled back out of a PDF](#a-blacked-out-image-or-signature-could-be-pulled-back-out-of-a-pdf)
   - [Redacting a name in a PDF also blacks out/deletes part of the line above it](#redacting-a-name-in-a-pdf-also-blacks-outdeletes-part-of-the-line-above-it)
   - [A name inside a Word text box, SmartArt, or embedded object is not detected](#a-name-inside-a-word-text-box-smartart-or-embedded-object-is-not-detected)
@@ -221,7 +222,7 @@ This file records known errors, edge cases, and their solutions when developing 
 
 - **Symptom:** A word/phrase typed into PDF's "Words/phrases to redact" box (or, for Word, a name/organization) is matched but not replaced, or isn't matched at all even though it's visibly present on the page.
 - **Cause 1:** The PDF page is a scanned image and contains no selectable text layer.
-- **Solution 1:** The tool only processes selectable PDF text. The Review step now says which pages are scans and what happened to them: with **Also black out images** on, a scanned page comes out fully black; with it off, it goes through unredacted. Reading the words inside a scan needs OCR, which is planned.
+- **Solution 1:** Scanned pages are read with OCR (see "A scanned PDF page comes out as a picture with black boxes" below). If **Read the text on scanned pages** is off, or OCR is not installed, the Review step says which pages are scans and what happened to them: fully black with **Also black out images** on, unredacted with it off.
 - **Cause 2:** The same span was detected by both the spaCy model and the master list, or a name appears under two categories. In PDF a name under two categories surfaces as an `ambiguous` row in the label mapping rather than a wrong ID.
 - **Solution 2:** The code deduplicates overlapping spans (master-list source wins over an overlapping model source regardless of length; leftmost/longest breaks ties within the same source — see the entry above on a name followed by a bare hyphen), but a name listed under two categories (e.g. Vendor *and* Funder) can still conflict. Keep each name in a single category.
 - **Cause 3:** PyMuPDF extracts text with artifacts that break exact matching — typographic ligatures (`ﬁ` instead of `fi`), line-break hyphenation (`Acme Sup-\nplies`), and irregular whitespace. Whatever is doing the matching (PDF's `find_custom_words`, or Word/Excel's master-list recognizer and spaCy) sees a different string than the one being searched for.
@@ -233,6 +234,16 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Cause:** Detection was already whole-word. The PDF step then located each detected string with `page.search_for()`, a plain substring search that returns every occurrence on the page, including ones inside longer words. Excel and Word redact by the detection's own position, so they were never affected.
 - **Solution:** `_drop_embedded_hits` (`finance_redactor/infrastructure/documents/pdf_gateway.py`) lines each search hit up with the same-numbered occurrence in the page text and drops hits that sit against a word character. Punctuation does not count as a word character, so `(IPA)`, `IPA's` and `IPA-funded` are still redacted.
 - **Deliberate limit:** if the number of hits differs from the number of occurrences in the page text (a match that wraps a line, an unusual layout), nothing is dropped. A stray extra redaction in such a layout is accepted over leaving a name visible. If it affects a specific document, tell the maintainer.
+
+### A scanned PDF page comes out as a picture with black boxes
+
+- **What happens:** a scanned page (a picture of text, no text layer) is read with OCR (`infrastructure/ocr/rapid_ocr.py`, RapidOCR on ONNX Runtime, models bundled, no network). Names found in the text are replaced with labels. With **Also black out images** on, every mark the OCR could not read with confidence (below 0.8: signatures, handwriting, stamps, smudged text) is covered by a solid black box over the whole group of marks, so a signature's shape does not show. The page is then rebuilt as a single new picture, so nothing hidden from the original survives.
+- **The text on that page is no longer selectable.** It is a picture now; the labels are the only real text on it.
+- **OCR can misread.** A misread name may not be detected. The Review step lists the pages read with OCR: check them in the download before sharing.
+- **A word after a name can be redacted with it.** The language model sometimes runs a name into the next line ("Jane Doe" then "Signature:"). This is kept on purpose: stopping it would also split a name that wraps onto the next line, and half a name would show.
+- **A form's ruled lines** are blacked out line by line rather than as one box, so the text inside the form stays readable.
+- **Slower:** about two seconds a page, plus about two seconds the first time OCR runs in a session.
+- **Turn it off** under **Customize** (**Read the text on scanned pages**) to get the old behaviour.
 
 ### A blacked-out image or signature could be pulled back out of a PDF
 

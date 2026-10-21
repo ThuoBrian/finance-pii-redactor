@@ -76,6 +76,12 @@ master list. PDF also blacks out images and logos. Spotting a name that
 isn't on the list is a guess, so check the review table and untick anything
 that isn't really a name.
 
+**Scanned PDFs:** a scanned page is a picture of text. The tool reads its
+printed text (OCR), replaces the names it finds with labels, and blacks out
+everything it could not read with confidence: signatures, handwriting,
+stamps. The page comes out as a cleaned picture. OCR can misread, so the
+Review step lists the scanned pages for you to check.
+
 **Addresses, in all three formats:** P.O. boxes, plot, house and L.R.
 numbers, and street addresses such as `14 Maple Road` become `[ADDRESS]`.
 A town or country name on its own is left alone.
@@ -112,7 +118,7 @@ irm https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/instal
 curl -fsSL https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/install.sh | bash
 ```
 
-Setup downloads about 400 MB and takes a few minutes, so you need internet
+Setup downloads about 500 MB and takes a few minutes, so you need internet
 for this part. After that the tool works offline.
 
 A few things that surprise people the first time:
