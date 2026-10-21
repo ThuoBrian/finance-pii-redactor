@@ -152,9 +152,12 @@ what happened instead — then file it.
   described in each option's help text. Blackout produces no mapping, since
   there is nothing to decode.
 - [ ] With "Also black out images/logos" checked (default), an embedded
-  image on the page is covered by a black box.
-- [ ] A scanned/image-only PDF (no selectable text) is left untouched aside
-  from images — expected, not a bug.
+  image on the page is covered by a black box. Then open the download in a
+  PDF tool and extract its images: the original picture (a signature, a logo)
+  must **not** come back.
+- [ ] A scanned/image-only PDF (no selectable text): the Review step warns
+  which pages are scans and says they come out fully black (images on) or
+  unredacted (images off). Names inside a scan are not read yet.
 
 ### Word
 

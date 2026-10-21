@@ -655,3 +655,30 @@ def formatting_note(formats: Mapping[str, SheetFormatting], n_tabs: int) -> str:
         for kind, count in totals.items()
     ]
     return "Not carried over from the original: " + ", ".join(parts) + "."
+
+
+def scanned_pages_warning(
+    scanned: Sequence[int], total_pages: int, images_blacked_out: bool
+) -> str:
+    """Explain that scanned pages were not read, and what happened to them.
+
+    A scan is a picture of text with no text layer, so detection sees nothing
+    on it. With image black-out on the whole page comes out black; with it off
+    the page goes through as it was, names and all.
+    """
+    n = len(scanned)
+    shown = ", ".join(str(i + 1) for i in scanned[:10]) + (", ..." if n > 10 else "")
+    verb, pronoun = ("is a scan", "it") if n == 1 else ("are scans", "them")
+    outcome = (
+        "Black out images is on, so the download shows "
+        f"{'that page' if n == 1 else 'those pages'} fully black."
+        if images_blacked_out
+        else "Black out images is off, so "
+        f"{'that page goes' if n == 1 else 'those pages go'} into the download "
+        "unredacted. Turn it on under Customize, or check them by hand."
+    )
+    return (
+        f"**{n} of {plural(total_pages, 'page')} {verb}** (page {shown}): a "
+        f"picture of text with no text layer, so names inside {pronoun} are not "
+        f"detected. {outcome}"
+    )

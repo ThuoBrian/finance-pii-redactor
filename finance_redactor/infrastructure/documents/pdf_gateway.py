@@ -185,7 +185,8 @@ class PyMuPdfDocument:
         ``([primary_search, ...fallbacks], label)``. When ``blackout`` is True,
         matched text is covered with a black box instead of labeled. Images are
         always blacked out; they appear in ``redactions`` as
-        ``("__IMAGE__", "")``.
+        ``("__IMAGE__", "")``. Image pixels under any redaction are removed
+        from the file, not just covered.
 
         If ``search_text`` is not found exactly, a small set of normalized
         variants is tried before giving up.
@@ -252,7 +253,16 @@ class PyMuPdfDocument:
                     text_color=(0, 0, 0),
                     fill=(0, 0, 0) if blackout else (1, 1, 1),
                 )
-        page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+        # PIXELS, not NONE: NONE only draws the black box over an image and
+        # leaves the image itself in the file, where anyone can extract it
+        # (a "blacked-out" signature came back intact). PIXELS blanks the
+        # pixels under every redaction, and an image wholly covered is dropped.
+        try:
+            page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_PIXELS)
+        except Exception:  # noqa: BLE001 - any failure must not leave the image
+            # If an unusual image format defeats pixel editing, remove every
+            # image a redaction touches instead. Over-redaction, never a leak.
+            page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_REMOVE)
 
     def remove_external_links(self) -> int:
         """Delete every link that leaves the document; return how many.

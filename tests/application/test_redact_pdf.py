@@ -710,3 +710,16 @@ def test_scan_redact_exclusion_is_case_and_whitespace_insensitive() -> None:
 
     assert result.crosswalk == []
     assert 0 not in doc.redactions_by_page
+
+
+def test_scan_marks_pages_with_images_but_no_text_as_scanned() -> None:
+    """A picture of text has no text layer: detection cannot see it, so say so."""
+    doc = FakePdfDocument(
+        ["", "Paid to John", ""],
+        image_rects={0: [(0, 0, 100, 100)], 1: [(0, 0, 10, 10)]},
+    )
+
+    scan = _service().scan(doc)
+
+    # Page 1 is a scan; page 2 has text (and a logo); page 3 is simply blank.
+    assert scan.scanned_pages == [0]

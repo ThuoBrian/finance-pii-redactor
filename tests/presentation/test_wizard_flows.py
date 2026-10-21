@@ -74,9 +74,15 @@ def _flow(fmt: str) -> None:
             settings=S,
             steps=steps,
         )
-    elif fmt == "pdf":
+    elif fmt in ("pdf", "pdf-scan"):
         doc = fitz.open()
-        doc.new_page().insert_text((72, 100), "Paid to Jane Doe for field work.")
+        page = doc.new_page()
+        if fmt == "pdf":
+            page.insert_text((72, 100), "Paid to Jane Doe for field work.")
+        else:  # a "scan": one image and no text layer
+            pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 40, 20), False)
+            pix.clear_with(200)
+            page.insert_image(fitz.Rect(0, 0, 595, 842), stream=pix.tobytes("png"))
         buffer = BytesIO(doc.tobytes())
         buffer.name = "made_up.pdf"
         service = RedactPdfService(
@@ -196,3 +202,11 @@ def test_redact_another_file_clears_the_results() -> None:
 
     assert "findings" not in at.session_state
     assert [s.value for s in at.subheader] == ["Options"]  # the test re-supplies a file
+
+
+def test_a_scanned_pdf_page_is_reported_on_the_review_step() -> None:
+    at = _start("pdf-scan")
+    _click(at, "Redact my file")
+
+    warnings = [w.value for w in at.warning]
+    assert any("1 of 1 page is a scan" in w and "fully black" in w for w in warnings)

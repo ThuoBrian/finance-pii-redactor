@@ -39,6 +39,7 @@ from finance_redactor.presentation.presenters import (
     review_summary,
     review_tab_labels,
     scan_result_findings,
+    scanned_pages_warning,
     search_editor_rows,
 )
 
@@ -636,3 +637,13 @@ def test_findings_from_before_a_module_reload_still_sort_and_hint() -> None:
     assert list(table["Detected text"]) == ["Across", "Care Organisation"]
     assert table.loc[0, "Hint"] == "ordinary word"
     assert review_tab_labels(findings)[0] == "Review (1 to check)"
+
+
+def test_scanned_pages_warning_says_what_happens_to_the_pages() -> None:
+    on = scanned_pages_warning([0], 3, images_blacked_out=True)
+    off = scanned_pages_warning([0, 2], 3, images_blacked_out=False)
+
+    assert on.startswith("**1 of 3 pages is a scan** (page 1)")
+    assert "fully black" in on
+    assert off.startswith("**2 of 3 pages are scans** (page 1, 3)")
+    assert "unredacted" in off

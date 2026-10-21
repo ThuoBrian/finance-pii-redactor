@@ -40,6 +40,7 @@ from finance_redactor.presentation.presenters import (
     findings_dataframe,
     plural,
     review_tab_labels,
+    scanned_pages_warning,
 )
 from finance_redactor.presentation.session import (
     output_stem,
@@ -244,7 +245,11 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
         st.caption("Matched areas will be blacked out in the downloaded PDF.")
 
     # Warnings stay above the tabs: an unresolved item is undecodable later,
-    # which deserves to be seen without opening anything.
+    # and a scanned page was not read at all; both deserve to be seen without
+    # opening anything.
+    scanned = state.pdf_scan_result.scanned_pages
+    if scanned:
+        st.warning(scanned_pages_warning(scanned, total_pages, run["redact_images"]))
     if not blackout:
         bracketed = state.get("pdf_bracketed", 0)
         if bracketed:
