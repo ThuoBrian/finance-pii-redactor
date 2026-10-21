@@ -63,6 +63,15 @@ class FakePdfDocument:
         """Mark the document as closed."""
         self.closed = True
 
+    def render_page(self, page_index: int, dpi: int) -> bytes:
+        """Return a stand-in PNG; the fake OCR engine ignores it."""
+        self.rendered = (page_index, dpi)
+        return b"png"
+
+    def rebuild_scanned_page(self, page_index: int, dpi: int, **kwargs: object) -> None:
+        """Record how the scanned page would be rebuilt."""
+        self.rebuilt = {"page": page_index, "dpi": dpi, **kwargs}
+
     def redact_page(
         self,
         page_index: int,
@@ -723,3 +732,102 @@ def test_scan_marks_pages_with_images_but_no_text_as_scanned() -> None:
 
     # Page 1 is a scan; page 2 has text (and a logo); page 3 is simply blank.
     assert scan.scanned_pages == [0]
+
+
+class FakeOcr:
+    """An ``OcrEngine`` double returning fixed lines for any picture."""
+
+    def __init__(self, lines: list) -> None:
+        """Store the lines to return."""
+        self.lines = lines
+        self.calls = 0
+
+    def read(self, png: bytes) -> list:
+        """Return the canned lines."""
+        self.calls += 1
+        return list(self.lines)
+
+
+def _ocr_lines():
+    from finance_redactor.domain.ocr import OcrLine
+
+    return [
+        OcrLine("Payment voucher", (100.0, 50.0, 250.0, 70.0), 0.99),
+        OcrLine("Paid to John today", (100.0, 80.0, 280.0, 100.0), 0.97),
+        OcrLine("smudged footer", (100.0, 900.0, 300.0, 920.0), 0.40),
+    ]
+
+
+def _john_in_ocr_text() -> PiiDetection:
+    # "Payment voucher" plus its newline is 16 chars, then "Paid to " is 8:
+    # John starts at 24 in the joined OCR text.
+    return PiiDetection(
+        entity_type="PERSON",
+        span=Span(24, 28),
+        score=0.85,
+        text="John",
+        source=DetectionSource.MODEL,
+    )
+
+
+def _ocr_service(ocr: FakeOcr | None) -> RedactPdfService:
+    return RedactPdfService(
+        open_document=_document_factory,
+        master_map={},
+        auto_prefixes={"PERSON": "PSN"},
+        detector=FakeDetector([_john_in_ocr_text()]),
+        fixed_masks={},
+        ocr=ocr,
+    )
+
+
+def test_a_scanned_page_is_read_with_ocr_and_rebuilt_not_searched() -> None:
+    doc = FakePdfDocument([""], image_rects={0: [(0, 0, 595, 842)]})
+    service = _ocr_service(FakeOcr(_ocr_lines()))
+
+    scan = service.scan(doc)
+    result = service.redact(doc, scan, [], redact_images=True)
+
+    assert scan.read_pages == [0]
+    assert [f.detected_text for f in result.findings] == ["John"]
+    rebuilt = doc.rebuilt
+    assert rebuilt["page"] == 0 and rebuilt["dpi"] == 200
+    ((box, label),) = rebuilt["names"]
+    assert label == "[001]"
+    assert box[1] == 80.0 and box[3] == 100.0  # on the "Paid to John" line
+    # The low-confidence footer is not kept, so its ink is blacked out.
+    assert rebuilt["keep"] == [(100.0, 50.0, 250.0, 70.0), (100.0, 80.0, 280.0, 100.0)]
+    assert rebuilt["blackout_other_ink"] is True
+    assert rebuilt["blackout_names"] is False
+    assert 0 not in doc.redactions_by_page  # no search-and-cover on that page
+
+
+def test_an_unticked_term_on_a_scanned_page_is_left_alone() -> None:
+    doc = FakePdfDocument([""], image_rects={0: [(0, 0, 595, 842)]})
+    service = _ocr_service(FakeOcr(_ocr_lines()))
+
+    scan = service.scan(doc)
+    service.redact(doc, scan, [], redact_images=True, exclude=frozenset({"john"}))
+
+    assert doc.rebuilt["names"] == []
+
+
+def test_without_an_ocr_engine_a_scan_is_reported_but_not_read() -> None:
+    doc = FakePdfDocument([""], image_rects={0: [(0, 0, 595, 842)]})
+    service = _ocr_service(None)
+
+    scan = service.scan(doc)
+
+    assert service.can_read_scans is False
+    assert scan.scanned_pages == [0]
+    assert scan.read_pages == []
+
+
+def test_reading_scans_can_be_turned_off_per_run() -> None:
+    doc = FakePdfDocument([""], image_rects={0: [(0, 0, 595, 842)]})
+    ocr = FakeOcr(_ocr_lines())
+
+    scan = _ocr_service(ocr).scan(doc, read_scans=False)
+
+    assert ocr.calls == 0
+    assert scan.read_pages == []

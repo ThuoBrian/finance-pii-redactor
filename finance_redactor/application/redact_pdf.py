@@ -64,7 +64,16 @@ document once and runs the detector once per page, returning a
 :class:`PdfScanResult`; ``redact`` takes that cached result plus a fresh
 ``exclude`` set and rebuilds the output with no detector call and no
 ``page_text`` call at all. ``execute`` is unchanged and kept for callers that
-don't need the split.
+don't need the split; it does not read scanned pages (the app uses
+``scan``/``redact``).
+
+Scanned pages (images, no text layer) are read with the optional ``ocr``
+engine during ``scan``. Detection then runs on the OCR text, and ``redact``
+rebuilds each such page as a cleaned picture of itself
+(``PdfDocument.rebuild_scanned_page``): printed text the OCR read with
+confidence stays, names in it are cleared and labelled, and with image
+black-out on, every other mark on the page (signatures, handwriting, stamps,
+text the OCR was unsure of) is blacked out.
 """
 
 from __future__ import annotations
@@ -74,7 +83,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 
-from finance_redactor.application.ports import PdfDocumentFactory, PiiDetector
+from finance_redactor.application.ports import (
+    OcrEngine,
+    PdfDocument,
+    PdfDocumentFactory,
+    PiiDetector,
+)
 from finance_redactor.application.results import PdfRedactionResult
 from finance_redactor.domain.custom_words import find_custom_words
 from finance_redactor.domain.entities import (
@@ -82,6 +96,7 @@ from finance_redactor.domain.entities import (
     Finding,
     PiiDetection,
 )
+from finance_redactor.domain.ocr import Box, OcrLine, join_lines, span_boxes
 from finance_redactor.domain.pdf_text_normalizer import (
     NormalizedText,
     normalize_pdf_text,
@@ -103,6 +118,13 @@ _ENTITIES = ["EMAIL_ADDRESS", "URL", "PERSON", "ORGANIZATION"]
 # ``[001]`` labels this flow writes. Counted, reported, and otherwise left
 # alone - the label format is fixed (see domain/pseudonyms.format_label).
 _BRACKETED_NUMBER = re.compile(r"\[\d{1,4}\]")
+
+# Scanned pages are rendered at this resolution for OCR, and the rebuilt page
+# is a picture at the same resolution (readable, not huge).
+_OCR_DPI = 200
+# Printed text the OCR read with at least this confidence is kept on a rebuilt
+# page; anything less sure counts as unread and is blacked out with the rest.
+_OCR_MIN_CONFIDENCE = 0.8
 
 
 class RedactionStyle(str, Enum):
@@ -126,8 +148,11 @@ class _PdfPageScan:
     detections: list[PiiDetection]
     bracketed: int
     # No text layer but at least one image: a scan, whose words detection
-    # cannot see. Reported to the user; nothing on such a page is matched.
+    # cannot see without OCR. Reported to the user.
     scanned: bool = False
+    # What OCR read on a scanned page (empty if it was not read). When set,
+    # ``raw_text`` is these lines joined, and detections refer to that text.
+    ocr_lines: tuple[OcrLine, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -151,6 +176,11 @@ class PdfScanResult:
         """Zero-based indices of pages that are scans (no text layer, has images)."""
         return [index for index, page in enumerate(self.pages) if page.scanned]
 
+    @property
+    def read_pages(self) -> list[int]:
+        """Zero-based indices of scanned pages whose text OCR read."""
+        return [index for index, page in enumerate(self.pages) if page.ocr_lines]
+
 
 class RedactPdfService:
     """Pseudonymizes (or blacks out) detected PII and the user's words in a PDF."""
@@ -165,8 +195,12 @@ class RedactPdfService:
         custom_words_score: float = 1.0,
         *,
         fixed_masks: Mapping[str, str],
+        ocr: OcrEngine | None = None,
     ) -> None:
         """Wire a PDF-opening factory, the pseudonym vocabulary, and a detector.
+
+        ``ocr`` reads scanned pages; ``None`` (OCR not installed) means scans
+        are reported but not read.
 
         ``detector`` is the composition root's spaCy-backed engine (see
         ``infrastructure/detection/presidio_detector.py``) - always on, not
@@ -188,6 +222,12 @@ class RedactPdfService:
         self._fuzzy_threshold = fuzzy_threshold
         self._custom_words_score = custom_words_score
         self._fixed_masks = fixed_masks
+        self._ocr = ocr
+
+    @property
+    def can_read_scans(self) -> bool:
+        """Whether an OCR engine is wired in to read scanned pages."""
+        return self._ocr is not None
 
     def execute(
         self,
@@ -288,7 +328,7 @@ class RedactPdfService:
         finally:
             document.close()
 
-    def scan(self, source: object) -> PdfScanResult:
+    def scan(self, source: object, *, read_scans: bool = True) -> PdfScanResult:
         """Run the detector once per page and cache the result for ``redact``.
 
         Pure and read-only: no custom words, no dedupe, no ``exclude``, no
@@ -318,6 +358,18 @@ class RedactPdfService:
                     if has_text
                     else []
                 )
+                scanned = not has_text and bool(document.page_image_rects(page_index))
+                lines: tuple[OcrLine, ...] = ()
+                if scanned and read_scans and self._ocr is not None:
+                    lines = tuple(
+                        self._ocr.read(document.render_page(page_index, _OCR_DPI))
+                    )
+                if lines:
+                    raw_text = join_lines(lines).text
+                    normalized = NormalizedText(raw_text, raw_text, ())
+                    detections = self._detector.analyze(
+                        raw_text, [*_ENTITIES, *self._fixed_masks], _THRESHOLD
+                    )
                 bracketed = len(_BRACKETED_NUMBER.findall(normalized.text))
                 pages.append(
                     _PdfPageScan(
@@ -325,8 +377,8 @@ class RedactPdfService:
                         normalized=normalized,
                         detections=detections,
                         bracketed=bracketed,
-                        scanned=not has_text
-                        and bool(document.page_image_rects(page_index)),
+                        scanned=scanned,
+                        ocr_lines=lines,
                     )
                 )
             return PdfScanResult(pages=pages)
@@ -372,6 +424,19 @@ class RedactPdfService:
                     ),
                 ]
                 bracketed += page.bracketed
+
+                if page.ocr_lines:
+                    self._rebuild_scanned_page(
+                        document,
+                        page_index,
+                        page.ocr_lines,
+                        self._labelled(
+                            page_index, detections, exclude, pseudonymizer, findings
+                        ),
+                        blackout=(style == RedactionStyle.BLACKOUT),
+                        redact_images=redact_images,
+                    )
+                    continue
 
                 redactions = self._page_redactions(
                     page_index=page_index,
@@ -422,6 +487,34 @@ class RedactPdfService:
         list spans the whole document in both callers) and returns this
         page's ``(candidates, label)`` redaction list.
         """
+        redactions: list[tuple[str | list[str], str]] = []
+        for detection, label in self._labelled(
+            page_index, detections, exclude, pseudonymizer, findings
+        ):
+            raw_span = normalized.to_raw_span(detection.span)
+            raw_substring = raw_text[raw_span.start : raw_span.end]
+            # Pass the normalized match text first, with the original
+            # extracted substring as a fallback so PyMuPDF can find it even
+            # when the page stores it with ligatures or hyphens.
+            candidates: list[str] = [detection.text]
+            if raw_substring != detection.text:
+                candidates.append(raw_substring)
+            redactions.append((candidates, label))
+        return redactions
+
+    def _labelled(
+        self,
+        page_index: int,
+        detections: list[PiiDetection],
+        exclude: frozenset[str],
+        pseudonymizer: Pseudonymizer,
+        findings: list[Finding],
+    ) -> list[tuple[PiiDetection, str]]:
+        """Dedupe, drop excluded terms, and give each kept detection its label.
+
+        Shared by text pages and OCR'd scanned pages. Appends a
+        :class:`Finding` per kept detection to ``findings``.
+        """
         # Sorted by position, not by dedupe_overlapping's own order: that
         # sorts by source priority first (see domain/rules.py), so a
         # master-list match late on the page would otherwise be assigned -
@@ -430,7 +523,7 @@ class RedactPdfService:
         # the order it receives them in is irrelevant to the output; it only
         # fixes the label numbering.
         kept = sorted(dedupe_overlapping(detections), key=lambda d: d.span.start)
-        redactions: list[tuple[str | list[str], str]] = []
+        labelled: list[tuple[PiiDetection, str]] = []
         for detection in kept:
             # Dropped before ``assign``, so an excluded term claims no
             # ordinal and the labels that do get written stay contiguous. It
@@ -457,13 +550,32 @@ class RedactPdfService:
                     source=detection.source,
                 )
             )
-            raw_span = normalized.to_raw_span(detection.span)
-            raw_substring = raw_text[raw_span.start : raw_span.end]
-            # Pass the normalized match text first, with the original
-            # extracted substring as a fallback so PyMuPDF can find it even
-            # when the page stores it with ligatures or hyphens.
-            candidates: list[str] = [detection.text]
-            if raw_substring != detection.text:
-                candidates.append(raw_substring)
-            redactions.append((candidates, label))
-        return redactions
+            labelled.append((detection, label))
+        return labelled
+
+    def _rebuild_scanned_page(
+        self,
+        document: PdfDocument,
+        page_index: int,
+        lines: tuple[OcrLine, ...],
+        labelled: list[tuple[PiiDetection, str]],
+        *,
+        blackout: bool,
+        redact_images: bool,
+    ) -> None:
+        """Redact an OCR'd scanned page by rebuilding it as a cleaned picture."""
+        ocr = join_lines(lines)
+        names: list[tuple[Box, str]] = [
+            (box, label)
+            for detection, label in labelled
+            for box in span_boxes(ocr, lines, detection.span)
+        ]
+        keep = [line.box for line in lines if line.score >= _OCR_MIN_CONFIDENCE]
+        document.rebuild_scanned_page(
+            page_index,
+            _OCR_DPI,
+            keep=keep,
+            names=names,
+            blackout_names=blackout,
+            blackout_other_ink=redact_images,
+        )

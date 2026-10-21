@@ -155,7 +155,10 @@ what happened instead — then file it.
   image on the page is covered by a black box. Then open the download in a
   PDF tool and extract its images: the original picture (a signature, a logo)
   must **not** come back.
-- [ ] A scanned/image-only PDF (no selectable text): the Review step warns
+- [ ] A scanned PDF with a made-up name and a signature: the name becomes a
+  label, the printed text stays readable, the signature is a solid black box
+  (no shape showing), and the Review step says the page was read with OCR.
+- [ ] Same file with **Read the text on scanned pages** off: the Review step warns
   which pages are scans and says they come out fully black (images on) or
   unredacted (images off). Names inside a scan are not read yet.
 

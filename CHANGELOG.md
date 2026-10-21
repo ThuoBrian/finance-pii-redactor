@@ -8,6 +8,17 @@ the `version` field in `pyproject.toml`.
 
 ### Added
 
+- **Scanned PDF pages are read with OCR.** A scanned page used to be either
+  fully black or unredacted. Now its printed text is read (RapidOCR on ONNX
+  Runtime; models ship with the package and run offline), names in it are
+  replaced with labels, and with "Black out images" on, everything the OCR
+  could not read with confidence (signatures, handwriting, stamps) is covered
+  by a solid black box, so a signature's shape does not show. The page comes
+  out as a single cleaned picture, with nothing hidden from the original. On
+  by default, under Customize as "Read the text on scanned pages"; about two
+  seconds a page. The Review step lists the pages read with OCR to check.
+  Installing grows by about 100 MB (`rapidocr`, `onnxruntime`, OpenCV
+  headless and Shapely).
 - **The PDF Review step says which pages are scans.** A scanned page (images,
   no text layer) used to pass through with no word about it. The warning
   lists the pages and says what happened to them: fully black with "Black out
