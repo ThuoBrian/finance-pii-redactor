@@ -5,6 +5,7 @@ from __future__ import annotations
 import fitz
 import pytest
 
+from finance_redactor.domain.entities import IMAGE_REDACTION_SENTINEL
 from finance_redactor.domain.errors import EncryptedPdfError, UnreadableFileError
 from finance_redactor.infrastructure.documents.pdf_gateway import (
     PyMuPdfDocument,
@@ -319,3 +320,63 @@ def test_drop_embedded_hits_ignores_a_non_word_edge():
 
     assert _drop_embedded_hits(rects, "Acme Ltd.x", "Acme Ltd.") == rects
     assert _drop_embedded_hits(rects, "xIPA", "IPA") == []
+
+
+_INK = (10, 20, 30)  # a made-up "signature" stroke colour, easy to look for
+
+
+def _signature_pdf_bytes() -> bytes:
+    """One page: a line of text and a made-up signature image (an ink stroke)."""
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 60, 20), False)
+    pix.clear_with(255)
+    for x in range(60):
+        pix.set_pixel(x, 10, _INK)
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 80), "Signed by Jane Doe:")
+    page.insert_image(fitz.Rect(72, 90, 272, 160), stream=pix.tobytes("png"))
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def _ink_survives(pdf_bytes: bytes) -> bool:
+    """Return True if any image left in the PDF still holds the signature stroke."""
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    try:
+        for img in doc[0].get_images(full=True):
+            pix = fitz.Pixmap(doc.extract_image(img[0])["image"])
+            if pix.width > 30 and pix.height > 10 and pix.pixel(30, 10)[:3] == _INK:
+                return True
+        return False
+    finally:
+        doc.close()
+
+
+def test_blacked_out_image_cannot_be_pulled_back_out_of_the_pdf():
+    """A black box drawn over an image is not redaction: the image must go too."""
+    data = _signature_pdf_bytes()
+    assert _ink_survives(data)  # the fixture really holds the signature
+
+    document = PyMuPdfDocument.open(data)
+    document.redact_page(0, [(IMAGE_REDACTION_SENTINEL, "")], blackout=True)
+    out = document.to_bytes()
+    document.close()
+
+    assert not _ink_survives(out)
+
+
+def test_text_redaction_still_works_on_a_page_with_an_image():
+    data = _signature_pdf_bytes()
+
+    document = PyMuPdfDocument.open(data)
+    document.redact_page(0, [(["Jane Doe"], "[001]"), (IMAGE_REDACTION_SENTINEL, "")])
+    out = document.to_bytes()
+    document.close()
+
+    reopened = PyMuPdfDocument.open(out)
+    text = reopened.page_text(0)
+    reopened.close()
+    assert "Jane Doe" not in text
+    assert "[001]" in text
+    assert not _ink_survives(out)

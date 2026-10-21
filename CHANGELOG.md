@@ -8,6 +8,11 @@ the `version` field in `pyproject.toml`.
 
 ### Added
 
+- **The PDF Review step says which pages are scans.** A scanned page (images,
+  no text layer) used to pass through with no word about it. The warning
+  lists the pages and says what happened to them: fully black with "Black out
+  images" on, unredacted with it off. Reading the text inside a scan (OCR) is
+  the next step.
 - **An optional PDF mapping with names.** Under the PDF mapping download there
   is now a toggle, "Also prepare a mapping with names (Confidential)", off by
   default. Switched on, it adds a second download, `<name>_crosswalk.csv`, with
@@ -150,6 +155,13 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **Blacked-out images, signatures included, are now really removed from
+  PDFs.** "Also black out images" used to draw a black box over each image and
+  leave the image itself in the file, where any PDF tool could extract it
+  intact. Redactions now blank the pixels underneath (an image covered
+  completely is dropped), with a fallback that removes the image outright if
+  its format defeats pixel editing. PDFs blacked out before this fix still
+  carry their images: redact the originals again.
 - **The review step no longer crashes with `KeyError: <DetectionSource.MODEL:
   'model'>`.** It happened when Streamlit re-imported the code while a result
   was still on screen (for example after an update or a code change): findings

@@ -125,6 +125,9 @@ class _PdfPageScan:
     normalized: NormalizedText
     detections: list[PiiDetection]
     bracketed: int
+    # No text layer but at least one image: a scan, whose words detection
+    # cannot see. Reported to the user; nothing on such a page is matched.
+    scanned: bool = False
 
 
 @dataclass(frozen=True)
@@ -142,6 +145,11 @@ class PdfScanResult:
     def page_count(self) -> int:
         """Number of pages captured by the scan."""
         return len(self.pages)
+
+    @property
+    def scanned_pages(self) -> list[int]:
+        """Zero-based indices of pages that are scans (no text layer, has images)."""
+        return [index for index, page in enumerate(self.pages) if page.scanned]
 
 
 class RedactPdfService:
@@ -317,6 +325,8 @@ class RedactPdfService:
                         normalized=normalized,
                         detections=detections,
                         bracketed=bracketed,
+                        scanned=not has_text
+                        and bool(document.page_image_rects(page_index)),
                     )
                 )
             return PdfScanResult(pages=pages)
