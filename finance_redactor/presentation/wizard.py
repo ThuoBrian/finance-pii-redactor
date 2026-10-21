@@ -86,12 +86,15 @@ def nav(
     back: tuple[str, int] | None = None,
     forward: tuple[str, int] | None = None,
     finish: bool = False,
+    hold: str | None = None,
 ) -> None:
     """Draw the Back / Continue row under a step.
 
     ``finish`` puts "Redact another file" where Continue would be, for the
-    last step.
+    last step. ``hold`` disables Continue and says why, above the row.
     """
+    if hold:
+        st.info(hold)
     left, _, right = st.columns([2, 3, 2])
     if back is not None and left.button(
         f"← {back[0]}", width="stretch", key=f"nav_back_{back[1]}"
@@ -102,6 +105,7 @@ def nav(
         type="primary",
         width="stretch",
         key=f"nav_forward_{forward[1]}",
+        disabled=bool(hold),
     ):
         go(forward[1])
     if finish and right.button(

@@ -210,3 +210,34 @@ def test_a_scanned_pdf_page_is_reported_on_the_review_step() -> None:
 
     warnings = [w.value for w in at.warning]
     assert any("1 of 1 page is a scan" in w and "fully black" in w for w in warnings)
+
+
+def _continue_button(at: AppTest):
+    return next(b for b in at.button if b.label == "Continue to download →")
+
+
+def test_continue_waits_until_review_changes_are_applied() -> None:
+    at = _start("excel")
+    _click(at, "Redact my file")
+
+    _click(at, "Untick all shown (1)")
+
+    assert _continue_button(at).disabled
+    assert any("not applied yet" in i.value for i in at.info)
+    _click(at, "Apply changes (1 pending)")
+    assert not _continue_button(at).disabled
+
+
+def test_a_re_ticked_term_cannot_slip_through_unapplied() -> None:
+    """Untick and apply, then re-tick to hide it again: Continue must wait."""
+    at = _start("excel")
+    _click(at, "Redact my file")
+    _click(at, "Untick all shown (1)")
+    _click(at, "Apply changes (1 pending)")
+    # Apply reruns the script mid-run, and AppTest keeps a stale copy of the
+    # buttons from before it; one more run gives a clean tree to click in.
+    at.run()
+
+    _click(at, "Tick all shown (1)")
+
+    assert _continue_button(at).disabled
