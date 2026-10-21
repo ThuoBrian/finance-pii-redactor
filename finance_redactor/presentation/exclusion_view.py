@@ -229,6 +229,23 @@ def render_deselect_editor(
     return pending if clicked else excluded
 
 
+def unapplied_changes_note(key_prefix: str, excluded: frozenset[str]) -> str | None:
+    """Return why Continue must wait, or ``None`` if every tick is applied.
+
+    Continuing with ticks not yet applied would build the download from the
+    older choice. One case of that is a leak: a term unticked and applied,
+    then re-ticked to hide it again, would still show.
+    """
+    pending = st.session_state.get(f"{key_prefix}_review_pending", excluded)
+    n_changes = len(pending ^ excluded)
+    if not n_changes:
+        return None
+    return (
+        f"You have {plural(n_changes, 'change')} not applied yet. Click **Apply "
+        "changes** first, or undo them, then continue."
+    )
+
+
 def _apply_button(key: str, n_changes: int) -> bool:
     """Draw the Apply button: primary with a count, or idle when nothing changed."""
     if n_changes:

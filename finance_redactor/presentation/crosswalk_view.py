@@ -50,7 +50,10 @@ _CROSSWALK_WARNING = (
 
 
 def render_pdf_mapping_warnings(crosswalk: list[Assignment]) -> None:
-    """Warn about PDF items that cannot be decoded later. Call above the tabs.
+    """Note PDF items that cannot be decoded later. Call above the tabs.
+
+    Shown as information, not a warning: the items were redacted like any
+    other, so nothing is visible. Yellow is kept for what affects what shows.
 
     These stay outside the mapping tab on purpose: in the Excel and Word flows
     a flagged row is a nudge to tidy the master list, because the CSV still
@@ -63,7 +66,7 @@ def render_pdf_mapping_warnings(crosswalk: list[Assignment]) -> None:
     missing = [a for a in unresolved if not a.ambiguous]
 
     if missing:
-        st.warning(
+        st.info(
             f"Not in the master list: {plural(len(missing), 'redacted item')}. "
             "They were still redacted, but their mapping rows carry a "
             "placeholder token instead of an Internal ID, so **they cannot be "
@@ -71,7 +74,7 @@ def render_pdf_mapping_warnings(crosswalk: list[Assignment]) -> None:
             "and re-run if you need them identifiable."
         )
     if ambiguous:
-        st.warning(
+        st.info(
             "Ambiguous master-list match: "
             f"{plural(len(ambiguous), 'redacted item')}. Each matched more than "
             "one master-list row with conflicting IDs, so no Internal ID was "

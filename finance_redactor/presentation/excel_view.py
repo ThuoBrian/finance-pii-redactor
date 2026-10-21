@@ -24,6 +24,7 @@ from finance_redactor.presentation.crosswalk_view import (
 from finance_redactor.presentation.exclusion_view import (
     render_deselect_editor,
     render_exclusion_warning,
+    unapplied_changes_note,
 )
 from finance_redactor.presentation.presenters import (
     ENTITY_HELP,
@@ -296,6 +297,9 @@ def _review_step(excel_service: RedactExcelService, steps: Any) -> None:
     wizard.nav(
         back=("Back to options", wizard.OPTIONS),
         forward=("Continue to download", wizard.DOWNLOAD),
+        hold=unapplied_changes_note(
+            "excel", state.get("excel_excluded_applied", frozenset())
+        ),
     )
 
 

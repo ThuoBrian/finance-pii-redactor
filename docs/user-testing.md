@@ -201,6 +201,8 @@ what happened instead — then file it.
 - [ ] **Find a term** narrows the table as you type; untick a match, clear the
   box, and it is still unticked.
 - [ ] After **Apply changes**, a green "Rebuilt the file" note appears once.
+- [ ] Untick a row and, without applying, try **Continue to download**: it is
+  disabled with a note until you apply or undo the change.
 - [ ] A file where every term is a master-list name or a strict pattern shows
   "Nothing here is a guess" with the table folded under **Review anyway**.
 - [ ] **Show** narrows the table to one source. Untick a row, switch the

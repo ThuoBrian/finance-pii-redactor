@@ -166,6 +166,15 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **"Continue to download" waits until review changes are applied.** It used
+  to go ahead with ticks that had not been applied, so the download was built
+  from the older choice. In one case that was a leak: a term unticked and
+  applied, then re-ticked to hide it again, still showed. Continue is now
+  disabled, with a note, until the changes are applied or undone.
+- **PDF "Not in the master list" and "Ambiguous master-list match" notices are
+  blue information boxes, not yellow warnings.** Those items were redacted like
+  any other; the notice is only about decoding them later. Yellow is kept for
+  what affects what shows.
 - **Blacked-out images, signatures included, are now really removed from
   PDFs.** "Also black out images" used to draw a black box over each image and
   leave the image itself in the file, where any PDF tool could extract it
