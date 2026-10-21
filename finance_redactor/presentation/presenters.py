@@ -657,28 +657,63 @@ def formatting_note(formats: Mapping[str, SheetFormatting], n_tabs: int) -> str:
     return "Not carried over from the original: " + ", ".join(parts) + "."
 
 
-def scanned_pages_warning(
-    scanned: Sequence[int], total_pages: int, images_blacked_out: bool
-) -> str:
-    """Explain that scanned pages were not read, and what happened to them.
+def _page_list(pages: Sequence[int]) -> str:
+    """Return 1-based page numbers, e.g. ``"page 1, 3"`` (first ten only)."""
+    shown = ", ".join(str(i + 1) for i in pages[:10]) + (
+        ", ..." if len(pages) > 10 else ""
+    )
+    return f"page {shown}"
 
-    A scan is a picture of text with no text layer, so detection sees nothing
-    on it. With image black-out on the whole page comes out black; with it off
-    the page goes through as it was, names and all.
+
+def scanned_pages_warning(
+    scanned: Sequence[int],
+    total_pages: int,
+    images_blacked_out: bool,
+    *,
+    read: Sequence[int] = (),
+) -> str:
+    """Explain what happened to scanned pages, read with OCR or not.
+
+    A scan is a picture of text with no text layer. A page OCR read had its
+    names redacted and, with image black-out on, everything it could not read
+    with confidence blacked out; it still deserves a look, because OCR can
+    misread. A page left unread comes out fully black with image black-out on,
+    and unredacted with it off.
     """
-    n = len(scanned)
-    shown = ", ".join(str(i + 1) for i in scanned[:10]) + (", ..." if n > 10 else "")
-    verb, pronoun = ("is a scan", "it") if n == 1 else ("are scans", "them")
-    outcome = (
-        "Black out images is on, so the download shows "
-        f"{'that page' if n == 1 else 'those pages'} fully black."
-        if images_blacked_out
-        else "Black out images is off, so "
-        f"{'that page goes' if n == 1 else 'those pages go'} into the download "
-        "unredacted. Turn it on under Customize, or check them by hand."
-    )
-    return (
-        f"**{n} of {plural(total_pages, 'page')} {verb}** (page {shown}): a "
-        f"picture of text with no text layer, so names inside {pronoun} are not "
-        f"detected. {outcome}"
-    )
+    parts = []
+    read_set = set(read)
+    done = [i for i in scanned if i in read_set]
+    unread = [i for i in scanned if i not in read_set]
+    if done:
+        n = len(done)
+        rest = (
+            ", and anything OCR could not read with confidence (signatures, "
+            "handwriting, stamps) is blacked out"
+            if images_blacked_out
+            else "; signatures, handwriting and stamps are left as they are, "
+            "because black out images is off"
+        )
+        parts.append(
+            f"**{n} of {plural(total_pages, 'page')} "
+            f"{'is a scan' if n == 1 else 'are scans'}, read with OCR** "
+            f"({_page_list(done)}). Names found in "
+            f"{'it' if n == 1 else 'them'} were redacted{rest}. OCR can misread, "
+            f"so check {'that page' if n == 1 else 'those pages'} in the download."
+        )
+    if unread:
+        n = len(unread)
+        outcome = (
+            "Black out images is on, so the download shows "
+            f"{'that page' if n == 1 else 'those pages'} fully black."
+            if images_blacked_out
+            else "Black out images is off, so "
+            f"{'that page goes' if n == 1 else 'those pages go'} into the download "
+            "unredacted. Turn it on under Customize, or check them by hand."
+        )
+        parts.append(
+            f"**{n} of {plural(total_pages, 'page')} "
+            f"{'is a scan' if n == 1 else 'are scans'}** ({_page_list(unread)}): a "
+            "picture of text that was not read, so names inside "
+            f"{'it' if n == 1 else 'them'} are not detected. {outcome}"
+        )
+    return "\n\n".join(parts)

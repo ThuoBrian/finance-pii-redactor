@@ -380,3 +380,107 @@ def test_text_redaction_still_works_on_a_page_with_an_image():
     assert "Jane Doe" not in text
     assert "[001]" in text
     assert not _ink_survives(out)
+
+
+def _scan_pdf_bytes() -> bytes:
+    """Build a made-up "scan": one picture of text plus a signature scribble."""
+    import numpy as np
+
+    text_page = fitz.open()
+    page = text_page.new_page()
+    page.insert_text((72, 100), "Payment voucher", fontsize=12)
+    page.insert_text((72, 130), "Paid to Jane Doe for field work.", fontsize=12)
+    pix = page.get_pixmap(dpi=200, colorspace=fitz.csRGB, alpha=False)
+    image = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
+    image = image.copy()
+    for i in range(400):  # the "signature": a dark diagonal stroke lower down
+        image[900 + i // 8 : 904 + i // 8, 300 + i] = 20
+    picture = fitz.Pixmap(fitz.csRGB, pix.width, pix.height, image.tobytes(), False)
+    scan = fitz.open()
+    scan.new_page().insert_image(
+        fitz.Rect(0, 0, 595, 842), stream=picture.tobytes("png")
+    )
+    data = scan.tobytes()
+    text_page.close()
+    scan.close()
+    return data
+
+
+def _only_image(pdf_bytes: bytes):
+    import numpy as np
+
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    (img,) = doc[0].get_images(full=True)
+    pix = fitz.Pixmap(doc.extract_image(img[0])["image"])
+    if pix.n != 3:
+        pix = fitz.Pixmap(fitz.csRGB, pix)
+    text = doc[0].get_text()
+    doc.close()
+    return np.frombuffer(pix.samples, dtype=np.uint8).reshape(
+        pix.height, pix.width, 3
+    ), text
+
+
+_KEEP = [(190, 240, 1000, 380)]  # the two printed lines, in 200 dpi pixels
+_NAME = (300, 325, 470, 375)  # where "Jane Doe" is taken to be
+# Points on the made-up signature stroke (row, column), in 200 dpi pixels.
+_STROKE = [(901 + i // 8, 300 + i) for i in range(0, 400, 25)]
+
+
+def _stroke_values(image) -> set[int]:
+    return {int(image[row, col, 0]) for row, col in _STROKE}
+
+
+def test_rebuilt_scan_keeps_read_text_labels_names_and_blacks_out_the_rest():
+    document = PyMuPdfDocument.open(_scan_pdf_bytes())
+    document.rebuild_scanned_page(
+        0,
+        200,
+        keep=_KEEP,
+        names=[(_NAME, "[001]")],
+        blackout_names=False,
+        blackout_other_ink=True,
+    )
+    image, text = _only_image(document.to_bytes())
+    document.close()
+
+    assert (image[325:375, 300:470] == 255).all()  # the name is gone from the picture
+    assert "[001]" in text  # and the label is written in its place
+    assert _stroke_values(image) == {0}  # the signature is blacked out
+    # ...as one solid box, so its shape does not show through.
+    assert (image[905:945, 330:680] == 0).all()
+    assert (image[240:320, 190:1000] < 100).any()  # the kept text is still there
+
+
+def test_rebuilt_scan_leaves_other_ink_when_image_blackout_is_off():
+    document = PyMuPdfDocument.open(_scan_pdf_bytes())
+    document.rebuild_scanned_page(
+        0,
+        200,
+        keep=_KEEP,
+        names=[(_NAME, "[001]")],
+        blackout_names=False,
+        blackout_other_ink=False,
+    )
+    image, _ = _only_image(document.to_bytes())
+    document.close()
+
+    assert (image[325:375, 300:470] == 255).all()
+    assert _stroke_values(image) == {20}  # untouched: the original stroke
+
+
+def test_rebuilt_scan_in_blackout_style_blacks_the_name_without_a_label():
+    document = PyMuPdfDocument.open(_scan_pdf_bytes())
+    document.rebuild_scanned_page(
+        0,
+        200,
+        keep=_KEEP,
+        names=[(_NAME, "[001]")],
+        blackout_names=True,
+        blackout_other_ink=True,
+    )
+    image, text = _only_image(document.to_bytes())
+    document.close()
+
+    assert (image[325:375, 300:470] == 0).all()
+    assert "[001]" not in text

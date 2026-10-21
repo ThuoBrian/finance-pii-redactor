@@ -9,12 +9,15 @@ parameters are unchanged from the original implementation.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from io import BytesIO
 
 import fitz  # PyMuPDF
+import numpy as np
 
 from finance_redactor.domain.entities import IMAGE_REDACTION_SENTINEL
 from finance_redactor.domain.errors import EncryptedPdfError, UnreadableFileError
+from finance_redactor.domain.ocr import Box
 
 _EXTERNAL_LINK_KINDS = frozenset({fitz.LINK_URI, fitz.LINK_LAUNCH, fitz.LINK_GOTOR})
 
@@ -110,6 +113,101 @@ def _drop_embedded_hits(
 
 def _is_word_char(char: str) -> bool:
     return bool(char) and (char.isalnum() or char == "_")
+
+
+# Rebuilding a scanned page: a pixel darker than this (0 black, 255 white) is
+# ink. Kept well above typical scan shadows' darkness but loose enough to catch
+# a light pen stroke; erring dark-side only adds black, never removes it.
+_INK_LEVEL = 190
+# Ink is tracked in square cells of this many pixels (1 mm at 200 dpi).
+_INK_CELL = 8
+# Marks closer than this many cells (3 mm) belong together: the strokes of one
+# signature, a stamp and its text.
+_MERGE_CELLS = 3
+# A group of marks is blacked out as its whole bounding box, so its shape (the
+# thing that makes a signature identifiable) does not show. A group covering
+# more than this share of the page is usually the ruled lines of a form; it is
+# blacked out mark by mark instead, so the form's text stays readable.
+_MAX_BOX_SHARE = 0.2
+
+
+def _box_slices(box: Box, height: int, width: int) -> tuple[slice, slice]:
+    """Return the (rows, cols) array slices for ``box``, clipped to the image."""
+    x0, y0, x1, y1 = box
+    return (
+        slice(max(0, int(y0)), min(height, int(np.ceil(y1)))),
+        slice(max(0, int(x0)), min(width, int(np.ceil(x1)))),
+    )
+
+
+def _grow(cells: np.ndarray, steps: int) -> np.ndarray:
+    """Return ``cells`` grown by ``steps`` cells in every direction."""
+    grown = cells.copy()
+    for _ in range(steps):
+        step = grown.copy()
+        step[1:, :] |= grown[:-1, :]
+        step[:-1, :] |= grown[1:, :]
+        step[:, 1:] |= grown[:, :-1]
+        step[:, :-1] |= grown[:, 1:]
+        grown = step
+    return grown
+
+
+def _groups(cells: np.ndarray) -> list[list[tuple[int, int]]]:
+    """Return the 4-connected groups of set cells (cell grids are small)."""
+    seen = np.zeros_like(cells)
+    rows, cols = cells.shape
+    groups = []
+    for start in zip(*np.nonzero(cells), strict=True):
+        if seen[start]:
+            continue
+        seen[start] = True
+        stack, members = [start], []
+        while stack:
+            r, c = stack.pop()
+            members.append((int(r), int(c)))
+            for nr, nc in ((r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)):
+                if (
+                    0 <= nr < rows
+                    and 0 <= nc < cols
+                    and cells[nr, nc]
+                    and not seen[nr, nc]
+                ):
+                    seen[nr, nc] = True
+                    stack.append((nr, nc))
+        groups.append(members)
+    return groups
+
+
+def _ink_outside(gray: np.ndarray, keep: Sequence[Box]) -> np.ndarray:
+    """Return the pixels to black out: every mark outside ``keep``, shape hidden.
+
+    Marks are grouped (``_MERGE_CELLS``) and each group is covered by its whole
+    bounding box, unless the box would cover more than ``_MAX_BOX_SHARE`` of
+    the page (a form's ruled lines), in which case only the group's own cells
+    are covered. Kept text inside a box is put back by the caller.
+    """
+    height, width = gray.shape
+    ink = gray < _INK_LEVEL
+    for box in keep:
+        ink[_box_slices(box, height, width)] = False
+    cell = _INK_CELL
+    rows, cols = -(-height // cell), -(-width // cell)
+    padded = np.zeros((rows * cell, cols * cell), dtype=bool)
+    padded[:height, :width] = ink
+    cells: np.ndarray = np.asarray(
+        padded.reshape(rows, cell, cols, cell).any(axis=(1, 3))
+    )
+    out = np.zeros_like(cells)
+    for members in _groups(_grow(cells, _MERGE_CELLS)):
+        rs = [r for r, _ in members]
+        cs = [c for _, c in members]
+        r0, r1, c0, c1 = min(rs), max(rs) + 1, min(cs), max(cs) + 1
+        if (r1 - r0) * (c1 - c0) <= _MAX_BOX_SHARE * cells.size:
+            out[r0:r1, c0:c1] = True
+        else:
+            out[tuple(np.array(members).T)] = True
+    return np.repeat(np.repeat(out, cell, axis=0), cell, axis=1)[:height, :width]
 
 
 class PyMuPdfDocument:
@@ -278,6 +376,59 @@ class PyMuPdfDocument:
                     page.delete_link(link)
                     removed += 1
         return removed
+
+    def render_page(self, page_index: int, dpi: int) -> bytes:
+        """Render one page to a PNG at ``dpi`` (for OCR)."""
+        return self._doc.load_page(page_index).get_pixmap(dpi=dpi).tobytes("png")
+
+    def rebuild_scanned_page(
+        self,
+        page_index: int,
+        dpi: int,
+        *,
+        keep: Sequence[Box],
+        names: Sequence[tuple[Box, str]],
+        blackout_names: bool,
+        blackout_other_ink: bool,
+    ) -> None:
+        """Replace a scanned page with a cleaned picture of itself.
+
+        The page is rendered at ``dpi``, edited as pixels, and put back as a
+        single new image after everything on the page has been removed, so no
+        hidden layer of the original survives. Labels are drawn as real text
+        on top. Boxes are in the rendered page's pixels.
+        """
+        page = self._doc.load_page(page_index)
+        pix = page.get_pixmap(dpi=dpi, colorspace=fitz.csRGB, alpha=False)
+        height, width = pix.height, pix.width
+        image = np.frombuffer(pix.samples, dtype=np.uint8).reshape(height, width, 3)
+        original = image
+        image = image.copy()
+        if blackout_other_ink:
+            image[_ink_outside(image.mean(axis=2), keep)] = 0
+            # A blacked-out box can overlap printed text the OCR read with
+            # confidence (a signature across a line); put that text back.
+            for box in keep:
+                rows, cols = _box_slices(box, height, width)
+                image[rows, cols] = original[rows, cols]
+        for box, _label in names:
+            image[_box_slices(box, height, width)] = 0 if blackout_names else 255
+        cleaned = fitz.Pixmap(fitz.csRGB, width, height, image.tobytes(), False)
+
+        page.add_redact_annot(page.rect, fill=(1, 1, 1))
+        page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_REMOVE)
+        page.insert_image(page.rect, stream=cleaned.tobytes("png"))
+        if not blackout_names:
+            scale = 72 / dpi
+            for (x0, y0, x1, y1), label in names:
+                height_pt = (y1 - y0) * scale
+                page.insert_text(
+                    (x0 * scale + 1, y1 * scale - height_pt * 0.2),
+                    label,
+                    fontname="helv",
+                    fontsize=max(6.0, min(11.0, height_pt * 0.75)),
+                    color=(0, 0, 0),
+                )
 
     def to_bytes(self) -> bytes:
         """Render the redacted document to bytes, without the original's metadata.

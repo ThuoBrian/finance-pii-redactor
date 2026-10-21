@@ -110,6 +110,7 @@ def _options_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> N
     state.setdefault("pdf_style", RedactionStyle.PSEUDONYMIZE)
     state.setdefault("pdf_custom_words", "")
     state.setdefault("pdf_redact_images", True)
+    state.setdefault("pdf_read_scans", True)
 
     with st.expander("Customize: labels or black boxes, words to add, images"):
         st.radio(
@@ -149,6 +150,20 @@ def _options_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> N
             ),
             key="pdf_redact_images",
         )
+        st.checkbox(
+            "Read the text on scanned pages (OCR)",
+            disabled=not pdf_service.can_read_scans,
+            help=(
+                "A scanned page is a picture of text. With this on, the printed "
+                "text is read, names in it are redacted, and anything that could "
+                "not be read with confidence (signatures, handwriting, stamps) "
+                "is blacked out when 'black out images' is on. Slower: about two "
+                "seconds a page."
+                if pdf_service.can_read_scans
+                else "OCR is not installed on this computer; re-run the installer."
+            ),
+            key="pdf_read_scans",
+        )
 
     style = state["pdf_style"]
     redact_images = bool(state["pdf_redact_images"])
@@ -167,8 +182,13 @@ def _options_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> N
     if st.button("Redact my file", type="primary", width="stretch"):
         uploaded.seek(0)
         try:
-            with st.status("Scanning the PDF...", expanded=False) as status:
-                scan_result = pdf_service.scan(uploaded)
+            with st.status(
+                "Scanning the PDF (scanned pages take a few seconds each)...",
+                expanded=False,
+            ) as status:
+                scan_result = pdf_service.scan(
+                    uploaded, read_scans=bool(state["pdf_read_scans"])
+                )
                 uploaded.seek(0)
                 status.update(label="Building the redacted PDF...")
                 result = pdf_service.redact(
@@ -249,7 +269,14 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
     # opening anything.
     scanned = state.pdf_scan_result.scanned_pages
     if scanned:
-        st.warning(scanned_pages_warning(scanned, total_pages, run["redact_images"]))
+        st.warning(
+            scanned_pages_warning(
+                scanned,
+                total_pages,
+                run["redact_images"],
+                read=state.pdf_scan_result.read_pages,
+            )
+        )
     if not blackout:
         bracketed = state.get("pdf_bracketed", 0)
         if bracketed:

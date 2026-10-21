@@ -22,6 +22,8 @@ dependencies = [
     # `python -m spacy download` step in run.bat / run.sh.
     "en_core_web_lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl",
     "pyahocorasick>=2.3.1",
+    "rapidocr>=3.10,<4",
+    "onnxruntime>=1.31,<2",
 ]
 
 
