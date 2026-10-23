@@ -21,9 +21,9 @@ the `version` field in `pyproject.toml`.
   headless and Shapely).
 - **The PDF Review step says which pages are scans.** A scanned page (images,
   no text layer) used to pass through with no word about it. The warning
-  lists the pages and says what happened to them: fully black with "Black out
-  images" on, unredacted with it off. Reading the text inside a scan (OCR) is
-  the next step.
+  lists the pages and says what happened to them: read with OCR (check them
+  in the download), or, for pages OCR did not read, fully black with "Black
+  out images" on and unredacted with it off.
 - **An optional PDF mapping with names.** Under the PDF mapping download there
   is now a toggle, "Also prepare a mapping with names (Confidential)", off by
   default. Switched on, it adds a second download, `<name>_crosswalk.csv`, with
