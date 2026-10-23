@@ -13,7 +13,7 @@ dependencies = [
     "presidio-analyzer>=2.2.354,<3.0",
     "spacy>=3.7.0,<4.0",
     "streamlit>=1.52.0,<2.0",
-    "pymupdf>=1.24.0,<2.0",
+    "pymupdf>=1.24.0,<3.0",
     # Import name is "docx". Note: there is a separate, unmaintained "docx"
     # package on PyPI - this must stay "python-docx".
     "python-docx>=1.1.0,<2.0",
