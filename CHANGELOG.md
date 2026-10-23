@@ -176,6 +176,13 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **`run.bat` reports first-time setup problems correctly.** It read the
+  wrong exit code, so on a machine without `uv` it said the setup helper
+  failed even when it installed fine, and a failed program setup was
+  reported as "Program is ready" before the app failed to start. It now
+  checks the real result and, when setup fails, shows the setup log (saved
+  as `finance-redact-setup.log` in your temp folder) the way `run.sh`
+  already did. Both launchers now mention Word files in their banner.
 - **"Continue to download" waits until review changes are applied.** It used
   to go ahead with ticks that had not been applied, so the download was built
   from the older choice. In one case that was a leak: a term unticked and

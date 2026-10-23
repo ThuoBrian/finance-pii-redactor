@@ -34,7 +34,7 @@ print_banner() {
     echo -e " ${IPA_GREEN}====================================================================${RESET}"
     echo ""
     echo -e "     ${BOLD}${WHITE}FINANCE PII REDACTOR${RESET}"
-    echo -e "     ${DIM}Removes names and organizations from your Excel and PDF files.${RESET}"
+    echo -e "     ${DIM}Removes names and organizations from your Excel, PDF and Word files.${RESET}"
     echo -e "     ${BOLD}${IPA_GREEN}Runs 100% on your computer - nothing is ever uploaded.${RESET}"
     echo ""
     echo -e " ${IPA_GREEN}====================================================================${RESET}"
@@ -106,7 +106,7 @@ print_step 2 2 "Preparing the program"
 if [ ! -d "$APP_DIR/.venv" ]; then
     print_info "First-time setup: installing the program and language model (one-time)."
     (uv sync --python 3.12 --project "$APP_DIR" >/tmp/finance-redact-setup.log 2>&1) &
-    spinner $! "Downloading about 400 MB, this can take a few minutes..."
+    spinner $! "Large download, this can take a few minutes..."
     wait $! || {
         print_error "The program could not be set up."
         print_hint "Please check your internet connection, then run this again."

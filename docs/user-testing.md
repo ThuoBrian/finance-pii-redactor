@@ -38,8 +38,8 @@ irm https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/instal
 curl -fsSL https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/install.sh | bash
 ```
 
-Pick a folder when asked, then wait — first run downloads ~400 MB (the
-language model) and needs internet once. The app opens in your browser when
+Pick a folder when asked, then wait — first run downloads several hundred MB
+(the language model and OCR) and needs internet once. The app opens in your browser when
 it's ready.
 
 If something goes wrong here, check **[troubleshooting.md's "Environment and

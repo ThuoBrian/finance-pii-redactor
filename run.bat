@@ -25,7 +25,8 @@ if %errorlevel% neq 0 (
     call :info "First-time setup: installing a small helper (one-time)."
     call :wait "This can take a minute. Please leave this window open..."
     powershell -ExecutionPolicy Bypass -Command "irm https://astral.sh/uv/install.ps1 | iex" >nul 2>&1
-    if %errorlevel% neq 0 (
+    rem !errorlevel!, not %errorlevel%: inside ( ) the latter is read before the block runs
+    if !errorlevel! neq 0 (
         call :error "Setup helper could not be installed."
         call :hint "Please check your internet connection, then run this again."
         call :bye
@@ -46,11 +47,15 @@ if "%APPDIR:~-1%"=="\" set "APPDIR=%APPDIR:~0,-1%"
 call :stepnum 2 3 "Preparing the program"
 if not exist "%APPDIR%\.venv" (
     call :info "First-time setup: installing the program and language model (one-time)."
-    call :wait "This downloads about 400 MB and can take a few minutes. Please leave this window open..."
-    uv sync --python 3.12 --project "%APPDIR%" >nul 2>&1
-    if %errorlevel% neq 0 (
+    call :wait "This is a large download and can take a few minutes. Please leave this window open..."
+    set "SETUPLOG=%TEMP%\finance-redact-setup.log"
+    uv sync --python 3.12 --project "%APPDIR%" >"!SETUPLOG!" 2>&1
+    if !errorlevel! neq 0 (
         call :error "The program could not be set up."
         call :hint "Please check your internet connection, then run this again."
+        echo.
+        echo Setup log ^(!SETUPLOG!^):
+        type "!SETUPLOG!"
         call :bye
         exit /b 1
     )
@@ -85,7 +90,7 @@ echo.
 echo  %IPA_GREEN%====================================================================%RESET%
 echo.
 echo      %BOLD%%WHITE%FINANCE PII REDACTOR%RESET%
-echo      %DIM%Removes names and organizations from your Excel and PDF files.%RESET%
+echo      %DIM%Removes names and organizations from your Excel, PDF and Word files.%RESET%
 echo      %BOLD%%IPA_GREEN%Runs 100%% on your computer - nothing is ever uploaded.%RESET%
 echo.
 echo  %IPA_GREEN%====================================================================%RESET%
