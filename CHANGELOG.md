@@ -74,6 +74,16 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **The installers look like the launchers and update more safely.**
+  `install.ps1` and `install.sh` now use the same green banner and numbered
+  steps as `run.bat`/`run.sh`, and they finish with a summary: where the app
+  is installed, how to open it again, and how to update. Before replacing an
+  existing install they ask first, and they refuse to touch a
+  `finance-pii-redactor` folder that is not an install. The old copy is moved
+  aside, not deleted, until the new one is in place, so a failed download or
+  a running app no longer leaves you with no install at all. On Windows, the
+  download is faster and errors show as a short message instead of a stack
+  trace.
 - **The app shows one step at a time.** Upload, Options, Review and Download
   each get their own screen, with **Back** and **Continue** buttons and the
   step tracker on top; choices made under Options are kept when you go back.
