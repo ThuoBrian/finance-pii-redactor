@@ -1,15 +1,39 @@
-"""AppTest checks for the review editor's layout: search, clean run, Apply."""
+"""AppTest checks for the review editor: search, clean run, ticks, Apply."""
 
 from __future__ import annotations
 
 from streamlit.testing.v1 import AppTest
 
 
-def _editor(clean: bool = False) -> None:
+def _editor(clean: bool = False, fake_clicks: bool = False) -> None:
+    from contextlib import nullcontext
+    from typing import Any
+    from unittest.mock import patch
+
+    import pandas as pd
     import streamlit as st
 
     from finance_redactor.domain.entities import DetectionSource, Finding
     from finance_redactor.presentation.exclusion_view import render_deselect_editor
+    from finance_redactor.presentation.presenters import REDACT_COLUMN
+
+    state = st.session_state
+
+    def fake_editor(data: pd.DataFrame, *, key: str, **_: Any) -> pd.DataFrame:
+        # AppTest cannot click inside a data_editor, so this stands in for
+        # one. Like the real widget, it is a new widget whenever its input
+        # data changes, and its edits so far - including the click that
+        # caused this run - are lost.
+        edits = [*state.get("fake_edits", []), *state.pop("fake_click", [])]
+        identity = (key, data.to_json())
+        if state.get("fake_identity") != identity:
+            state.fake_identity, edits = identity, []
+        state.fake_edits = edits
+        edited = data.copy()
+        for term in edits:
+            row = edited["Detected text"] == term
+            edited.loc[row, REDACT_COLUMN] = ~edited.loc[row, REDACT_COLUMN]
+        return edited
 
     def finding(text: str, source: DetectionSource) -> Finding:
         return Finding(
@@ -27,7 +51,9 @@ def _editor(clean: bool = False) -> None:
             finding("Salaries", DetectionSource.MODEL),
         ]
     applied = st.session_state.get("applied", frozenset())
-    result = render_deselect_editor(findings, key_prefix="t", excluded=applied)
+    fake = patch.object(st, "data_editor", fake_editor) if fake_clicks else None
+    with fake or nullcontext():
+        result = render_deselect_editor(findings, key_prefix="t", excluded=applied)
     if result != applied:  # what the flows do: rebuild, then rerun
         st.session_state.applied = result
         st.rerun()
@@ -88,3 +114,16 @@ def test_apply_confirms_once_and_then_the_notice_goes() -> None:
     ]
     at.run()
     assert not [s for s in at.success if s.value.startswith("Rebuilt the file")]
+
+
+def test_each_single_click_on_a_tick_box_counts() -> None:
+    at = AppTest.from_function(
+        _editor, kwargs={"fake_clicks": True}, default_timeout=30
+    ).run()
+
+    for term in ("Jane Doe", "Salaries"):
+        at.session_state["fake_click"] = [term]
+        at.run()
+
+    assert not at.exception
+    assert _apply_buttons(at) == ["Apply changes (2 pending)"]
