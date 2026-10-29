@@ -176,6 +176,9 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **Review tick boxes respond to a single click.** Every other tick or
+  untick in the "Hide in output?" column was ignored, so a box seemed to
+  need a double click. Each click now registers.
 - **`run.bat` reports first-time setup problems correctly.** It read the
   wrong exit code, so on a machine without `uv` it said the setup helper
   failed even when it installed fine, and a failed program setup was

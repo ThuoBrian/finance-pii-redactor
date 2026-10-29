@@ -91,6 +91,12 @@ def render_deselect_editor(
     it. ``excluded`` is the *applied* set; a change of it, or of the
     findings, resets the pending set to it.
 
+    The editor's input is built from ``base``, a copy of the pending set taken
+    at the last re-key, never from the live one. Streamlit counts the input
+    data as part of the editor's identity, so feeding each tick back in would
+    make the next run a new widget and drop the click that triggered it:
+    every other tick would be lost.
+
     Not wrapped in a form, so the Apply button can show a pending count and
     turn primary the moment a tick changes. A review pass still costs one
     rebuild, not one per tick: ``st.data_editor`` reruns the script on every
@@ -106,13 +112,18 @@ def render_deselect_editor(
     filter_key = f"{key_prefix}_review_filter"
     search_key = f"{key_prefix}_review_search"
     notice_key = f"{key_prefix}_review_notice"
+    base_key = f"{key_prefix}_review_base"
+
+    def rekey(new_pending: frozenset[str]) -> None:
+        state[pending_key] = new_pending
+        state[base_key] = new_pending
+        state[version_key] = state.get(version_key, 0) + 1
 
     overview = detection_editor_dataframe(findings, excluded)
     signature = (frozenset(term_key(t) for t in overview["Detected text"]), excluded)
     if state.get(signature_key) != signature:
         state[signature_key] = signature
-        state[pending_key] = excluded
-        state[version_key] = state.get(version_key, 0) + 1
+        rekey(excluded)
         state.pop(filter_key, None)
         state.pop(search_key, None)
     pending: frozenset[str] = state[pending_key]
@@ -159,7 +170,7 @@ def render_deselect_editor(
         view = (choice, search)
         if view != state.get(f"{filter_key}_last"):
             state[f"{filter_key}_last"] = view
-            state[version_key] += 1
+            rekey(pending)
 
         shown_all = search_editor_rows(filter_editor_rows(overview, choice), search)
         shown_keys = frozenset(term_key(t) for t in shown_all["Detected text"])
@@ -180,8 +191,7 @@ def render_deselect_editor(
         ):
             pending, changed = pending - shown_keys, True
         if changed:
-            state[pending_key] = pending
-            state[version_key] += 1
+            rekey(pending)
 
         # The only editable widget in this codebase. Everything else is
         # st.dataframe, deliberately: those tables are read-only records.
@@ -189,7 +199,9 @@ def render_deselect_editor(
         # operator overrule a detection, and a tick box beside the offending
         # row is where they will look for it.
         table = search_editor_rows(
-            filter_editor_rows(detection_editor_dataframe(findings, pending), choice),
+            filter_editor_rows(
+                detection_editor_dataframe(findings, state[base_key]), choice
+            ),
             search,
         )
         edited = st.data_editor(
