@@ -49,14 +49,17 @@ desktop.ini
 .env
 .env.*
 
-# ── Claude Code local files ──────────────────────────────────────────────────
+# ── Agent instruction files (Claude Code and others) ─────────────────────────
 # Kept local rather than public: CLAUDE.md documents detection internals/
 # limitations (e.g. exactly what the PDF flow does and doesn't auto-detect) -
 # not a secret, but not something we want to hand a public roadmap of to
 # anyone who clones/forks this repo either. Untracked as of 2026-08-25; still
 # read locally by Claude Code, just no longer synced to GitHub going forward.
+# AGENTS.md followed on 2026-10-30 for the same reason; the rules that matter
+# to every contributor are in CONTRIBUTING.md and enforced by tests.
 .claude/
 CLAUDE.md
+AGENTS.md
 
 # ── Legacy source (excluded from packaging too) ──────────────────────────────
 _legacy/
