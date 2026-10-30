@@ -24,7 +24,7 @@
 - [ ] Master list / data handling (`data/`, `FPR_MASTER_LIST_DIR` / in-app setup dialog)
 - [ ] Launcher/installer scripts (`run.bat`, `run.sh`, `install.ps1`, `install.sh`)
 - [ ] Tests (`tests/`)
-- [ ] Documentation (`README.md`, `ARCHITECTURE.md`, `AGENTS.md`, `docs/troubleshooting.md`, `data/README.md`)
+- [ ] Documentation (`README.md`, `ARCHITECTURE.md`, `docs/troubleshooting.md`, `data/README.md`)
 - [ ] CI / tooling (`.github/workflows/`, `pyproject.toml`)
 - [ ] None of the above
 

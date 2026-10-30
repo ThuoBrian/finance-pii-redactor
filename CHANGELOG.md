@@ -74,6 +74,8 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **`AGENTS.md` is no longer tracked.** It stays local, like `CLAUDE.md`. The
+  rules every contributor needs are in `CONTRIBUTING.md`.
 - **The installers look like the launchers and update more safely.**
   `install.ps1` and `install.sh` now use the same green banner and numbered
   steps as `run.bat`/`run.sh`, and they finish with a summary: where the app
