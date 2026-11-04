@@ -15,6 +15,7 @@ from streamlit.testing.v1 import AppTest
 
 
 def _flow(fmt: str) -> None:
+    import re
     from io import BytesIO
 
     import fitz
@@ -40,25 +41,27 @@ def _flow(fmt: str) -> None:
     from finance_redactor.presentation.pdf_view import run_pdf_flow
 
     class Detector:
+        # "Jane Doe", plus "Sample01" and so on for the long-list workbook.
         def analyze(self, text, entities, threshold):
-            i = text.find("Jane Doe")
-            if i == -1:
-                return []
             return [
                 PiiDetection(
                     entity_type="PERSON",
-                    span=Span(i, i + 8),
+                    span=Span(m.start(), m.end()),
                     score=0.85,
-                    text="Jane Doe",
+                    text=m.group(),
                     source=DetectionSource.MODEL,
                 )
+                for m in re.finditer(r"Jane Doe|Sample\d{2}", text)
             ]
 
     wizard.keep_option_choices()
     steps = st.empty()
-    if fmt == "excel":
+    if fmt in ("excel", "excel-long"):
         buffer = BytesIO()
-        pd.DataFrame({"notes": ["Paid Jane Doe", "ok"]}).to_excel(buffer, index=False)
+        notes = ["Paid Jane Doe", "ok"]
+        if fmt == "excel-long":  # long enough for the filter and bulk buttons
+            notes += [f"Paid Sample{n:02d}" for n in range(1, 13)]
+        pd.DataFrame({"notes": notes}).to_excel(buffer, index=False)
         buffer.seek(0)
         buffer.name = "made_up.xlsx"
         service = RedactExcelService(
@@ -303,6 +306,8 @@ def test_a_scanned_pdf_page_is_reported_on_the_review_step() -> None:
 
     warnings = [w.value for w in at.warning]
     assert any("1 of 1 page is a scan" in w and "fully black" in w for w in warnings)
+    # One "Before you share" box, not a stack of separate ones.
+    assert len(warnings) == 1 and warnings[0].startswith("**Before you share")
 
 
 def _continue_button(at: AppTest):
@@ -310,28 +315,28 @@ def _continue_button(at: AppTest):
 
 
 def test_continue_waits_until_review_changes_are_applied() -> None:
-    at = _start("excel")
+    at = _start("excel-long")
     _click(at, "Redact my file")
 
-    _click(at, "Untick all shown (1)")
+    _click(at, "Untick all shown (13)")
 
     assert _continue_button(at).disabled
     assert any("not applied yet" in i.value for i in at.info)
-    _click(at, "Apply changes (1 pending)")
+    _click(at, "Apply changes (13 pending)")
     assert not _continue_button(at).disabled
 
 
 def test_a_re_ticked_term_cannot_slip_through_unapplied() -> None:
     """Untick and apply, then re-tick to hide it again: Continue must wait."""
-    at = _start("excel")
+    at = _start("excel-long")
     _click(at, "Redact my file")
-    _click(at, "Untick all shown (1)")
-    _click(at, "Apply changes (1 pending)")
+    _click(at, "Untick all shown (13)")
+    _click(at, "Apply changes (13 pending)")
     # Apply reruns the script mid-run, and AppTest keeps a stale copy of the
     # buttons from before it; one more run gives a clean tree to click in.
     at.run()
 
-    _click(at, "Tick all shown (1)")
+    _click(at, "Tick all shown (13)")
 
     assert _continue_button(at).disabled
 

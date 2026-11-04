@@ -5,7 +5,7 @@ from __future__ import annotations
 from streamlit.testing.v1 import AppTest
 
 
-def _editor(clean: bool = False, fake_clicks: bool = False) -> None:
+def _editor(clean: bool = False, fake_clicks: bool = False, long: bool = True) -> None:
     from contextlib import nullcontext
     from typing import Any
     from unittest.mock import patch
@@ -50,6 +50,11 @@ def _editor(clean: bool = False, fake_clicks: bool = False) -> None:
             finding("Jane Doe", DetectionSource.MODEL),
             finding("Salaries", DetectionSource.MODEL),
         ]
+    if long:  # past one screen of rows, so the filter and bulk buttons show
+        findings += [
+            finding(f"Filler Name {n:02d}", DetectionSource.MASTER_LIST)
+            for n in range(1, 13)
+        ]
     applied = st.session_state.get("applied", frozenset())
     fake = patch.object(st, "data_editor", fake_editor) if fake_clicks else None
     with fake or nullcontext():
@@ -59,9 +64,9 @@ def _editor(clean: bool = False, fake_clicks: bool = False) -> None:
         st.rerun()
 
 
-def _run(clean: bool = False) -> AppTest:
+def _run(clean: bool = False, long: bool = True) -> AppTest:
     return AppTest.from_function(
-        _editor, kwargs={"clean": clean}, default_timeout=30
+        _editor, kwargs={"clean": clean, "long": long}, default_timeout=30
     ).run()
 
 
@@ -98,19 +103,19 @@ def test_a_clean_run_says_so_and_folds_the_table_away() -> None:
 
     assert not at.exception
     assert any("Nothing here is a guess" in s.value for s in at.success)
-    assert [e.label for e in at.expander] == ["How to read this table", "Review anyway"]
+    assert [e.label for e in at.expander] == ["How to use this list", "Review anyway"]
 
 
 def test_apply_confirms_once_and_then_the_notice_goes() -> None:
     at = _run()
-    _press(at, "Untick all shown (3)")
+    _press(at, "Untick all shown (15)")
 
-    _press(at, "Apply changes (3 pending)")
+    _press(at, "Apply changes (15 pending)")
 
     assert not at.exception
     notices = [s.value for s in at.success if s.value.startswith("Rebuilt the file")]
     assert notices == [
-        "Rebuilt the file. 3 terms are left visible; they are listed above the download."
+        "Rebuilt the file. 15 terms are left visible; they are listed above the download."
     ]
     at.run()
     assert not [s for s in at.success if s.value.startswith("Rebuilt the file")]
@@ -127,3 +132,22 @@ def test_each_single_click_on_a_tick_box_counts() -> None:
 
     assert not at.exception
     assert _apply_buttons(at) == ["Apply changes (2 pending)"]
+
+
+def test_a_short_list_has_no_filter_search_or_bulk_buttons() -> None:
+    at = _run(long=False)
+
+    assert not at.exception
+    assert not at.text_input
+    assert not [b for b in at.button if "all shown" in b.label]
+    assert [t.label for t in at.toggle] == ["Show details"]
+
+
+def test_show_details_keeps_pending_ticks() -> None:
+    at = _run()
+    _press(at, "Untick all shown (15)")
+
+    at.toggle[0].set_value(True).run()
+
+    assert not at.exception
+    assert _apply_buttons(at) == ["Apply changes (15 pending)"]

@@ -126,7 +126,7 @@ This file records known errors, edge cases, and their solutions when developing 
 ### An ordinary word is being redacted
 
 - **Symptom:** An everyday word is replaced in the output - `salaries`, `rent`, `transport`, `bank`. It happens on every occurrence, in every document.
-- **First, find out why it matched.** Open **Check what was detected** (Review step, **Review** tab) and read the **Source** column for that word. It tells you which of three different problems you have:
+- **First, find out why it matched.** Open **Check what was detected** (Review step, **Review** tab) and read the **Why it was found** column for that word (or turn on **Show details** for the **Source** column). It tells you which of three different problems you have:
   - **`master list`** - the workbook has a row whose `Name` is that word. Someone added a payee or account called `Salaries`, and the tool matches master-list names exactly, so every occurrence of the word is now a hit in all three formats. This is the common cause in a finance master list.
   - **`model`** - spaCy guessed. Possible in all three formats. Often an ALL-CAPS label (`SALARIES`) that the recasing pass turns into a name-shaped `Salaries` (see "ALL-CAPS names and acronym false positives" below).
   - **`custom word`** - it came from the **Missed something? Add words or phrases** box on the Review step. Remove it there and click **Add and rebuild**; the box is not saved between sessions.

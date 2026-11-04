@@ -82,6 +82,18 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **The Review list is simpler.** It now shows three columns: the tick box,
+  the term, and **Why it was found**, in plain words ("On your master list",
+  "Looks like a name. Check it: it is an ordinary English word"). **Show
+  details** brings back the kind, source, confidence, hint and count. The
+  filter, search and "Untick all" buttons appear only once the list is longer
+  than one screen. Tabs are renamed: **Mapping** is now **Code list**, and
+  **Occurrences** is now **Where found**.
+- **One "Before you share this PDF" box replaces up to three PDF warnings.**
+  Scanned pages and mapping rows with no Internal ID are listed together above
+  the list. The box is yellow only when something may still show. The note
+  about the PDF's own bracketed numbers moved to the Download step, next to
+  the code list it concerns.
 - **Words to add moved from Options to Review (PDF and Word).** The box used
   to ask for missed words before anything had been found. It's now on the
   Review step, under "Missed something? Add words or phrases", so a name that

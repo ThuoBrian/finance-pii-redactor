@@ -29,7 +29,6 @@ from finance_redactor.presentation.crosswalk_view import (
     PDF_NAMES_TOGGLE_KEY,
     render_pdf_mapping_download,
     render_pdf_mapping_section,
-    render_pdf_mapping_warnings,
     render_pdf_names_download,
 )
 from finance_redactor.presentation.exclusion_view import (
@@ -40,6 +39,7 @@ from finance_redactor.presentation.exclusion_view import (
 from finance_redactor.presentation.presenters import (
     findings_dataframe,
     merge_findings,
+    pdf_mapping_notes,
     plural,
     review_tab_labels,
     scanned_pages_warning,
@@ -257,12 +257,13 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
     elif blackout:
         st.caption("Matched areas will be blacked out in the downloaded PDF.")
 
-    # Warnings stay above the tabs: an unresolved item is undecodable later,
-    # and a scanned page was not read at all; both deserve to be seen without
-    # opening anything.
+    # One box above the list, not a stack of them: a scanned page and an
+    # item the code list can't decode later are both worth seeing before
+    # the file goes anywhere. Yellow only when something may show.
     scanned = state.pdf_scan_result.scanned_pages
+    notes = []
     if scanned:
-        st.warning(
+        notes.append(
             scanned_pages_warning(
                 scanned,
                 total_pages,
@@ -271,17 +272,10 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
             )
         )
     if not blackout:
-        bracketed = state.get("pdf_bracketed", 0)
-        if bracketed:
-            st.warning(
-                "This document already contained "
-                f"{plural(bracketed, 'bracketed number')} of its own, such "
-                "as footnote markers or line-item numbers. Redaction labels "
-                "look the same ([001]), so a reader of the output may not "
-                "be able to tell which brackets are redactions. The label "
-                "mapping lists every label this tool actually inserted."
-            )
-        render_pdf_mapping_warnings(state.pdf_crosswalk)
+        notes += pdf_mapping_notes(state.pdf_crosswalk)
+    if notes:
+        box = st.warning if scanned else st.info
+        box("**Before you share this PDF**\n\n" + "\n\n".join(notes))
 
     columns_applied = state.get("pdf_columns_applied", frozenset())
     columns = _column_picker(state.pdf_scan_result.table_columns, columns_applied)
@@ -418,6 +412,16 @@ def _download_step(master_list_fingerprint: str, steps: Any) -> None:
             render_pdf_mapping_download(
                 state.pdf_crosswalk, base_name, master_list_fingerprint
             )
+            bracketed = state.get("pdf_bracketed", 0)
+            if bracketed:
+                # Moved here from Review: it is about reading the output,
+                # next to the file that tells the labels apart.
+                st.caption(
+                    "This PDF already had "
+                    f"{plural(bracketed, 'bracketed number')} of its own (such "
+                    "as footnote markers) that look like the [001] labels. "
+                    "The code list names every label this tool added."
+                )
     with private:
         if blackout:
             st.caption("Black out leaves nothing to decode, so there is no file here.")

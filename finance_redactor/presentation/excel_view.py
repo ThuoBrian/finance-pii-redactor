@@ -258,7 +258,7 @@ def _review_step(excel_service: RedactExcelService, steps: Any) -> None:
             st.caption(
                 f"Showing the first {plural(PREVIEW_MAX_ROWS, 'row')} of "
                 f"{len(df):,}. Highlighted cells below that: {n_hidden:,} "
-                "(listed under Occurrences). The download has every row."
+                "(listed under Where found). The download has every row."
             )
     with tab_mapping:
         render_crosswalk_section(state.crosswalk)
