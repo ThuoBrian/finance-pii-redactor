@@ -255,7 +255,7 @@ This file records known errors, edge cases, and their solutions when developing 
 - **One value can still be shown:** untick it in **Hide in output?** like any other term.
 - **Known limits:**
   - A table drawn without ruling lines can be missed on a text page.
-  - The scanned-page grouping is a guess. A two-column page layout can show up as a "table", and a table with very uneven rows can be missed. Neither leaves anything less redacted than before; it only changes the choices offered.
+  - The scanned-page grouping is a guess. A two-column page layout can show up as a "table", and a table with uneven rows can be missed. Neither leaves anything less redacted than before; it only changes the choices offered.
   - Columns with the same header merge into one choice across tables and pages.
   - A column with no header shows as `Column 1`, `Column 2` and so on.
   - Excel and Word already work by column or cell, so this is PDF-only.
