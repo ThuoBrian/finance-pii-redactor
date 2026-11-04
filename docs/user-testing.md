@@ -114,7 +114,11 @@ what happened instead — then file it.
 - [ ] An email address and a website URL redact automatically, with nothing
   typed in.
 - [ ] A name/organization **that is on your test master list** redacts with
-  nothing typed into "Additional words/phrases to redact".
+  nothing typed into the Review step's "Missed something? Add words or
+  phrases" box.
+- [ ] A made-up name the scan missed, typed into that box on the Review step,
+  is redacted after **Add and rebuild**, with no second scan, and shows up in
+  the review list.
 - [ ] A name that is **not** on the master list still redacts, with a flagged
   row in the mapping (see
   [troubleshooting.md](troubleshooting.md#pdf-detects-names-the-same-way-excel-and-word-do)).
@@ -170,6 +174,8 @@ what happened instead — then file it.
   [troubleshooting.md](troubleshooting.md#a-name-inside-a-word-text-box-smartart-or-embedded-object-is-not-detected)).
 - [ ] Downloaded document keeps original formatting (bold, tables, etc.)
   around the redacted text.
+- [ ] A made-up word typed into "Missed something? Add words or phrases" on
+  the Review step is redacted after **Add and rebuild**.
 
 ### Rejecting a false positive
 

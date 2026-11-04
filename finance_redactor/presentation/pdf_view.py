@@ -17,7 +17,6 @@ flagged IDs only.
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 import streamlit as st
@@ -50,10 +49,12 @@ from finance_redactor.presentation.session import (
     reset_on_new_upload,
 )
 from finance_redactor.presentation.steps import show_step
+from finance_redactor.presentation.words_view import (
+    render_words_box,
+    typed_words,
+    unapplied_words_note,
+)
 
-# A typed word that is itself a label, e.g. "[001]". Redacting it would mean
-# redacting this tool's own output on a second pass.
-_LABEL_SHAPED = re.compile(r"^\[\d+\]$")
 # The Review step's table-column picker (its live value).
 _COLUMNS_KEY = "pdf_columns_pending"
 
@@ -109,17 +110,17 @@ def _options_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> N
     st.subheader("Options")
     st.caption(
         "Names, organizations, emails, websites, bank details and addresses "
-        "are found automatically. Images are blacked out."
+        "are found automatically. Images are blacked out. Missed a name? "
+        "You can add it on the next step."
     )
     # Values live in session state (seeded here, kept by wizard.keep_option_
     # choices), never in a widget default: passing both raises a warning.
     state = st.session_state
     state.setdefault("pdf_style", RedactionStyle.PSEUDONYMIZE)
-    state.setdefault("pdf_custom_words", "")
     state.setdefault("pdf_redact_images", True)
     state.setdefault("pdf_read_scans", True)
 
-    with st.expander("Customize: labels or black boxes, words to add, images"):
+    with st.expander("Customize: labels or black boxes, images, scanned pages"):
         st.radio(
             "Redaction style",
             options=[RedactionStyle.PSEUDONYMIZE, RedactionStyle.BLACKOUT],
@@ -135,17 +136,6 @@ def _options_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> N
                 "black box instead, with nothing to decode."
             ),
             key="pdf_style",
-        )
-        st.text_area(
-            "Words or phrases to add (optional)",
-            help=(
-                "One per line. Email addresses, websites, and any name already "
-                "on the master list are caught automatically - you don't need "
-                "to list those. Use this for anything else: a name not yet on "
-                "the master list, a project codename, a case number. Not saved "
-                "anywhere; re-enter next time if needed."
-            ),
-            key="pdf_custom_words",
         )
         st.checkbox(
             "Also black out images / logos",
@@ -174,17 +164,8 @@ def _options_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> N
 
     style = state["pdf_style"]
     redact_images = bool(state["pdf_redact_images"])
-    custom_words = [
-        w.strip() for w in state["pdf_custom_words"].splitlines() if w.strip()
-    ]
-    if any(_LABEL_SHAPED.match(w) for w in custom_words):
-        st.warning(
-            "One of your words to redact looks like a redaction label (e.g. "
-            "`[001]`). That is the shape this tool writes into the PDF, so "
-            "redacting it would redact the tool's own output. Remove it "
-            "unless the document genuinely contains that text for another "
-            "reason."
-        )
+    # Words typed for an earlier file in this session carry over.
+    custom_words = typed_words("pdf")
 
     if st.button("Redact my file", type="primary", width="stretch"):
         uploaded.seek(0)
@@ -304,6 +285,8 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
 
     columns_applied = state.get("pdf_columns_applied", frozenset())
     columns = _column_picker(state.pdf_scan_result.table_columns, columns_applied)
+    words_applied: list[str] = run["custom_words"]
+    words = render_words_box("pdf", words_applied, warn_label_shaped=True)
 
     review_findings = state.get("pdf_all_findings", [])
     tab_review, tab_mapping, tab_occurrences = st.tabs(
@@ -331,17 +314,18 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
     if (
         excluded != state.get("pdf_excluded_applied", frozenset())
         or columns != columns_applied
+        or words != words_applied
     ):
         # No detector call happens here at all: ``pdf_scan_result`` was
         # computed once, on the Redact click, and this just reruns the
         # cheap, detector-free redaction-building/apply step over it with
-        # the new exclude set and column choice.
+        # the new exclude set, column choice and typed words.
         uploaded.seek(0)
         with st.spinner("Rebuilding with your changes..."):
             rerun = pdf_service.redact(
                 uploaded,
                 state.pdf_scan_result,
-                run["custom_words"],
+                words,
                 style=run["style"],
                 redact_images=run["redact_images"],
                 exclude=excluded,
@@ -351,13 +335,14 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
         state.pdf_findings = rerun.findings
         state.pdf_crosswalk = rerun.crosswalk
         state.pdf_excluded_applied = excluded
-        if columns != columns_applied:
-            # A newly chosen column brings cell values the first run never
-            # found; add them so each one can still be unticked.
+        if columns != columns_applied or words != words_applied:
+            # A newly chosen column or typed word brings terms the first run
+            # never found; add them so each one can still be unticked.
             state.pdf_all_findings = merge_findings(
                 state.get("pdf_all_findings", []), rerun.findings
             )
             state.pdf_columns_applied = columns
+            run["custom_words"] = words
         st.rerun()
 
     wizard.nav(
@@ -365,7 +350,8 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
         forward=("Continue to download", wizard.DOWNLOAD),
         hold=unapplied_changes_note(
             "pdf", state.get("pdf_excluded_applied", frozenset())
-        ),
+        )
+        or unapplied_words_note("pdf", run["custom_words"]),
     )
 
 

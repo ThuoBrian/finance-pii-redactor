@@ -30,6 +30,7 @@ from finance_redactor.presentation.presenters import (
     THRESHOLD_HELP,
     entity_label,
     findings_dataframe,
+    merge_findings,
     plural,
     review_tab_labels,
 )
@@ -38,6 +39,11 @@ from finance_redactor.presentation.session import (
     reset_on_new_upload,
 )
 from finance_redactor.presentation.steps import show_step
+from finance_redactor.presentation.words_view import (
+    render_words_box,
+    typed_words,
+    unapplied_words_note,
+)
 
 
 def run_docx_flow(
@@ -87,26 +93,16 @@ def _options_step(
     st.subheader("Options")
     st.caption(
         "Names, organizations, emails, websites, bank details and addresses "
-        "are found automatically."
+        "are found automatically. Missed a name? You can add it on the "
+        "next step."
     )
     # Values live in session state (seeded here, kept by wizard.keep_option_
     # choices), never in a widget default: passing both raises a warning.
     state = st.session_state
-    state.setdefault("docx_custom_words", "")
     state.setdefault("docx_threshold", settings.default_threshold)
     state.setdefault("docx_entities", list(settings.supported_entities))
 
-    with st.expander("Customize: words to add, kinds of information, confidence"):
-        st.text_area(
-            "Words or phrases to add (optional)",
-            help=(
-                "One per line. Redacted in addition to detected "
-                "names/organizations/emails, even if not in the master list - "
-                "useful for a one-off sensitive term (e.g. a project codename). "
-                "Not saved anywhere; re-enter next time if needed."
-            ),
-            key="docx_custom_words",
-        )
+    with st.expander("Customize: kinds of information, confidence"):
         st.slider(
             "Confidence threshold",
             min_value=0.1,
@@ -123,9 +119,8 @@ def _options_step(
             key="docx_entities",
         )
 
-    custom_words = [
-        w.strip() for w in state["docx_custom_words"].splitlines() if w.strip()
-    ]
+    # Words typed for an earlier file in this session carry over.
+    custom_words = typed_words("docx")
     if st.button("Redact my file", type="primary", width="stretch"):
         uploaded.seek(0)
         try:
@@ -188,6 +183,9 @@ def _review_step(uploaded: Any, docx_service: RedactDocxService, steps: Any) -> 
             )
         )
 
+    words_applied: list[str] = state.docx_run_words
+    words = render_words_box("docx", words_applied)
+
     review_findings = state.get("docx_all_findings", [])
     tab_review, tab_mapping, tab_occurrences = st.tabs(
         review_tab_labels(review_findings)
@@ -208,22 +206,32 @@ def _review_step(uploaded: Any, docx_service: RedactDocxService, steps: Any) -> 
             hide_index=True,
         )
 
-    if excluded != state.get("docx_excluded_applied", frozenset()):
+    if (
+        excluded != state.get("docx_excluded_applied", frozenset())
+        or words != words_applied
+    ):
         # The scan/redact split (see redact_docx.py) means this never re-runs
         # spaCy - only the per-block dedupe/exclude/assign/apply step reruns,
         # over the cached DocxScanResult from the Redact click.
         uploaded.seek(0)
-        with st.spinner("Rebuilding without those terms..."):
+        with st.spinner("Rebuilding with your changes..."):
             rerun = docx_service.redact(
                 uploaded,
                 state.docx_scan_result,
-                state.docx_run_words,
+                words,
                 exclude=excluded,
             )
         state.docx_buffer = rerun.data
         state.docx_findings = rerun.findings
         state.docx_crosswalk = rerun.crosswalk
         state.docx_excluded_applied = excluded
+        if words != words_applied:
+            # A newly typed word brings terms the first run never found;
+            # add them so each one can still be unticked.
+            state.docx_all_findings = merge_findings(
+                state.get("docx_all_findings", []), rerun.findings
+            )
+            state.docx_run_words = words
         st.rerun()
 
     wizard.nav(
@@ -231,7 +239,8 @@ def _review_step(uploaded: Any, docx_service: RedactDocxService, steps: Any) -> 
         forward=("Continue to download", wizard.DOWNLOAD),
         hold=unapplied_changes_note(
             "docx", state.get("docx_excluded_applied", frozenset())
-        ),
+        )
+        or unapplied_words_note("docx", state.docx_run_words),
     )
 
 

@@ -157,12 +157,15 @@ def test_each_format_walks_options_review_download_and_back(fmt: str) -> None:
     assert any("Safe to share" in m.value for m in at.markdown)
     assert any("Keep private" in m.value for m in at.markdown)
 
-    if fmt == "pdf":
+    if fmt in ("pdf", "word"):
         # AppTest keeps the Review step's filter control in its element tree
         # after the switch to Download, then fails looking up its (correctly
         # discarded) state on the next run. The real app does not: going back
-        # from Download in a PDF was checked in Edge. Excel and Word cover the
-        # Back path here.
+        # from Download in a PDF was checked in Edge. Word joined PDF here once
+        # the words box moved onto Review, pushing the filter past the end of
+        # the shorter Download tree. Excel covers this Back path;
+        # test_words_typed_for_one_run_carry_into_the_next_build covers Word's
+        # Back from Review.
         return
     _click(at, "← Back to review")
     assert [s.value for s in at.subheader] == ["Review what was found"]
@@ -187,12 +190,88 @@ def test_the_excel_download_has_no_crosswalk_sheet_and_offers_it_separately() ->
 
 def test_option_choices_survive_a_trip_to_review_and_back() -> None:
     at = _start("word")
-    at.text_area(key="docx_custom_words").set_value("Project Nightingale").run()
+    at.slider(key="docx_threshold").set_value(0.6).run()
 
     _click(at, "Redact my file")
     _click(at, "← Back to options")
 
-    assert at.text_area(key="docx_custom_words").value == "Project Nightingale"
+    assert at.slider(key="docx_threshold").value == 0.6
+
+
+def _add_words(at: AppTest, prefix: str, words: str) -> None:
+    at.text_area(key=f"{prefix}_custom_words").set_value(words).run()
+    _click(at, "Add and rebuild")
+    at.run()  # Add reruns mid-run; one more run gives a clean tree
+
+
+def test_the_words_box_is_on_review_not_options() -> None:
+    at = _start("word")
+    assert not any(t.key == "docx_custom_words" for t in at.text_area)
+
+    _click(at, "Redact my file")
+
+    assert at.text_area(key="docx_custom_words").value == ""
+
+
+def test_a_word_added_on_review_is_redacted_in_word_without_a_rescan() -> None:
+    from docx import Document
+
+    at = _start("word")
+    _click(at, "Redact my file")
+    scan = at.session_state["docx_scan_result"]
+
+    _add_words(at, "docx", "payment")
+
+    assert at.session_state["docx_scan_result"] is scan  # no rescan
+    assert at.session_state["docx_run_words"] == ["payment"]
+    listed = {f.detected_text for f in at.session_state["docx_all_findings"]}
+    assert "payment" in listed
+    text = Document(BytesIO(at.session_state["docx_buffer"])).paragraphs[0].text
+    assert "payment" not in text
+    assert not _continue_button(at).disabled
+
+
+def test_a_word_added_on_review_is_redacted_in_a_pdf() -> None:
+    import fitz
+
+    at = _start("pdf")
+    _click(at, "Redact my file")
+
+    _add_words(at, "pdf", "field work")
+
+    output = fitz.open(stream=at.session_state["pdf_buffer"], filetype="pdf")
+    assert "field work" not in output[0].get_text()
+    assert at.session_state["pdf_run"]["custom_words"] == ["field work"]
+
+
+def test_continue_waits_until_typed_words_are_added() -> None:
+    at = _start("word")
+    _click(at, "Redact my file")
+
+    at.text_area(key="docx_custom_words").set_value("payment").run()
+
+    assert _continue_button(at).disabled
+    assert any("not in the file yet" in i.value for i in at.info)
+
+
+def test_a_label_shaped_word_is_warned_about_in_a_pdf() -> None:
+    at = _start("pdf")
+    _click(at, "Redact my file")
+
+    at.text_area(key="pdf_custom_words").set_value("[001]").run()
+
+    assert any("looks like a redaction label" in w.value for w in at.warning)
+
+
+def test_words_typed_for_one_run_carry_into_the_next_build() -> None:
+    at = _start("word")
+    _click(at, "Redact my file")
+    _add_words(at, "docx", "payment")
+
+    _click(at, "← Back to options")
+    _click(at, "Redact my file")
+
+    assert at.session_state["docx_run_words"] == ["payment"]
 
 
 def test_pdf_names_file_stays_off_by_default_on_the_download_step() -> None:

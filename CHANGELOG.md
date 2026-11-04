@@ -82,6 +82,14 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **Words to add moved from Options to Review (PDF and Word).** The box used
+  to ask for missed words before anything had been found. It's now on the
+  Review step, under "Missed something? Add words or phrases", so a name that
+  the master list and the model both missed can be added while the findings are
+  on screen. **Add and rebuild** updates the file without scanning again, and
+  the new words join the review list, where they can be unticked like any other
+  term. Continue waits until typed words are added. Words still carry over to
+  the next file in the same session.
 - **`AGENTS.md` is no longer tracked.** It stays local, like `CLAUDE.md`. The
   rules every contributor needs are in `CONTRIBUTING.md`.
 - **The installers look like the launchers and update more safely.**
