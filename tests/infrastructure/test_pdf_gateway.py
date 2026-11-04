@@ -484,3 +484,43 @@ def test_rebuilt_scan_in_blackout_style_blacks_the_name_without_a_label():
 
     assert (image[325:375, 300:470] == 0).all()
     assert "[001]" not in text
+
+
+def _ruled_table_pdf_bytes() -> bytes:
+    """Build a one-page PDF with a ruled three-column table of made-up payees."""
+    rows = [
+        ["Payee", "Account No", "Amount"],
+        ["Alex Sample", "1234567890", "100.00"],
+        ["Robin Example", "2345678901", "250.00"],
+    ]
+    xs, top, height = [72, 222, 372, 472], 100, 20
+    doc = fitz.open()
+    page = doc.new_page()
+    for r, row in enumerate(rows):
+        for c, text in enumerate(row):
+            page.insert_text((xs[c] + 4, top + r * height + 14), text, fontsize=10)
+    for r in range(len(rows) + 1):
+        page.draw_line((xs[0], top + r * height), (xs[-1], top + r * height))
+    for x in xs:
+        page.draw_line((x, top), (x, top + len(rows) * height))
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def test_page_tables_returns_each_column_with_its_header_and_cells():
+    document = PyMuPdfDocument.open(_ruled_table_pdf_bytes())
+
+    columns = document.page_tables(0)
+
+    assert [(c.header, c.cells) for c in columns] == [
+        ("Payee", ("Alex Sample", "Robin Example")),
+        ("Account No", ("1234567890", "2345678901")),
+        ("Amount", ("100.00", "250.00")),
+    ]
+
+
+def test_page_tables_is_empty_on_a_page_without_a_table():
+    document = PyMuPdfDocument.open(_wrapped_name_pdf_bytes())
+
+    assert document.page_tables(0) == []

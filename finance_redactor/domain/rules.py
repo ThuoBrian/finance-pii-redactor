@@ -26,7 +26,10 @@ def classify_source(score: float, custom_match_score: float) -> DetectionSource:
     )
 
 
-# Overlap priority, low to high: a master-list-sourced detection (an exact
+# Overlap priority, low to high: a cell of a table column the user chose to
+# redact in full wins over everything, since the user asked for the whole
+# cell to go; a curated name inside it would otherwise win and leave the rest
+# of the cell (an address, a phone number) showing. Next, a master-list-sourced detection (an exact
 # match against the curated vocabulary) always wins, since a curated match is
 # the strongest signal. A pattern match (a deterministic regex, e.g. an email,
 # URL or address) ranks next, since it's just as deterministic as a
@@ -34,10 +37,11 @@ def classify_source(score: float, custom_match_score: float) -> DetectionSource:
 # ranks above a plain model guess, since it's still an explicit, exact match,
 # just not curated or pattern-validated.
 _SOURCE_PRIORITY = {
-    DetectionSource.MASTER_LIST: 0,
-    DetectionSource.PATTERN: 1,
-    DetectionSource.CUSTOM: 2,
-    DetectionSource.MODEL: 3,
+    DetectionSource.TABLE_COLUMN: 0,
+    DetectionSource.MASTER_LIST: 1,
+    DetectionSource.PATTERN: 2,
+    DetectionSource.CUSTOM: 3,
+    DetectionSource.MODEL: 4,
 }
 
 
@@ -56,7 +60,12 @@ def dedupe_overlapping(detections: Iterable[PiiDetection]) -> list[PiiDetection]
     deterministic but not curated; a custom word (see
     ``domain/custom_words.py``) in turn beats an overlapping model guess,
     since it's still an explicit, exact match the user typed for this run,
-    just not curated or pattern-validated. Within the same source, leftmost
+    just not curated or pattern-validated. A chosen table-column cell (see
+    ``domain/tables.py``) outranks all of them: the user asked for the whole
+    cell, and a curated name inside it winning would leave the rest showing.
+    The cost is that a cell with extra text resolves to a flagged auto-id;
+    a cell that is exactly a curated name still gets its ID by name. Within
+    the same source, leftmost
     wins; ties break to the longest span. This is the exact algorithm the PDF
     flow used inline, now isolated and reusable.
     """

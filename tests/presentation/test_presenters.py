@@ -28,8 +28,10 @@ from finance_redactor.presentation.presenters import (
     filter_editor_rows,
     findings_dataframe,
     formatting_note,
+    merge_findings,
     merge_pending,
     pdf_mapping_dataframe,
+    pdf_mapping_notes,
     pdf_mapping_with_names_dataframe,
     pdf_review_dataframe,
     plural,
@@ -41,6 +43,7 @@ from finance_redactor.presentation.presenters import (
     scan_result_findings,
     scanned_pages_warning,
     search_editor_rows,
+    why_found,
 )
 
 
@@ -322,7 +325,8 @@ def test_empty_inputs_exclude_nothing() -> None:
     assert list(detection_editor_dataframe([]).columns) == [
         "Hide in output?",
         "Detected text",
-        "Entity type",
+        "Why it was found",
+        "Kind",
         "Source",
         "Confidence",
         "Hint",
@@ -544,8 +548,8 @@ def test_review_comes_first_and_counts_the_model_guesses() -> None:
 
     assert review_tab_labels(findings) == [
         "Review (4 to check)",
-        "Mapping",
-        "Occurrences",
+        "Code list",
+        "Where found",
     ]
     assert review_tab_labels(findings, preview=True)[1] == "Preview"
 
@@ -657,3 +661,96 @@ def test_scanned_pages_warning_for_pages_read_with_ocr() -> None:
     assert "signatures, handwriting, stamps" in read_part
     assert "check that page" in read_part
     assert unread_part.startswith("**1 of 2 pages is a scan** (page 2)")
+
+
+def test_merge_findings_adds_only_terms_not_already_listed() -> None:
+    def finding(text: str) -> Finding:
+        return Finding(
+            page=0,
+            detected_text=text,
+            entity_type="CUSTOM",
+            score=1.0,
+            source=DetectionSource.TABLE_COLUMN,
+        )
+
+    existing = [finding("Alex Sample")]
+    new = [finding("alex  sample"), finding("Robin Example")]
+
+    merged = merge_findings(existing, new)
+
+    assert [f.detected_text for f in merged] == ["Alex Sample", "Robin Example"]
+
+
+def test_review_summary_counts_table_cells() -> None:
+    findings = [
+        Finding(
+            page=0,
+            detected_text="Alex Sample",
+            entity_type="CUSTOM",
+            score=1.0,
+            source=DetectionSource.TABLE_COLUMN,
+        )
+    ]
+
+    assert "1 table cell" in review_summary(detection_editor_dataframe(findings))
+
+
+def _plain_finding(source: DetectionSource, entity_type: str = "PERSON") -> Finding:
+    return Finding(
+        page=0,
+        detected_text="Across",
+        entity_type=entity_type,
+        score=0.85,
+        source=source,
+    )
+
+
+def test_why_found_says_where_a_term_came_from_in_plain_words() -> None:
+    assert (
+        why_found(_plain_finding(DetectionSource.MASTER_LIST)) == "On your master list"
+    )
+    assert why_found(_plain_finding(DetectionSource.CUSTOM)) == "You typed it"
+    assert why_found(_plain_finding(DetectionSource.TABLE_COLUMN)) == (
+        "In a table column you chose"
+    )
+    assert why_found(_plain_finding(DetectionSource.PATTERN, "EMAIL_ADDRESS")) == (
+        "Shaped like an email address"
+    )
+    assert why_found(_plain_finding(DetectionSource.MODEL)) == "Looks like a name"
+    assert why_found(_plain_finding(DetectionSource.MODEL, "ORGANIZATION")) == (
+        "Looks like an organization"
+    )
+
+
+def test_why_found_turns_a_hint_into_advice() -> None:
+    why = why_found(_plain_finding(DetectionSource.MODEL), "ordinary word")
+
+    assert why == "Looks like a name. Check it: it is an ordinary English word"
+
+
+def test_the_review_table_fills_the_why_column() -> None:
+    table = detection_editor_dataframe([_plain_finding(DetectionSource.MASTER_LIST)])
+
+    assert table.loc[0, "Why it was found"] == "On your master list"
+    assert table.loc[0, "Kind"] == "Person"
+
+
+def test_pdf_mapping_notes_cover_missing_and_ambiguous_items() -> None:
+    def item(ambiguous: bool, internal_id: str | None = None) -> Assignment:
+        return Assignment(
+            original_name="Zzyzx Qwertyson",
+            entity_type="PERSON",
+            category="",
+            pseudonym="PSN-AUTO-1A2B3",
+            auto=True,
+            ordinal=1,
+            internal_id=internal_id,
+            ambiguous=ambiguous,
+        )
+
+    notes = pdf_mapping_notes([item(False), item(True), item(False, "17728")])
+
+    assert len(notes) == 2
+    assert "1 redacted item not on the master list" in notes[0]
+    assert "matched more than one" in notes[1]
+    assert pdf_mapping_notes([item(False, "17728")]) == []

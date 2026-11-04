@@ -8,6 +8,14 @@ the `version` field in `pyproject.toml`.
 
 ### Added
 
+- **Whole table columns can be redacted in a PDF.** When a PDF holds a table,
+  the Review step lists its columns under "Table columns to redact in full".
+  Every entry in a chosen column gets a label, like a found name, and goes into
+  the mapping. A cell that matches a master-list name gets that name's
+  Internal ID. Columns whose header looks like a name, account or contact
+  (Payee, Account No, Phone) start chosen. Tables on text pages are found by
+  PyMuPDF. On scanned pages they're worked out from where the OCR'd lines sit.
+  Changing the choice rebuilds the file without scanning again.
 - **Scanned PDF pages are read with OCR.** A scanned page used to be either
   fully black or unredacted. Now its printed text is read (RapidOCR on ONNX
   Runtime; models ship with the package and run offline), names in it are
@@ -74,6 +82,26 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **The Review list is simpler.** It now shows three columns: the tick box,
+  the term, and **Why it was found**, in plain words ("On your master list",
+  "Looks like a name. Check it: it is an ordinary English word"). **Show
+  details** brings back the kind, source, confidence, hint and count. The
+  filter, search and "Untick all" buttons appear only once the list is longer
+  than one screen. Tabs are renamed: **Mapping** is now **Code list**, and
+  **Occurrences** is now **Where found**.
+- **One "Before you share this PDF" box replaces up to three PDF warnings.**
+  Scanned pages and mapping rows with no Internal ID are listed together above
+  the list. The box is yellow only when something may still show. The note
+  about the PDF's own bracketed numbers moved to the Download step, next to
+  the code list it concerns.
+- **Words to add moved from Options to Review (PDF and Word).** The box used
+  to ask for missed words before anything had been found. It's now on the
+  Review step, under "Missed something? Add words or phrases", so a name that
+  the master list and the model both missed can be added while the findings are
+  on screen. **Add and rebuild** updates the file without scanning again, and
+  the new words join the review list, where they can be unticked like any other
+  term. Continue waits until typed words are added. Words still carry over to
+  the next file in the same session.
 - **`AGENTS.md` is no longer tracked.** It stays local, like `CLAUDE.md`. The
   rules every contributor needs are in `CONTRIBUTING.md`.
 - **The installers look like the launchers and update more safely.**

@@ -16,6 +16,7 @@ import pandas as pd
 
 from finance_redactor.domain.entities import PiiDetection, Span
 from finance_redactor.domain.ocr import Box, OcrLine
+from finance_redactor.domain.tables import TableColumn
 
 
 @runtime_checkable
@@ -90,6 +91,10 @@ class PdfDocument(Protocol):
         self, page_index: int
     ) -> list[tuple[float, float, float, float]]:
         """Return image bounding boxes on one page as (x0, y0, x1, y1) tuples."""
+        ...
+
+    def page_tables(self, page_index: int) -> list[TableColumn]:
+        """Return the columns of every table found in one page's text layer."""
         ...
 
     def redact_page(

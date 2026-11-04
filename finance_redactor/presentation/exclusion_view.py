@@ -30,6 +30,7 @@ import streamlit as st
 from finance_redactor.domain.entities import Finding
 from finance_redactor.presentation.presenters import (
     ALL_SOURCES,
+    EDITOR_SIMPLE_COLUMNS,
     REDACT_COLUMN,
     SOURCE_FILTERS,
     apply_notice,
@@ -44,15 +45,11 @@ from finance_redactor.presentation.presenters import (
 )
 
 _HOW_TO_READ = (
-    "Each row is one term the tool found, with the likeliest false positives "
-    "at the top and your master-list names at the bottom. Untick **Hide in "
-    "output?** for anything that is not really a name or a bank/payment "
-    "detail, then click **Apply changes**. Nothing is rebuilt until you click "
-    "it, so tick and untick as many rows as you like first. An unticked term "
-    "is left as-is in the file you download. **Source** tells you why it "
-    "matched, and what the lasting fix is: *master list* means a row in the "
-    "workbook matches this word, so unticking it patches this one document "
-    "while editing the workbook fixes every future one."
+    "Everything ticked is hidden in your download. The rows most likely to "
+    "be wrong are at the top. If a row is not really a name or a private "
+    "detail, untick it, then click **Apply changes**.\n\n"
+    "If a master-list name is wrong, unticking fixes this file only. Fix the "
+    "master list to stop it coming back."
 )
 _CLEAN_RUN = (
     "Nothing here is a guess. Every term came from your master list, words "
@@ -111,6 +108,7 @@ def render_deselect_editor(
     signature_key = f"{key_prefix}_review_signature"
     filter_key = f"{key_prefix}_review_filter"
     search_key = f"{key_prefix}_review_search"
+    details_key = f"{key_prefix}_review_details"
     notice_key = f"{key_prefix}_review_notice"
     base_key = f"{key_prefix}_review_base"
 
@@ -139,7 +137,7 @@ def render_deselect_editor(
         # Filled at the end, once this run's ticks are known; drawn here so
         # the line sits at the top where the reviewer looks first.
         status_slot = st.empty()
-        with st.expander("How to read this table"):
+        with st.expander("How to use this list"):
             st.markdown(_HOW_TO_READ)
 
         clean = model_guess_count(overview) == 0
@@ -148,48 +146,65 @@ def render_deselect_editor(
         body = st.expander("Review anyway") if clean else st.container()
 
     with body:
-        counts = {
-            label: int((overview["Source"] == source).sum())
-            for label, source in SOURCE_FILTERS.items()
-        }
-        filter_col, search_col = st.columns([3, 2])
-        with filter_col:
-            choice = st.segmented_control(
-                "Show",
-                options=[ALL_SOURCES, *(label for label, n in counts.items() if n)],
-                default=ALL_SOURCES,
-                format_func=lambda label: (
-                    f"{label} ({counts[label]})" if label in counts else label
-                ),
-                key=filter_key,
-            )
-        with search_col:
-            search = st.text_input(
-                "Find a term", key=search_key, placeholder="e.g. total"
-            )
-        view = (choice, search)
+        # Filter, search and the bulk buttons help only once the list
+        # scrolls; on a short list they are clutter.
+        long_list = len(overview) > _EDITOR_ROWS
+        choice: str | None = None
+        search = ""
+        if long_list:
+            counts = {
+                label: int((overview["Source"] == source).sum())
+                for label, source in SOURCE_FILTERS.items()
+            }
+            filter_col, search_col = st.columns([3, 2])
+            with filter_col:
+                choice = st.segmented_control(
+                    "Show",
+                    options=[
+                        ALL_SOURCES,
+                        *(label for label, n in counts.items() if n),
+                    ],
+                    default=ALL_SOURCES,
+                    format_func=lambda label: (
+                        f"{label} ({counts[label]})" if label in counts else label
+                    ),
+                    key=filter_key,
+                )
+            with search_col:
+                search = st.text_input(
+                    "Find a term", key=search_key, placeholder="e.g. total"
+                )
+        details = st.toggle(
+            "Show details",
+            key=details_key,
+            help="Adds the kind, source, confidence and hint columns.",
+        )
+        # The editor is a new widget whenever its columns change, so a
+        # change of view re-keys it from the pending set like a filter does.
+        view = (choice, search, details)
         if view != state.get(f"{filter_key}_last"):
             state[f"{filter_key}_last"] = view
             rekey(pending)
 
         shown_all = search_editor_rows(filter_editor_rows(overview, choice), search)
         shown_keys = frozenset(term_key(t) for t in shown_all["Detected text"])
-        untick_col, tick_col = st.columns(2)
         changed = False
-        if untick_col.button(
-            f"Untick all shown ({len(shown_keys)})",
-            disabled=not shown_keys,
-            width="stretch",
-            key=f"{key_prefix}_review_untick_shown",
-        ):
-            pending, changed = pending | shown_keys, True
-        if tick_col.button(
-            f"Tick all shown ({len(shown_keys)})",
-            disabled=not shown_keys,
-            width="stretch",
-            key=f"{key_prefix}_review_tick_shown",
-        ):
-            pending, changed = pending - shown_keys, True
+        if long_list:
+            untick_col, tick_col = st.columns(2)
+            if untick_col.button(
+                f"Untick all shown ({len(shown_keys)})",
+                disabled=not shown_keys,
+                width="stretch",
+                key=f"{key_prefix}_review_untick_shown",
+            ):
+                pending, changed = pending | shown_keys, True
+            if tick_col.button(
+                f"Tick all shown ({len(shown_keys)})",
+                disabled=not shown_keys,
+                width="stretch",
+                key=f"{key_prefix}_review_tick_shown",
+            ):
+                pending, changed = pending - shown_keys, True
         if changed:
             rekey(pending)
 
@@ -210,6 +225,7 @@ def render_deselect_editor(
             hide_index=True,
             height=_HEADER_PX + _ROW_PX * max(1, min(len(table), _EDITOR_ROWS)),
             key=f"{key_prefix}_deselect_editor_{state[version_key]}",
+            column_order=None if details else EDITOR_SIMPLE_COLUMNS,
             column_config={
                 REDACT_COLUMN: st.column_config.CheckboxColumn(
                     REDACT_COLUMN,

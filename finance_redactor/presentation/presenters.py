@@ -17,7 +17,12 @@ from finance_redactor.application.ports import SheetFormatting
 from finance_redactor.application.results import WorkbookScanResult
 from finance_redactor.domain.entities import DetectionSource, Finding
 from finance_redactor.domain.pseudonyms import Assignment, normalize
-from finance_redactor.domain.review_hints import review_hint
+from finance_redactor.domain.review_hints import (
+    ALL_CAPS,
+    ONE_WORD_ORGANIZATION,
+    ORDINARY_WORD,
+    review_hint,
+)
 
 _EXCEL_COLUMNS = [
     "Sheet",
@@ -410,21 +415,34 @@ def findings_dataframe(findings: list[Finding], page_label: str) -> pd.DataFrame
 # would render read-only, and nothing would raise.
 REDACT_COLUMN = "Hide in output?"
 _TERM_COLUMN = "Detected text"
+_WHY_COLUMN = "Why it was found"
 
 _EDITOR_COLUMNS = [
     REDACT_COLUMN,
     _TERM_COLUMN,
-    "Entity type",
+    _WHY_COLUMN,
+    "Kind",
     "Source",
     "Confidence",
     "Hint",
     "Occurrences",
 ]
+# What the review table shows by default: enough to decide, nothing to decode.
+# The rest is one "Show details" toggle away.
+EDITOR_SIMPLE_COLUMNS = (REDACT_COLUMN, _TERM_COLUMN, _WHY_COLUMN)
+
+# A model hint, in words someone who has never heard of spaCy can act on.
+_PLAIN_HINT = {
+    ORDINARY_WORD: "it is an ordinary English word",
+    ALL_CAPS: "it is in capitals, often a heading or an acronym",
+    ONE_WORD_ORGANIZATION: "one-word organizations are often labels",
+}
 
 # Review order: the guesses most likely to be wrong first, curated names last.
 _MODEL_WITH_HINT, _MODEL_PLAIN, _TYPED, _PATTERN, _CURATED = range(5)
 _SOURCE_TIER = {
     DetectionSource.CUSTOM: _TYPED,
+    DetectionSource.TABLE_COLUMN: _TYPED,
     DetectionSource.PATTERN: _PATTERN,
     DetectionSource.MASTER_LIST: _CURATED,
 }
@@ -434,9 +452,38 @@ ALL_SOURCES = "All"
 SOURCE_FILTERS = {
     "Model guesses": DetectionSource.MODEL.value,
     "Typed words": DetectionSource.CUSTOM.value,
+    "Table columns": DetectionSource.TABLE_COLUMN.value,
     "Pattern matches": DetectionSource.PATTERN.value,
     "Master list": DetectionSource.MASTER_LIST.value,
 }
+
+
+def why_found(finding: Finding, hint: str = "") -> str:
+    """Say in plain words why a term was found, and whether to look twice.
+
+    The review table's main column. ``Source``, ``Kind``, ``Confidence`` and
+    ``Hint`` say the same things in the tool's own terms, behind "Show
+    details".
+    """
+    source = finding.source
+    if source == DetectionSource.MASTER_LIST:
+        return "On your master list"
+    if source == DetectionSource.CUSTOM:
+        return "You typed it"
+    if source == DetectionSource.TABLE_COLUMN:
+        return "In a table column you chose"
+    kind = entity_label(finding.entity_type).lower()
+    if source == DetectionSource.PATTERN:
+        return f"Shaped like {_with_article(kind)}"
+    # A model guess, or a source this build does not know: treat as a guess.
+    guess = "a name" if finding.entity_type == "PERSON" else _with_article(kind)
+    if hint:
+        return f"Looks like {guess}. Check it: {_PLAIN_HINT.get(hint, hint)}"
+    return f"Looks like {guess}"
+
+
+def _with_article(noun: str) -> str:
+    return f"{'an' if noun[:1] in 'aeiou' else 'a'} {noun}"
 
 
 def detection_editor_dataframe(
@@ -494,7 +541,8 @@ def detection_editor_dataframe(
         {
             REDACT_COLUMN: key not in excluded,
             _TERM_COLUMN: finding.detected_text,
-            "Entity type": finding.entity_type,
+            _WHY_COLUMN: why_found(finding, hint),
+            "Kind": entity_label(finding.entity_type),
             "Source": finding.source.value,
             "Confidence": round(score, 2),
             "Hint": hint,
@@ -503,6 +551,20 @@ def detection_editor_dataframe(
         for (_, hint), score, _, key, finding in ranked
     ]
     return pd.DataFrame(rows, columns=_EDITOR_COLUMNS)
+
+
+def merge_findings(
+    existing: Sequence[Finding], new: Sequence[Finding]
+) -> list[Finding]:
+    """Return ``existing`` plus each finding of ``new`` whose term is not in it yet."""
+    seen = {term_key(f.detected_text) for f in existing}
+    merged = list(existing)
+    for finding in new:
+        key = term_key(finding.detected_text)
+        if key not in seen:
+            seen.add(key)
+            merged.append(finding)
+    return merged
 
 
 def term_key(term: object) -> str:
@@ -551,7 +613,12 @@ def review_tab_labels(
     """
     n = model_guess_count(detection_editor_dataframe(findings)) if findings else 0
     review = f"Review ({n} to check)" if n else "Review"
-    return [review, *(["Preview"] if preview else []), "Mapping", "Occurrences"]
+    return [
+        review,
+        *(["Preview"] if preview else []),
+        "Code list",
+        "Where found",
+    ]
 
 
 def review_status(
@@ -595,6 +662,7 @@ def review_summary(table: pd.DataFrame) -> str:
         parts.append(f"{guess} ({hinted} worth a closer look)" if hinted else guess)
     for label, source in (
         ("typed word", DetectionSource.CUSTOM.value),
+        ("table cell", DetectionSource.TABLE_COLUMN.value),
         ("pattern match", DetectionSource.PATTERN.value),
         ("master-list name", DetectionSource.MASTER_LIST.value),
     ):
@@ -663,6 +731,33 @@ def _page_list(pages: Sequence[int]) -> str:
         ", ..." if len(pages) > 10 else ""
     )
     return f"page {shown}"
+
+
+def pdf_mapping_notes(crosswalk: Sequence[Assignment]) -> list[str]:
+    """Return notes on mapping rows with no Internal ID, for "Before you share".
+
+    The items were redacted like any other, so nothing shows. But the PDF
+    mapping has no names, so such a row can never be decoded later; that is
+    worth knowing before the file goes anywhere.
+    """
+    unresolved = [a for a in crosswalk if a.internal_id is None]
+    ambiguous = sum(1 for a in unresolved if a.ambiguous)
+    missing = len(unresolved) - ambiguous
+    notes = []
+    if missing:
+        notes.append(
+            f"**{plural(missing, 'redacted item')} not on the master list.** "
+            "They are hidden, but the code list can't say who they are later. "
+            "Add them to the master list and redact again if that matters."
+        )
+    if ambiguous:
+        notes.append(
+            f"**{plural(ambiguous, 'redacted item')} matched more than one "
+            "master-list row** with different IDs, so no ID was recorded. Fix "
+            "the duplicates (the master-list card in the sidebar lists them) "
+            "and redact again."
+        )
+    return notes
 
 
 def scanned_pages_warning(

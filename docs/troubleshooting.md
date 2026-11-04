@@ -31,6 +31,7 @@ This file records known errors, edge cases, and their solutions when developing 
   - [PDF text is not replaced, or a typed word/phrase isn't found](#pdf-text-is-not-replaced-or-a-typed-wordphrase-isnt-found)
   - [A short word is redacted inside longer words in a PDF](#a-short-word-is-redacted-inside-longer-words-in-a-pdf)
   - [A scanned PDF page comes out as a picture with black boxes](#a-scanned-pdf-page-comes-out-as-a-picture-with-black-boxes)
+  - [Redacting a whole table column in a PDF](#redacting-a-whole-table-column-in-a-pdf)
   - [A blacked-out image or signature could be pulled back out of a PDF](#a-blacked-out-image-or-signature-could-be-pulled-back-out-of-a-pdf)
   - [Redacting a name in a PDF also blacks out/deletes part of the line above it](#redacting-a-name-in-a-pdf-also-blacks-outdeletes-part-of-the-line-above-it)
   - [A name inside a Word text box, SmartArt, or embedded object is not detected](#a-name-inside-a-word-text-box-smartart-or-embedded-object-is-not-detected)
@@ -125,10 +126,10 @@ This file records known errors, edge cases, and their solutions when developing 
 ### An ordinary word is being redacted
 
 - **Symptom:** An everyday word is replaced in the output - `salaries`, `rent`, `transport`, `bank`. It happens on every occurrence, in every document.
-- **First, find out why it matched.** Open **Check what was detected** (Review step, **Review** tab) and read the **Source** column for that word. It tells you which of three different problems you have:
+- **First, find out why it matched.** Open **Check what was detected** (Review step, **Review** tab) and read the **Why it was found** column for that word (or turn on **Show details** for the **Source** column). It tells you which of three different problems you have:
   - **`master list`** - the workbook has a row whose `Name` is that word. Someone added a payee or account called `Salaries`, and the tool matches master-list names exactly, so every occurrence of the word is now a hit in all three formats. This is the common cause in a finance master list.
   - **`model`** - spaCy guessed. Possible in all three formats. Often an ALL-CAPS label (`SALARIES`) that the recasing pass turns into a name-shaped `Salaries` (see "ALL-CAPS names and acronym false positives" below).
-  - **`custom word`** - it came from the "Additional words/phrases to redact" box. Clear it; the box is not saved between sessions.
+  - **`custom word`** - it came from the **Missed something? Add words or phrases** box on the Review step. Remove it there and click **Add and rebuild**; the box is not saved between sessions.
 - **Fix it for this document:** untick the word in the **Hide in output?** column of **Check what was detected** and click **Apply changes**. The file is rebuilt without it, and everything else stays redacted. This works in all three formats and is the only lever PDF has.
 - **Fix it for good (the `master list` case):** edit `data/Names List - Organized.xlsx` - delete the row, or make the name distinctive (`Salaries Account`, `Salaries Ltd`). A multi-word name no longer matches the bare word, because the matcher keys on the whole string. Save, close, then click **Refresh** (master-list card, sidebar). Do this rather than unticking every time: an unticked word is per-document and you would repeat it forever.
 - **Fix it for good (the `model` case):** raise the **Confidence threshold** under **Customize** on the Options step, in Excel or Word. Do **not** push it past **0.90** - curated master-list matches score exactly 0.90, so anything above that stops matching **every** name in the workbook at once, which is a far worse problem than the one you started with.
@@ -137,7 +138,7 @@ This file records known errors, edge cases, and their solutions when developing 
 ### A typed word gets a flagged code instead of a curated Internal ID
 
 - **Applies to:** PDF. In **Word**, typed words are still never looked up in the master list, so they always get a flagged `CST-AUTO-<hash>` code - that part is expected there, not a bug.
-- **Symptom:** In a PDF, a word typed into "Additional words/phrases to redact" shows up in the label mapping with an `AUTO-` placeholder in the **Internal ID** column and a reason under **Flagged**, instead of a real `Internal ID`.
+- **Symptom:** In a PDF, a word typed into the Review step's **Missed something? Add words or phrases** box shows up in the label mapping with an `AUTO-` placeholder in the **Internal ID** column and a reason under **Flagged**, instead of a real `Internal ID`.
 - **Cause:** PDF typed words *are* resolved against the master list, so a flagged row means the lookup genuinely found nothing usable. **Flagged** says which of two things happened:
   - `not in master list` - no row matches that name. Matching is exact on the name (accent- and case-insensitive, plus the usual organization-suffix aliases), so a typo or a reworded form will miss. Check the **Possible match** column in the review table: if it names a near-miss, that is the row you probably meant.
   - `ambiguous - matched several master-list rows` - two or more rows matched with **different** `Internal ID`s, so the tool refused to pick one. Writing a coin-flip ID into a mapping that carries no names would be undetectable later, so it declines instead. Fix the duplicate rows (the master-list data-quality panel in the options step already flags them) and re-run.
@@ -207,7 +208,7 @@ This file records known errors, edge cases, and their solutions when developing 
 
 ### Can't type an accented name (`José`, `Muñoz`, `André`) into the "words to redact" box
 
-- **Symptom:** A Latin American (or other accented) name in a PDF or Word document won't redact, because typing the exact accented characters into the "Additional words/phrases to redact" box isn't practical on a US/ASCII keyboard. This matters most for a name that is *not* on the master list, where the custom-words box is the only way to catch it - a curated name is matched exactly, accents and all, without typing anything.
+- **Symptom:** A Latin American (or other accented) name in a PDF or Word document won't redact, because typing the exact accented characters into the Review step's words box isn't practical on a US/ASCII keyboard. This matters most for a name that is *not* on the master list, where the custom-words box is the only way to catch it - a curated name is matched exactly, accents and all, without typing anything.
 - **Cause (fixed):** `find_custom_words` (`finance_redactor/domain/custom_words.py`) used to be a purely literal, case-insensitive match, so typing the unaccented approximation (`Jose Garcia`) never matched the accented text (`José García`) in the document.
 - **Solution:** `find_custom_words` now folds accents (via `_fold_diacritics`, a length-preserving Unicode NFKD decomposition, the same technique `recasing.recase_uppercase` uses for ALL-CAPS) before matching, in both directions: typing `Jose Garcia` matches `José García` in the text, and typing `José García` matches an unaccented `Jose Garcia` (e.g. from an OCR pass that dropped accents). The detection reported in the crosswalk/review table still shows the real spelling as it appeared in the document, not the folded form. This only covers the PDF/Word custom-words box - master-list-based detection (used by Word/Excel's automatic name/organization matching) does not yet fold accents; add the exact accented spelling as it appears in `data/Names List - Organized.xlsx` for now.
 
@@ -220,7 +221,7 @@ This file records known errors, edge cases, and their solutions when developing 
 
 ### PDF text is not replaced, or a typed word/phrase isn't found
 
-- **Symptom:** A word/phrase typed into PDF's "Words/phrases to redact" box (or, for Word, a name/organization) is matched but not replaced, or isn't matched at all even though it's visibly present on the page.
+- **Symptom:** A word/phrase typed into PDF's words box (Review step) (or, for Word, a name/organization) is matched but not replaced, or isn't matched at all even though it's visibly present on the page.
 - **Cause 1:** The PDF page is a scanned image and contains no selectable text layer.
 - **Solution 1:** Scanned pages are read with OCR (see "A scanned PDF page comes out as a picture with black boxes" below). If **Read the text on scanned pages** is off, or OCR is not installed, the Review step says which pages are scans and what happened to them: fully black with **Also black out images** on, unredacted with it off.
 - **Cause 2:** The same span was detected by both the spaCy model and the master list, or a name appears under two categories. In PDF a name under two categories surfaces as an `ambiguous` row in the label mapping rather than a wrong ID.
@@ -244,6 +245,20 @@ This file records known errors, edge cases, and their solutions when developing 
 - **A form's ruled lines** are blacked out line by line rather than as one box, so the text inside the form stays readable.
 - **Slower:** about two seconds a page, plus about two seconds the first time OCR runs in a session.
 - **Turn it off** under **Customize** (**Read the text on scanned pages**) to get the old behaviour.
+
+### Redacting a whole table column in a PDF
+
+- **What happens:** when a PDF holds a table, the Review step lists its columns under **Table columns to redact in full**. Every entry in a chosen column is treated like a found name: it gets a label and a row in the mapping. A cell that exactly matches a master-list name gets that name's Internal ID. The header row stays. Columns whose header looks like a name, account or contact (Payee, Name, Account No, Phone, Email, ID) start chosen. Changing the choice rebuilds the file without scanning again.
+- **Where tables come from:** on pages with a text layer, PyMuPDF's table finder (`PyMuPdfDocument.page_tables`). On scanned pages, the lines OCR read are grouped into rows and columns by where they sit (`domain/tables.py`, `columns_from_lines`).
+- **The same value is redacted everywhere on the page,** not only inside the table, and it gets the same label. This is deliberate over-redaction.
+- **A cell beats a name inside it.** If a chosen cell reads `Alex Sample, 12 Example Road`, the whole cell is redacted, not just the name. The cost is that the cell gets a flagged `AUTO-` ID, not the curated one. A cell that is exactly a curated name still gets its ID.
+- **One value can still be shown:** untick it in **Hide in output?** like any other term.
+- **Known limits:**
+  - A table drawn without ruling lines can be missed on a text page.
+  - The scanned-page grouping is a guess. A two-column page layout can show up as a "table", and a table with uneven rows can be missed. Neither leaves anything less redacted than before; it only changes the choices offered.
+  - Columns with the same header merge into one choice across tables and pages.
+  - A column with no header shows as `Column 1`, `Column 2` and so on.
+  - Excel and Word already work by column or cell, so this is PDF-only.
 
 ### A blacked-out image or signature could be pulled back out of a PDF
 

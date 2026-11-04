@@ -158,7 +158,8 @@ you to the step before, and your choices are kept.
 3. **Review.** The **Review** tab lists what was found, likeliest mistakes
    first. Untick anything that isn't really a name, then click **Apply
    changes** to rebuild the file without them; everything else stays
-   redacted. The **Source** column says why each term matched. Ordinary words
+   redacted. The **Why it was found** column says why each term matched
+   (**Show details** adds the technical columns). Ordinary words
    sometimes get caught, usually because someone added one to the master list
    as a payee.
 4. **Download.** Two cards: **Safe to share** (Internal) and **Keep private**

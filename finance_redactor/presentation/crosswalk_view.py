@@ -1,7 +1,7 @@
 """Rendering of the mapping between what was redacted and what replaced it.
 
 Two schemes live here, because PDF and Excel/Word differ in what they write
-into a document. Each has a review table (the Review step's Mapping tab) and
+into a document. Each has a review table (the Review step's Code list tab) and
 downloads (the Download step, sorted into an Internal and a Confidential card).
 
 PDF stamps a document-local ``[001]`` label. :func:`render_pdf_mapping_download`
@@ -47,40 +47,6 @@ _CROSSWALK_WARNING = (
     "the file. Store it somewhere secure, apart from the redacted file, and "
     "never send the two together."
 )
-
-
-def render_pdf_mapping_warnings(crosswalk: list[Assignment]) -> None:
-    """Note PDF items that cannot be decoded later. Call above the tabs.
-
-    Shown as information, not a warning: the items were redacted like any
-    other, so nothing is visible. Yellow is kept for what affects what shows.
-
-    These stay outside the mapping tab on purpose: in the Excel and Word flows
-    a flagged row is a nudge to tidy the master list, because the CSV still
-    carries the name. Here the download has no names, so an unresolved row is
-    genuinely undecodable later - that deserves to be seen without opening
-    anything.
-    """
-    unresolved = [a for a in crosswalk if a.internal_id is None]
-    ambiguous = [a for a in unresolved if a.ambiguous]
-    missing = [a for a in unresolved if not a.ambiguous]
-
-    if missing:
-        st.info(
-            f"Not in the master list: {plural(len(missing), 'redacted item')}. "
-            "They were still redacted, but their mapping rows carry a "
-            "placeholder token instead of an Internal ID, so **they cannot be "
-            "decoded from the master list later**. Add them to the master list "
-            "and re-run if you need them identifiable."
-        )
-    if ambiguous:
-        st.info(
-            "Ambiguous master-list match: "
-            f"{plural(len(ambiguous), 'redacted item')}. Each matched more than "
-            "one master-list row with conflicting IDs, so no Internal ID was "
-            "recorded rather than guessing one. Fix the duplicate rows (the "
-            "master-list card in the sidebar lists them) and re-run."
-        )
 
 
 def render_pdf_mapping_section(crosswalk: list[Assignment]) -> None:

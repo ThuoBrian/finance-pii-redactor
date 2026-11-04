@@ -34,13 +34,16 @@ class DetectionSource(str, Enum):
     covers a deterministic regex match (an email, URL, bank/payment detail or
     address, see ``infrastructure/detection/presidio_detector.py``) - not a
     guess like ``MODEL``, not curated like ``MASTER_LIST``, not user-typed like
-    ``CUSTOM``, so it gets its own label.
+    ``CUSTOM``, so it gets its own label. ``TABLE_COLUMN`` covers a cell of a
+    PDF table column the user chose to redact in full (see
+    ``domain/tables.py``).
     """
 
     MODEL = "model"
     MASTER_LIST = "master list"
     CUSTOM = "custom word"
     PATTERN = "pattern match"
+    TABLE_COLUMN = "table column"
 
 
 @dataclass(frozen=True)

@@ -114,7 +114,11 @@ what happened instead — then file it.
 - [ ] An email address and a website URL redact automatically, with nothing
   typed in.
 - [ ] A name/organization **that is on your test master list** redacts with
-  nothing typed into "Additional words/phrases to redact".
+  nothing typed into the Review step's "Missed something? Add words or
+  phrases" box.
+- [ ] A made-up name the scan missed, typed into that box on the Review step,
+  is redacted after **Add and rebuild**, with no second scan, and shows up in
+  the review list.
 - [ ] A name that is **not** on the master list still redacts, with a flagged
   row in the mapping (see
   [troubleshooting.md](troubleshooting.md#pdf-detects-names-the-same-way-excel-and-word-do)).
@@ -170,6 +174,8 @@ what happened instead — then file it.
   [troubleshooting.md](troubleshooting.md#a-name-inside-a-word-text-box-smartart-or-embedded-object-is-not-detected)).
 - [ ] Downloaded document keeps original formatting (bold, tables, etc.)
   around the redacted text.
+- [ ] A made-up word typed into "Missed something? Add words or phrases" on
+  the Review step is redacted after **Add and rebuild**.
 
 ### Rejecting a false positive
 
@@ -177,8 +183,9 @@ what happened instead — then file it.
   (`Salaries` works), then redact a document that uses that word normally.
   It should be redacted — that is the bug this control exists for.
 - [ ] Open **Check what was detected**. The word appears as **one** row, not
-  one per occurrence, with an **Occurrences** count and **Source** =
-  `master list`.
+  one per occurrence, with **Why it was found** = "On your master list".
+  Turn on **Show details**: the row has an **Occurrences** count and
+  **Source** = `master list`, and your ticks are unchanged.
 - [ ] Untick it, then click **Apply changes**. The file rebuilds, and the
   downloaded file now contains the word while **every other detection is
   still redacted**. That second half is the important check.
@@ -194,7 +201,11 @@ what happened instead — then file it.
   name is last. The status line above the table matches what you see.
 - [ ] The review step opens on the **Review** tab, labelled with how many model
   guesses there are to check. The per-occurrence table is in its own
-  **Occurrences** tab.
+  **Where found** tab.
+- [ ] With a dozen terms or fewer, there is no filter, search or "Untick all"
+  row above the table, just the list. With more, they appear.
+- [ ] A scanned PDF shows one **Before you share this PDF** box above the
+  list, not several.
 - [ ] There is one **Apply changes** button, under the table. The line at the
   top says what is left: guesses to check, terms left visible, changes not
   applied yet.
