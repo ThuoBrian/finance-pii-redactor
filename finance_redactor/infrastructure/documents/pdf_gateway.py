@@ -18,6 +18,7 @@ import numpy as np
 from finance_redactor.domain.entities import IMAGE_REDACTION_SENTINEL
 from finance_redactor.domain.errors import EncryptedPdfError, UnreadableFileError
 from finance_redactor.domain.ocr import Box
+from finance_redactor.domain.tables import TableColumn, header_or_default
 
 _EXTERNAL_LINK_KINDS = frozenset({fitz.LINK_URI, fitz.LINK_LAUNCH, fitz.LINK_GOTOR})
 
@@ -269,6 +270,32 @@ class PyMuPdfDocument:
             for rect in page.get_image_rects(xref):
                 rects.append((rect.x0, rect.y0, rect.x1, rect.y1))
         return rects
+
+    def page_tables(self, page_index: int) -> list[TableColumn]:
+        """Return the columns of every table PyMuPDF finds on one page.
+
+        The header comes from PyMuPDF's header detection; when the header is
+        the table's own first row (``header.external`` False) that row is
+        left out of the cells. A table with fewer than two columns or two
+        rows is skipped: it is a box around text, not a table.
+        """
+        page = self._doc.load_page(page_index)
+        columns: list[TableColumn] = []
+        for table in page.find_tables().tables:
+            rows = table.extract()
+            if table.col_count < 2 or len(rows) < 2:
+                continue
+            if not table.header.external:
+                rows = rows[1:]
+            for index, header in enumerate(table.header.names):
+                cells = tuple(
+                    cell.strip()
+                    for row in rows
+                    if index < len(row) and (cell := row[index]) and cell.strip()
+                )
+                if cells:
+                    columns.append(TableColumn(header_or_default(header, index), cells))
+        return columns
 
     def redact_page(
         self,

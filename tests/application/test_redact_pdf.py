@@ -15,17 +15,22 @@ from finance_redactor.application.redact_pdf import RedactionStyle, RedactPdfSer
 from finance_redactor.config import DEFAULT_SETTINGS
 from finance_redactor.domain.entities import DetectionSource, PiiDetection, Span
 from finance_redactor.domain.pseudonyms import MasterEntry, normalize
+from finance_redactor.domain.tables import TableColumn
 
 
 class FakePdfDocument:
     """In-memory PDF double for testing RedactPdfService."""
 
     def __init__(
-        self, pages: list[str], image_rects: dict[int, list[tuple]] | None = None
+        self,
+        pages: list[str],
+        image_rects: dict[int, list[tuple]] | None = None,
+        tables: dict[int, list[TableColumn]] | None = None,
     ) -> None:
-        """Create a fake document with the given page texts and image rectangles."""
+        """Create a fake document with page texts, image rectangles and tables."""
         self._pages = pages
         self._image_rects = image_rects or {}
+        self._tables = tables or {}
         self.links = 0
         self.links_removed_before_render = False
         self.redactions_by_page: dict[int, list[tuple[str, str]]] = {}
@@ -48,6 +53,10 @@ class FakePdfDocument:
         return [
             tuple(float(c) for c in r) for r in self._image_rects.get(page_index, [])
         ]
+
+    def page_tables(self, page_index: int) -> list[TableColumn]:
+        """Return the table columns recorded for this page."""
+        return list(self._tables.get(page_index, []))
 
     def remove_external_links(self) -> int:
         """Report the canned link count and remember it was called."""
@@ -831,3 +840,124 @@ def test_reading_scans_can_be_turned_off_per_run() -> None:
 
     assert ocr.calls == 0
     assert scan.read_pages == []
+
+
+# --- Whole-column redaction (made-up names and numbers) ---------------------
+
+_TABLE_PAGE = (
+    "Payee Account No Amount\n"
+    "Alex Sample 1234567890 100.00\n"
+    "Robin Example 2345678901 250.00"
+)
+
+
+def _table_doc() -> FakePdfDocument:
+    return FakePdfDocument(
+        [_TABLE_PAGE],
+        tables={
+            0: [
+                TableColumn("Payee", ("Alex Sample", "Robin Example")),
+                TableColumn("Account No", ("1234567890", "2345678901")),
+                TableColumn("Amount", ("100.00", "250.00")),
+            ]
+        },
+    )
+
+
+def test_scan_lists_the_table_columns_by_key() -> None:
+    scan = _service().scan(_table_doc())
+
+    assert scan.table_columns == {
+        "payee": "Payee",
+        "account no": "Account No",
+        "amount": "Amount",
+    }
+
+
+def test_a_chosen_column_has_every_cell_redacted_and_others_are_left() -> None:
+    doc = _table_doc()
+    service = _service()
+    scan = service.scan(doc)
+
+    result = service.redact(doc, scan, [], columns=frozenset({"payee"}))
+
+    redacted = [found for found, _label in doc.redactions_by_page[0]]
+    assert redacted == ["Alex Sample", "Robin Example"]
+    assert {f.source for f in result.findings} == {DetectionSource.TABLE_COLUMN}
+    assert [row.label for row in result.crosswalk] == ["[001]", "[002]"]
+
+
+def test_no_columns_chosen_redacts_no_cells() -> None:
+    doc = _table_doc()
+    service = _service()
+
+    result = service.redact(doc, service.scan(doc), [])
+
+    assert result.findings == []
+
+
+def test_an_unticked_cell_value_stays_visible() -> None:
+    doc = _table_doc()
+    service = _service()
+    scan = service.scan(doc)
+
+    result = service.redact(
+        doc,
+        scan,
+        [],
+        columns=frozenset({"payee"}),
+        exclude=frozenset({normalize("Robin Example")}),
+    )
+
+    assert [f.detected_text for f in result.findings] == ["Alex Sample"]
+
+
+def test_a_cell_that_is_a_curated_name_gets_its_internal_id() -> None:
+    doc = _table_doc()
+    master = {
+        ("PERSON", normalize("Alex Sample")): MasterEntry(
+            "PSN-17728", "Staff", internal_id="17728"
+        )
+    }
+    service = _service(master_map=master, auto_prefixes={"PERSON": "PSN"})
+    scan = service.scan(doc)
+
+    result = service.redact(doc, scan, [], columns=frozenset({"payee"}))
+
+    by_text = {row.original_name: row for row in result.crosswalk}
+    assert by_text["Alex Sample"].internal_id == "17728"
+    assert by_text["Robin Example"].auto is True
+
+
+def test_table_columns_on_a_scanned_page_come_from_the_ocr_lines() -> None:
+    from finance_redactor.domain.ocr import OcrLine
+
+    def line(text: str, x0: float, row: int) -> OcrLine:
+        top = 100.0 + row * 30.0
+        return OcrLine(text, (x0, top, x0 + 150.0, top + 20.0), 0.95)
+
+    lines = [
+        line("Payee", 100.0, 0),
+        line("Amount", 400.0, 0),
+        line("Alex Sample", 100.0, 1),
+        line("100.00", 400.0, 1),
+        line("Robin Example", 100.0, 2),
+        line("250.00", 400.0, 2),
+    ]
+    doc = FakePdfDocument([""], image_rects={0: [(0, 0, 595, 842)]})
+    service = RedactPdfService(
+        open_document=_document_factory,
+        master_map={},
+        auto_prefixes={"CUSTOM": "CST"},
+        detector=FakeDetector(),
+        fixed_masks={},
+        ocr=FakeOcr(lines),
+    )
+    scan = service.scan(doc)
+
+    service.redact(doc, scan, [], columns=frozenset({"payee"}))
+
+    assert scan.table_columns == {"payee": "Payee", "amount": "Amount"}
+    names = doc.rebuilt["names"]
+    assert [label for _box, label in names] == ["[001]", "[002]"]
+    assert [box[1] for box, _label in names] == [130.0, 160.0]  # rows 1 and 2

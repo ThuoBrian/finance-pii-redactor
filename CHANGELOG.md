@@ -8,6 +8,14 @@ the `version` field in `pyproject.toml`.
 
 ### Added
 
+- **Whole table columns can be redacted in a PDF.** When a PDF holds a table,
+  the Review step lists its columns under "Table columns to redact in full".
+  Every entry in a chosen column gets a label, like a found name, and goes into
+  the mapping. A cell that matches a master-list name gets that name's
+  Internal ID. Columns whose header looks like a name, account or contact
+  (Payee, Account No, Phone) start chosen. Tables on text pages are found by
+  PyMuPDF. On scanned pages they're worked out from where the OCR'd lines sit.
+  Changing the choice rebuilds the file without scanning again.
 - **Scanned PDF pages are read with OCR.** A scanned page used to be either
   fully black or unredacted. Now its printed text is read (RapidOCR on ONNX
   Runtime; models ship with the package and run offline), names in it are

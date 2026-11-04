@@ -153,3 +153,11 @@ def test_dedupe_master_list_wins_over_overlapping_pattern_match() -> None:
     pattern_hit = _detection(0, 25, score=1.0, source=DetectionSource.PATTERN)
     kept = dedupe_overlapping([pattern_hit, master_list_hit])
     assert kept == [master_list_hit]
+
+
+def test_dedupe_table_column_cell_wins_over_a_master_list_name_inside_it() -> None:
+    """A chosen cell is redacted whole, so nothing else in it stays visible."""
+    cell = _detection(0, 20, source=DetectionSource.TABLE_COLUMN)
+    curated = _detection(0, 8, source=DetectionSource.MASTER_LIST)
+
+    assert dedupe_overlapping([curated, cell]) == [cell]

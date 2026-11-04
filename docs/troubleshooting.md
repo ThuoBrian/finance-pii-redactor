@@ -31,6 +31,7 @@ This file records known errors, edge cases, and their solutions when developing 
   - [PDF text is not replaced, or a typed word/phrase isn't found](#pdf-text-is-not-replaced-or-a-typed-wordphrase-isnt-found)
   - [A short word is redacted inside longer words in a PDF](#a-short-word-is-redacted-inside-longer-words-in-a-pdf)
   - [A scanned PDF page comes out as a picture with black boxes](#a-scanned-pdf-page-comes-out-as-a-picture-with-black-boxes)
+  - [Redacting a whole table column in a PDF](#redacting-a-whole-table-column-in-a-pdf)
   - [A blacked-out image or signature could be pulled back out of a PDF](#a-blacked-out-image-or-signature-could-be-pulled-back-out-of-a-pdf)
   - [Redacting a name in a PDF also blacks out/deletes part of the line above it](#redacting-a-name-in-a-pdf-also-blacks-outdeletes-part-of-the-line-above-it)
   - [A name inside a Word text box, SmartArt, or embedded object is not detected](#a-name-inside-a-word-text-box-smartart-or-embedded-object-is-not-detected)
@@ -244,6 +245,20 @@ This file records known errors, edge cases, and their solutions when developing 
 - **A form's ruled lines** are blacked out line by line rather than as one box, so the text inside the form stays readable.
 - **Slower:** about two seconds a page, plus about two seconds the first time OCR runs in a session.
 - **Turn it off** under **Customize** (**Read the text on scanned pages**) to get the old behaviour.
+
+### Redacting a whole table column in a PDF
+
+- **What happens:** when a PDF holds a table, the Review step lists its columns under **Table columns to redact in full**. Every entry in a chosen column is treated like a found name: it gets a label and a row in the mapping. A cell that exactly matches a master-list name gets that name's Internal ID. The header row stays. Columns whose header looks like a name, account or contact (Payee, Name, Account No, Phone, Email, ID) start chosen. Changing the choice rebuilds the file without scanning again.
+- **Where tables come from:** on pages with a text layer, PyMuPDF's table finder (`PyMuPdfDocument.page_tables`). On scanned pages, the lines OCR read are grouped into rows and columns by where they sit (`domain/tables.py`, `columns_from_lines`).
+- **The same value is redacted everywhere on the page,** not only inside the table, and it gets the same label. This is deliberate over-redaction.
+- **A cell beats a name inside it.** If a chosen cell reads `Alex Sample, 12 Example Road`, the whole cell is redacted, not just the name. The cost is that the cell gets a flagged `AUTO-` ID, not the curated one. A cell that is exactly a curated name still gets its ID.
+- **One value can still be shown:** untick it in **Hide in output?** like any other term.
+- **Known limits:**
+  - A table drawn without ruling lines can be missed on a text page.
+  - The scanned-page grouping is a guess. A two-column page layout can show up as a "table", and a table with very uneven rows can be missed. Neither leaves anything less redacted than before; it only changes the choices offered.
+  - Columns with the same header merge into one choice across tables and pages.
+  - A column with no header shows as `Column 1`, `Column 2` and so on.
+  - Excel and Word already work by column or cell, so this is PDF-only.
 
 ### A blacked-out image or signature could be pulled back out of a PDF
 

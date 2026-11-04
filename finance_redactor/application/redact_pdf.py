@@ -74,6 +74,12 @@ rebuilds each such page as a cleaned picture of itself
 confidence stays, names in it are cleared and labelled, and with image
 black-out on, every other mark on the page (signatures, handwriting, stamps,
 text the OCR was unsure of) is blacked out.
+
+Tables: ``scan`` also records each page's table columns (the gateway's table
+finder on text pages, :func:`columns_from_lines` on OCR'd ones), and
+``redact`` takes the ``columns`` the user chose. Every cell of a chosen column
+becomes a detection like a typed word (see ``domain/tables.py``), so it is
+labelled, mapped and resolved against the master list by the same code.
 """
 
 from __future__ import annotations
@@ -107,6 +113,12 @@ from finance_redactor.domain.pseudonyms import (
     normalize,
 )
 from finance_redactor.domain.rules import dedupe_overlapping
+from finance_redactor.domain.tables import (
+    TableColumn,
+    column_detections,
+    column_key,
+    columns_from_lines,
+)
 
 # Fixed threshold - not user-tunable (PDF has no threshold widget, matching
 # the "just works" ask). Low enough to admit schema-less URLs (score 0.5) and
@@ -153,6 +165,8 @@ class _PdfPageScan:
     # What OCR read on a scanned page (empty if it was not read). When set,
     # ``raw_text`` is these lines joined, and detections refer to that text.
     ocr_lines: tuple[OcrLine, ...] = ()
+    # The columns of every table on the page, for whole-column redaction.
+    tables: tuple[TableColumn, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -180,6 +194,15 @@ class PdfScanResult:
     def read_pages(self) -> list[int]:
         """Zero-based indices of scanned pages whose text OCR read."""
         return [index for index, page in enumerate(self.pages) if page.ocr_lines]
+
+    @property
+    def table_columns(self) -> dict[str, str]:
+        """Each table column's key, mapped to its header as first seen."""
+        columns: dict[str, str] = {}
+        for page in self.pages:
+            for column in page.tables:
+                columns.setdefault(column_key(column.header), column.header)
+        return columns
 
 
 class RedactPdfService:
@@ -364,12 +387,16 @@ class RedactPdfService:
                     lines = tuple(
                         self._ocr.read(document.render_page(page_index, _OCR_DPI))
                     )
+                tables: tuple[TableColumn, ...] = (
+                    tuple(document.page_tables(page_index)) if has_text else ()
+                )
                 if lines:
                     raw_text = join_lines(lines).text
                     normalized = NormalizedText(raw_text, raw_text, ())
                     detections = self._detector.analyze(
                         raw_text, [*_ENTITIES, *self._fixed_masks], _THRESHOLD
                     )
+                    tables = tuple(columns_from_lines(lines))
                 bracketed = len(_BRACKETED_NUMBER.findall(normalized.text))
                 pages.append(
                     _PdfPageScan(
@@ -379,6 +406,7 @@ class RedactPdfService:
                         bracketed=bracketed,
                         scanned=scanned,
                         ocr_lines=lines,
+                        tables=tables,
                     )
                 )
             return PdfScanResult(pages=pages)
@@ -394,8 +422,13 @@ class RedactPdfService:
         style: RedactionStyle = RedactionStyle.PSEUDONYMIZE,
         redact_images: bool = False,
         exclude: frozenset[str] = frozenset(),
+        columns: frozenset[str] = frozenset(),
     ) -> PdfRedactionResult:
         """Rebuild the redacted document from an existing :class:`PdfScanResult`.
+
+        ``columns`` holds the keys (see ``PdfScanResult.table_columns``) of
+        the table columns to redact in full. ``exclude`` still applies to
+        their cell values, so one value can be left visible.
 
         ``source`` must be freshly opened (the caller resets its read
         position before calling this) - a new document build needs a fresh
@@ -421,6 +454,12 @@ class RedactPdfService:
                     *page.detections,
                     *find_custom_words(
                         page.normalized.text, custom_words, self._custom_words_score
+                    ),
+                    *column_detections(
+                        page.normalized.text,
+                        page.tables,
+                        columns,
+                        self._custom_words_score,
                     ),
                 ]
                 bracketed += page.bracketed

@@ -24,6 +24,7 @@ import streamlit as st
 
 from finance_redactor.application.redact_pdf import RedactionStyle, RedactPdfService
 from finance_redactor.domain.errors import EncryptedPdfError, UnreadableFileError
+from finance_redactor.domain.tables import suggested_columns
 from finance_redactor.presentation import wizard
 from finance_redactor.presentation.crosswalk_view import (
     PDF_NAMES_TOGGLE_KEY,
@@ -39,6 +40,7 @@ from finance_redactor.presentation.exclusion_view import (
 )
 from finance_redactor.presentation.presenters import (
     findings_dataframe,
+    merge_findings,
     plural,
     review_tab_labels,
     scanned_pages_warning,
@@ -52,6 +54,8 @@ from finance_redactor.presentation.steps import show_step
 # A typed word that is itself a label, e.g. "[001]". Redacting it would mean
 # redacting this tool's own output on a second pass.
 _LABEL_SHAPED = re.compile(r"^\[\d+\]$")
+# The Review step's table-column picker (its live value).
+_COLUMNS_KEY = "pdf_columns_pending"
 
 
 def run_pdf_flow(
@@ -84,6 +88,8 @@ def run_pdf_flow(
             "pdf_links",
             "pdf_all_findings",
             "pdf_excluded_applied",
+            "pdf_columns_applied",
+            _COLUMNS_KEY,
             "pdf_scan_result",
             "pdf_run",
             "excel_bytes",
@@ -192,12 +198,15 @@ def _options_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> N
                 )
                 uploaded.seek(0)
                 status.update(label="Building the redacted PDF...")
+                # Name-, account- and contact-like columns start chosen.
+                columns = suggested_columns(scan_result.table_columns)
                 result = pdf_service.redact(
                     uploaded,
                     scan_result,
                     custom_words,
                     style=style,
                     redact_images=redact_images,
+                    columns=columns,
                 )
         except EncryptedPdfError:
             st.error(
@@ -226,6 +235,8 @@ def _options_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> N
         # away with the row and strand the decision.
         state.pdf_all_findings = result.findings
         state.pdf_excluded_applied = frozenset()
+        state.pdf_columns_applied = columns
+        state[_COLUMNS_KEY] = sorted(columns)
         # The settings this result was built with. The later steps read
         # these, not the option widgets, which are only drawn on Options.
         state.pdf_run = {
@@ -291,6 +302,9 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
             )
         render_pdf_mapping_warnings(state.pdf_crosswalk)
 
+    columns_applied = state.get("pdf_columns_applied", frozenset())
+    columns = _column_picker(state.pdf_scan_result.table_columns, columns_applied)
+
     review_findings = state.get("pdf_all_findings", [])
     tab_review, tab_mapping, tab_occurrences = st.tabs(
         review_tab_labels(review_findings)
@@ -314,13 +328,16 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
             hide_index=True,
         )
 
-    if excluded != state.get("pdf_excluded_applied", frozenset()):
+    if (
+        excluded != state.get("pdf_excluded_applied", frozenset())
+        or columns != columns_applied
+    ):
         # No detector call happens here at all: ``pdf_scan_result`` was
         # computed once, on the Redact click, and this just reruns the
         # cheap, detector-free redaction-building/apply step over it with
-        # the new exclude set.
+        # the new exclude set and column choice.
         uploaded.seek(0)
-        with st.spinner("Rebuilding without those terms..."):
+        with st.spinner("Rebuilding with your changes..."):
             rerun = pdf_service.redact(
                 uploaded,
                 state.pdf_scan_result,
@@ -328,11 +345,19 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
                 style=run["style"],
                 redact_images=run["redact_images"],
                 exclude=excluded,
+                columns=columns,
             )
         state.pdf_buffer = rerun.data
         state.pdf_findings = rerun.findings
         state.pdf_crosswalk = rerun.crosswalk
         state.pdf_excluded_applied = excluded
+        if columns != columns_applied:
+            # A newly chosen column brings cell values the first run never
+            # found; add them so each one can still be unticked.
+            state.pdf_all_findings = merge_findings(
+                state.get("pdf_all_findings", []), rerun.findings
+            )
+            state.pdf_columns_applied = columns
         st.rerun()
 
     wizard.nav(
@@ -342,6 +367,32 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
             "pdf", state.get("pdf_excluded_applied", frozenset())
         ),
     )
+
+
+def _column_picker(
+    table_columns: dict[str, str], applied: frozenset[str]
+) -> frozenset[str]:
+    """Draw the table-column picker and return the columns now chosen.
+
+    Shown only when the scan found a table. A change applies at once (the
+    rebuild is cheap); the caller compares the result with ``applied``.
+    """
+    if not table_columns:
+        return applied
+    st.session_state.setdefault(_COLUMNS_KEY, sorted(applied))
+    chosen = st.multiselect(
+        "Table columns to redact in full",
+        options=list(table_columns),
+        format_func=lambda key: table_columns[key],
+        key=_COLUMNS_KEY,
+        help=(
+            "Every entry in a chosen column is replaced with a label, and the "
+            "same value is replaced anywhere else on that page too. Columns "
+            "that look like names, accounts or contact details start chosen. "
+            "The header row stays."
+        ),
+    )
+    return frozenset(chosen)
 
 
 def _download_step(master_list_fingerprint: str, steps: Any) -> None:

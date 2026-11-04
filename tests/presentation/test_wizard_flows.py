@@ -74,11 +74,25 @@ def _flow(fmt: str) -> None:
             settings=S,
             steps=steps,
         )
-    elif fmt in ("pdf", "pdf-scan"):
+    elif fmt in ("pdf", "pdf-scan", "pdf-table"):
         doc = fitz.open()
         page = doc.new_page()
         if fmt == "pdf":
             page.insert_text((72, 100), "Paid to Jane Doe for field work.")
+        elif fmt == "pdf-table":  # a ruled table of made-up payees
+            rows = [
+                ["Payee", "Amount"],
+                ["Alex Sample", "100.00"],
+                ["Robin Example", "250.00"],
+            ]
+            xs, top = [72, 272, 372], 100
+            for r, row in enumerate(rows):
+                for c, text in enumerate(row):
+                    page.insert_text((xs[c] + 4, top + r * 20 + 14), text)
+            for r in range(len(rows) + 1):
+                page.draw_line((xs[0], top + r * 20), (xs[-1], top + r * 20))
+            for x in xs:
+                page.draw_line((x, top), (x, top + len(rows) * 20))
         else:  # a "scan": one image and no text layer
             pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 40, 20), False)
             pix.clear_with(200)
@@ -241,3 +255,28 @@ def test_a_re_ticked_term_cannot_slip_through_unapplied() -> None:
     _click(at, "Tick all shown (1)")
 
     assert _continue_button(at).disabled
+
+
+def test_a_pdf_table_offers_its_columns_with_name_like_ones_chosen() -> None:
+    at = _start("pdf-table")
+    _click(at, "Redact my file")
+
+    picker = at.multiselect[0]
+    assert picker.label == "Table columns to redact in full"
+    assert picker.value == ["payee"]
+    assert at.session_state["pdf_columns_applied"] == frozenset({"payee"})
+    texts = {f.detected_text for f in at.session_state["pdf_findings"]}
+    assert {"Alex Sample", "Robin Example"} <= texts
+    import fitz
+
+    output = fitz.open(stream=at.session_state["pdf_buffer"], filetype="pdf")
+    page_text = output[0].get_text()
+    assert "Alex Sample" not in page_text and "Robin Example" not in page_text
+    assert "Payee" in page_text and "100.00" in page_text  # header, unchosen
+
+    picker.set_value(["payee", "amount"]).run()
+
+    assert not at.exception, at.exception
+    assert at.session_state["pdf_columns_applied"] == frozenset({"payee", "amount"})
+    listed = {f.detected_text for f in at.session_state["pdf_all_findings"]}
+    assert {"100.00", "250.00"} <= listed

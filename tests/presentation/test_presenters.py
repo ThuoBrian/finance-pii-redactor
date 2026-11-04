@@ -28,6 +28,7 @@ from finance_redactor.presentation.presenters import (
     filter_editor_rows,
     findings_dataframe,
     formatting_note,
+    merge_findings,
     merge_pending,
     pdf_mapping_dataframe,
     pdf_mapping_with_names_dataframe,
@@ -657,3 +658,35 @@ def test_scanned_pages_warning_for_pages_read_with_ocr() -> None:
     assert "signatures, handwriting, stamps" in read_part
     assert "check that page" in read_part
     assert unread_part.startswith("**1 of 2 pages is a scan** (page 2)")
+
+
+def test_merge_findings_adds_only_terms_not_already_listed() -> None:
+    def finding(text: str) -> Finding:
+        return Finding(
+            page=0,
+            detected_text=text,
+            entity_type="CUSTOM",
+            score=1.0,
+            source=DetectionSource.TABLE_COLUMN,
+        )
+
+    existing = [finding("Alex Sample")]
+    new = [finding("alex  sample"), finding("Robin Example")]
+
+    merged = merge_findings(existing, new)
+
+    assert [f.detected_text for f in merged] == ["Alex Sample", "Robin Example"]
+
+
+def test_review_summary_counts_table_cells() -> None:
+    findings = [
+        Finding(
+            page=0,
+            detected_text="Alex Sample",
+            entity_type="CUSTOM",
+            score=1.0,
+            source=DetectionSource.TABLE_COLUMN,
+        )
+    ]
+
+    assert "1 table cell" in review_summary(detection_editor_dataframe(findings))

@@ -425,6 +425,7 @@ _EDITOR_COLUMNS = [
 _MODEL_WITH_HINT, _MODEL_PLAIN, _TYPED, _PATTERN, _CURATED = range(5)
 _SOURCE_TIER = {
     DetectionSource.CUSTOM: _TYPED,
+    DetectionSource.TABLE_COLUMN: _TYPED,
     DetectionSource.PATTERN: _PATTERN,
     DetectionSource.MASTER_LIST: _CURATED,
 }
@@ -434,6 +435,7 @@ ALL_SOURCES = "All"
 SOURCE_FILTERS = {
     "Model guesses": DetectionSource.MODEL.value,
     "Typed words": DetectionSource.CUSTOM.value,
+    "Table columns": DetectionSource.TABLE_COLUMN.value,
     "Pattern matches": DetectionSource.PATTERN.value,
     "Master list": DetectionSource.MASTER_LIST.value,
 }
@@ -503,6 +505,20 @@ def detection_editor_dataframe(
         for (_, hint), score, _, key, finding in ranked
     ]
     return pd.DataFrame(rows, columns=_EDITOR_COLUMNS)
+
+
+def merge_findings(
+    existing: Sequence[Finding], new: Sequence[Finding]
+) -> list[Finding]:
+    """Return ``existing`` plus each finding of ``new`` whose term is not in it yet."""
+    seen = {term_key(f.detected_text) for f in existing}
+    merged = list(existing)
+    for finding in new:
+        key = term_key(finding.detected_text)
+        if key not in seen:
+            seen.add(key)
+            merged.append(finding)
+    return merged
 
 
 def term_key(term: object) -> str:
@@ -595,6 +611,7 @@ def review_summary(table: pd.DataFrame) -> str:
         parts.append(f"{guess} ({hinted} worth a closer look)" if hinted else guess)
     for label, source in (
         ("typed word", DetectionSource.CUSTOM.value),
+        ("table cell", DetectionSource.TABLE_COLUMN.value),
         ("pattern match", DetectionSource.PATTERN.value),
         ("master-list name", DetectionSource.MASTER_LIST.value),
     ):
