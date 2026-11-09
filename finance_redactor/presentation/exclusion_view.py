@@ -45,11 +45,10 @@ from finance_redactor.presentation.presenters import (
 )
 
 _HOW_TO_READ = (
-    "Everything ticked is hidden in your download. The rows most likely to "
-    "be wrong are at the top. If a row is not really a name or a private "
-    "detail, untick it, then click **Apply changes**.\n\n"
-    "If a master-list name is wrong, unticking fixes this file only. Fix the "
-    "master list to stop it coming back."
+    "Ticked rows are hidden in your download; the likeliest mistakes are at "
+    "the top. Untick anything that is not a name or private detail, then "
+    "click **Apply changes**. Unticking fixes this file only: fix the master "
+    "list to stop a wrong name coming back."
 )
 _CLEAN_RUN = (
     "Nothing here is a guess. Every term came from your master list, words "
@@ -131,14 +130,11 @@ def render_deselect_editor(
         notice = state.pop(notice_key, None)
         if notice:
             st.success(notice)
-        st.markdown(
-            f"**Check what was detected ({plural(len(overview), 'distinct term')})**"
-        )
         # Filled at the end, once this run's ticks are known; drawn here so
-        # the line sits at the top where the reviewer looks first.
+        # the line sits at the top where the reviewer looks first. It carries
+        # the term count, so there is no separate heading.
         status_slot = st.empty()
-        with st.expander("How to use this list"):
-            st.markdown(_HOW_TO_READ)
+        st.caption(_HOW_TO_READ)
 
         clean = model_guess_count(overview) == 0
         if clean:

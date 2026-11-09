@@ -240,19 +240,14 @@ def _review_step(excel_service: RedactExcelService, steps: Any) -> None:
         df = list(scan_sheets.values())[shown]
         redacted_df = redacted_sheets[shown].data
         cell_keys = redacted_sheets[shown].highlighted
-        col_orig, col_redacted = st.columns(2)
-        with col_orig:
-            st.markdown("**Original**")
-            st.dataframe(
-                preview_styler(df, cell_keys), width="stretch", hide_index=True
-            )
-        with col_redacted:
-            st.markdown("**Redacted**")
-            st.dataframe(
-                preview_styler(redacted_df, cell_keys),
-                width="stretch",
-                hide_index=True,
-            )
+        # Stacked, not side by side: in the centered layout two half-width
+        # tables would hide most columns. The rows line up in both.
+        st.markdown("**Redacted**")
+        st.dataframe(
+            preview_styler(redacted_df, cell_keys), width="stretch", hide_index=True
+        )
+        st.markdown("**Original**")
+        st.dataframe(preview_styler(df, cell_keys), width="stretch", hide_index=True)
         if len(df) > PREVIEW_MAX_ROWS:
             n_hidden = preview_hidden_count(df, cell_keys)
             st.caption(

@@ -54,7 +54,7 @@ def _main() -> None:
     # renders before it (the master-list-setup dialog below, or even a
     # cache_resource spinner on a cold cache) would otherwise raise.
     st.set_page_config(
-        page_title="Finance PII Redactor", page_icon=":shield:", layout="wide"
+        page_title="Finance PII Redactor", page_icon=":shield:", layout="centered"
     )
     # Before any widget is drawn: keeps the Options choices alive on the
     # steps where those widgets are not shown (see presentation/wizard.py).
@@ -149,7 +149,9 @@ def _main() -> None:
         render_master_list_setup_dialog(settings.names_dir)
 
     with st.sidebar:
-        st.logo(str(_LOGO), size="large")
+        # A full-width image, not st.logo: the logo is a wide illustration,
+        # and st.logo's 24px-high slot shrinks it past recognition.
+        st.image(str(_LOGO), width="stretch")
         st.markdown("### Finance PII Redactor")
         render_master_list_card(
             name_counts,
@@ -160,10 +162,12 @@ def _main() -> None:
             ),
             on_refresh=_get_master_list_bundle.clear,
         )
-        st.caption(":green[●] Everything stays on this computer")
-        if st.button("Start over", width="stretch", key="sidebar_start_over"):
+        st.caption(f":green[●] Everything stays on this computer · [Help]({_HELP_URL})")
+        # Nothing to start over from until a file is in.
+        if st.session_state.get(wizard.upload_key()) is not None and st.button(
+            "Start over", width="stretch", key="sidebar_start_over"
+        ):
             wizard.start_over()
-        st.link_button("Help and troubleshooting", _HELP_URL, width="stretch")
     render_quit_control()
 
     steps = st.empty()
@@ -189,7 +193,9 @@ def _main() -> None:
             type=["xlsx", "xls", "pdf", "docx"],
             help="The file is processed entirely on your machine.",
             key=wizard.upload_key(),
-            label_visibility="collapsed" if not on_upload_step else "visible",
+            # The step heading above says the same; the label stays for
+            # screen readers.
+            label_visibility="collapsed",
         )
     if uploaded is None:
         wizard.set_step(wizard.UPLOAD)

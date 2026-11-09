@@ -103,7 +103,7 @@ def test_a_clean_run_says_so_and_folds_the_table_away() -> None:
 
     assert not at.exception
     assert any("Nothing here is a guess" in s.value for s in at.success)
-    assert [e.label for e in at.expander] == ["How to use this list", "Review anyway"]
+    assert [e.label for e in at.expander] == ["Review anyway"]
 
 
 def test_apply_confirms_once_and_then_the_notice_goes() -> None:

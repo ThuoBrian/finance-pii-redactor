@@ -82,6 +82,18 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **A calmer, narrower page.** The app now uses Streamlit's centered layout
+  instead of stretching across the whole screen, so tables, captions and
+  buttons stay in one readable column. The Excel preview shows the redacted
+  table above the original instead of squeezing them side by side.
+- **A tidier sidebar.** The logo is shown full width, where it can be seen.
+  The master-list card fits on one line, with the file location and Refresh
+  folded under "Location and refresh". Help is a link next to the privacy
+  note, and "Start over" appears only once a file is loaded.
+- **The Review tab says the count once.** The "Check what was detected"
+  heading and the "How to use this list" expander are gone; the status line
+  carries the count and a short caption explains the tick boxes.
+
 - **The Review list is simpler.** It now shows three columns: the tick box,
   the term, and **Why it was found**, in plain words ("On your master list",
   "Looks like a name. Check it: it is an ordinary English word"). **Show

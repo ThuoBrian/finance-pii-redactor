@@ -66,11 +66,12 @@ def render_master_list_card(
     total = sum(name_counts.values())
     issues = list(issues or ())
     with st.container(border=True):
-        st.markdown("**Master list**")
         if total:
-            st.markdown(f"**{plural(total, 'name')}** :green-badge[ready]")
+            st.markdown(
+                f"**Master list** · {plural(total, 'name')} :green-badge[ready]"
+            )
         else:
-            st.markdown(":red-badge[no names loaded]")
+            st.markdown("**Master list** :red-badge[no names loaded]")
         line = _counts_line(name_counts)
         if age_seconds is not None:
             line += f" · updated {time_ago(age_seconds)}"
@@ -81,14 +82,14 @@ def render_master_list_card(
             with st.expander(f"{badge}[{plural(len(issues), 'thing')} to tidy]"):
                 for issue in issues:
                     _render_issue(issue)
-        with st.expander("Where is it?"):
+        with st.expander("Location and refresh"):
             st.caption(f"`{master_list_path}`")
             st.caption("Save and close the workbook in Excel, then Refresh.")
-        if on_refresh is not None and st.button(
-            "Refresh",
-            key="master_list_refresh",
-            width="stretch",
-            help="Re-read the master list after editing it or changing its folder.",
-        ):
-            on_refresh()
-            st.rerun()
+            if on_refresh is not None and st.button(
+                "Refresh",
+                key="master_list_refresh",
+                width="stretch",
+                help="Re-read the master list after editing it or changing its folder.",
+            ):
+                on_refresh()
+                st.rerun()
