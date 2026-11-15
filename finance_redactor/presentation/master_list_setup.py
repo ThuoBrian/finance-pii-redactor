@@ -53,25 +53,37 @@ def render_master_list_setup_dialog(current_names_dir: Path) -> None:
         key="master_list_setup_folder_input",
     )
 
-    if folder_input.strip():
-        if master_list_exists_at(folder_input):
+    folder = folder_input.strip()
+    found = master_list_exists_at(folder)
+    confirmed = found
+    if folder:
+        if found:
             st.success(f"Found `{MASTER_LIST_FILENAME}` at this path.")
         else:
             st.warning(
                 f"`{MASTER_LIST_FILENAME}` was not found at this exact path "
-                "yet. Double-check it (or save anyway if the folder is "
-                "still syncing in Box)."
+                "yet. Double-check it. If the folder is still syncing in Box, "
+                "you can save it anyway."
+            )
+            # Saving a wrong path quietly leaves the app on 0 names, so ask
+            # for an explicit yes instead of letting one click do it.
+            confirmed = st.checkbox(
+                "Save anyway: the folder is still syncing",
+                key="master_list_setup_save_anyway",
             )
 
     col_save, col_skip = st.columns(2)
     with col_save:
-        if st.button("Save and use this folder", type="primary", width="stretch"):
-            if not folder_input.strip():
-                st.error("Enter a folder path first.")
-            else:
-                save_master_list_dir(Path(folder_input.strip()))
-                st.session_state.master_list_setup_dismissed = True
-                st.rerun()
+        if st.button(
+            "Save and use this folder",
+            type="primary",
+            width="stretch",
+            disabled=not confirmed,
+            help=None if folder else "Enter a folder path first.",
+        ):
+            save_master_list_dir(Path(folder))
+            st.session_state.master_list_setup_dismissed = True
+            st.rerun()
     with col_skip:
         if st.button("Skip for now", width="stretch"):
             st.session_state.master_list_setup_dismissed = True

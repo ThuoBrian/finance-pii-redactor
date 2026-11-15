@@ -236,6 +236,11 @@ the `version` field in `pyproject.toml`.
   stops matching. The master-list card lists these names ("contain ' - '").
   If two such rows share the short part but have different Internal IDs, a
   bare short form gets a flagged auto-code instead of a guessed ID.
+- **The master-list setup dialog no longer saves a wrong folder on one
+  click.** "Save and use this folder" was clickable even while the dialog
+  warned that the workbook wasn't there. It is now greyed out until a folder
+  is entered, and when the workbook isn't found you must tick "Save anyway:
+  the folder is still syncing" first.
 - **Review tick boxes respond to a single click.** Every other tick or
   untick in the "Hide in output?" column was ignored, so a box seemed to
   need a double click. Each click now registers.
