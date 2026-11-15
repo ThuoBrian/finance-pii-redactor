@@ -339,6 +339,14 @@ def test_a_normal_pdf_has_no_not_found_warning() -> None:
     assert not any("could not be found" in w.value for w in at.warning)
 
 
+def test_a_short_pdf_gets_no_job_size_warning_on_options() -> None:
+    at = _start("pdf-scan")
+
+    assert [s.value for s in at.subheader] == ["Options"]
+    assert not at.warning
+    assert at.session_state["pdf_job_size"] == (1, 1)
+
+
 def _continue_button(at: AppTest):
     return next(b for b in at.button if b.label == "Continue to download →")
 

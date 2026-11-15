@@ -7,6 +7,7 @@ Collected here, they are the presentation layer's single rendering vocabulary.
 
 from __future__ import annotations
 
+import math
 from collections import Counter
 from collections.abc import Mapping, Sequence
 
@@ -661,6 +662,37 @@ def apply_notice(left_visible: frozenset[str], not_located: int = 0) -> str:
     if len(parts) == 1:
         parts.append("Every detected term is hidden.")
     return " ".join(parts)
+
+
+def pdf_job_size_note(
+    scanned: int,
+    total_pages: int,
+    *,
+    reading_scans: bool,
+    seconds_per_page: float,
+    large_pages: int,
+) -> str:
+    """Say up front how long a big PDF will take; empty for a quick one.
+
+    The OCR estimate shows once reading the scans would take a minute or
+    more; the page-count warning once the file has ``large_pages`` pages.
+    """
+    parts = []
+    seconds = scanned * seconds_per_page if reading_scans else 0
+    if seconds >= 60:
+        minutes = math.ceil(seconds / 60)
+        parts.append(
+            f"**{plural(scanned, 'scanned page')}, about "
+            f"{plural(minutes, 'minute')} to read.** Scanned pages are read "
+            "one at a time; leave this tab open until the review appears."
+        )
+    if total_pages >= large_pages:
+        parts.append(
+            f"**This PDF has {plural(total_pages, 'page')}.** A file this long "
+            "can take a long time and a lot of memory, and a run cannot be "
+            "stopped halfway. Consider splitting it into smaller files."
+        )
+    return "\n\n".join(parts)
 
 
 def not_located_warning(not_located: Sequence[Finding]) -> str:

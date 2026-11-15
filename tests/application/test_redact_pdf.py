@@ -958,6 +958,32 @@ def test_a_mixed_page_without_ocr_is_reported_and_still_searched() -> None:
     assert doc.redactions_by_page[0] == [("John", "[001]"), ("__IMAGE__", "")]
 
 
+def test_count_scanned_pages_matches_scan_without_detecting_or_reading() -> None:
+    doc = FakePdfDocument(
+        ["", _OCR_TEXT, "Text with a logo", ""],
+        image_rects={
+            0: [(0, 0, 595, 842)],  # a plain scan
+            1: [(0, 200, 595, 842)],  # typed text over a large scan
+            2: [(0, 0, 50, 50)],  # a logo: not a scan
+        },
+    )
+    detector = FakeDetector()
+    ocr = FakeOcr(_ocr_lines())
+    service = RedactPdfService(
+        open_document=_document_factory,
+        master_map={},
+        auto_prefixes={},
+        detector=detector,
+        fixed_masks={},
+        ocr=ocr,
+    )
+
+    assert service.count_scanned_pages(doc) == (2, 4)
+    assert detector.call_count == 0 and ocr.calls == 0
+    assert doc.closed is True
+    assert len(service.scan(doc, read_scans=False).scanned_pages) == 2
+
+
 def test_reading_scans_can_be_turned_off_per_run() -> None:
     doc = FakePdfDocument([""], image_rects={0: [(0, 0, 595, 842)]})
     ocr = FakeOcr(_ocr_lines())

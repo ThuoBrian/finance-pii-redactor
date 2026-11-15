@@ -149,6 +149,17 @@ _OCR_MIN_CONFIDENCE = 0.8
 # areas are summed, so overlapping images count twice: again towards OCR.
 _MIXED_PAGE_IMAGE_SHARE = 0.15
 
+# OCR runs one page at a time. Measured on 2026-11-15 on an 8-core Windows
+# laptop with synthetic A4 pages at ``_OCR_DPI``: about 6.5 s for a page of 12
+# lines and 11.5 s for a dense page of 40, plus 15-20 s to load the model on
+# the first page. Other work was running at the time, so treat it as a
+# rough, cautious figure for the up-front estimate, not a promise.
+OCR_SECONDS_PER_PAGE = 6.0
+# A PDF this long gets a warning before the run: every page is held in
+# memory, scanned pages are read one after another, and there is no way to
+# stop a run halfway.
+LARGE_PDF_PAGES = 300
+
 
 class RedactionStyle(str, Enum):
     """How matched text should be redacted in a PDF."""
@@ -374,6 +385,27 @@ class RedactPdfService:
         finally:
             document.close()
 
+    def count_scanned_pages(self, source: object) -> tuple[int, int]:
+        """Return ``(scanned pages, total pages)`` without detecting or OCR.
+
+        Cheap enough to run before :meth:`scan`, so the user can be told how
+        long reading the scans will take before starting. Uses the same test
+        for a scanned page as :meth:`scan`.
+        """
+        document = self._open_document(source)
+        try:
+            scanned = sum(
+                _is_scanned(
+                    document,
+                    page_index,
+                    has_text=bool(document.page_text(page_index).strip()),
+                )
+                for page_index in range(document.page_count)
+            )
+            return scanned, document.page_count
+        finally:
+            document.close()
+
     def scan(self, source: object, *, read_scans: bool = True) -> PdfScanResult:
         """Run the detector once per page and cache the result for ``redact``.
 
@@ -404,12 +436,7 @@ class RedactPdfService:
                     if has_text
                     else []
                 )
-                image_rects = document.page_image_rects(page_index)
-                scanned = bool(image_rects) and (
-                    not has_text
-                    or _image_share(image_rects, document.page_size(page_index))
-                    >= _MIXED_PAGE_IMAGE_SHARE
-                )
+                scanned = _is_scanned(document, page_index, has_text=has_text)
                 lines: tuple[OcrLine, ...] = ()
                 if scanned and read_scans and self._ocr is not None:
                     lines = tuple(
@@ -703,6 +730,16 @@ class RedactPdfService:
             blackout_names=blackout,
             blackout_other_ink=redact_images,
         )
+
+
+def _is_scanned(document: PdfDocument, page_index: int, *, has_text: bool) -> bool:
+    """Whether a page is a scan: images and no text, or mostly images."""
+    image_rects = document.page_image_rects(page_index)
+    return bool(image_rects) and (
+        not has_text
+        or _image_share(image_rects, document.page_size(page_index))
+        >= _MIXED_PAGE_IMAGE_SHARE
+    )
 
 
 def _image_share(

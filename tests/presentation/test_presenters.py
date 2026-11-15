@@ -31,6 +31,7 @@ from finance_redactor.presentation.presenters import (
     merge_findings,
     merge_pending,
     not_located_warning,
+    pdf_job_size_note,
     pdf_mapping_dataframe,
     pdf_mapping_notes,
     pdf_mapping_with_names_dataframe,
@@ -641,6 +642,40 @@ def test_not_located_warning_names_the_terms_and_pages() -> None:
     assert warning.startswith("**2 detected terms could not be found on the page")
     assert "(page 1, 3)" in warning
     assert "`Ann Example`, `Zorbo Quillfeather`" in warning
+
+
+def _job_note(scanned: int, total: int, reading_scans: bool = True) -> str:
+    return pdf_job_size_note(
+        scanned,
+        total,
+        reading_scans=reading_scans,
+        seconds_per_page=6.0,
+        large_pages=300,
+    )
+
+
+def test_pdf_job_size_note_estimates_ocr_time_for_many_scans() -> None:
+    note = _job_note(25, 40)
+
+    # 25 pages at 6 seconds is 150 seconds: rounded up to 3 minutes.
+    assert note.startswith("**25 scanned pages, about 3 minutes to read.**")
+    assert "This PDF has" not in note
+
+
+def test_pdf_job_size_note_stays_quiet_under_a_minute() -> None:
+    assert _job_note(9, 9) == ""  # 54 seconds
+    assert _job_note(10, 10).startswith("**10 scanned pages, about 1 minute")
+
+
+def test_pdf_job_size_note_skips_the_estimate_when_scans_are_not_read() -> None:
+    assert _job_note(200, 200, reading_scans=False) == ""
+
+
+def test_pdf_job_size_note_warns_about_a_very_long_pdf() -> None:
+    note = _job_note(0, 300)
+
+    assert note.startswith("**This PDF has 300 pages.**")
+    assert _job_note(0, 299) == ""
 
 
 def test_not_located_warning_is_empty_when_everything_was_found() -> None:

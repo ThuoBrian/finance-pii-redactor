@@ -245,7 +245,7 @@ This file records known errors, edge cases, and their solutions when developing 
 - **OCR can misread.** A misread name may not be detected. The Review step lists the pages read with OCR: check them in the download before sharing.
 - **A word after a name can be redacted with it.** The language model sometimes runs a name into the next line ("Jane Doe" then "Signature:"). This is kept on purpose: stopping it would also split a name that wraps onto the next line, and half a name would show.
 - **A form's ruled lines** are blacked out line by line rather than as one box, so the text inside the form stays readable.
-- **Slower:** about two seconds a page, plus about two seconds the first time OCR runs in a session.
+- **Slower:** several seconds a page, read one after another. Measured on an 8-core Windows laptop: about 6.5 seconds for a sparse page and 11.5 for a dense one, plus 15-20 seconds to load the model the first time OCR runs in a session. Faster machines do better. Before the run, the Options step estimates the time once reading the scans would take a minute or more (`OCR_SECONDS_PER_PAGE`, 6 seconds, in `application/redact_pdf.py`), and warns about any PDF of 300 pages or more (`LARGE_PDF_PAGES`): a run cannot be stopped halfway, so split a file that long.
 - **Turn it off** under **Customize** (**Read the text on scanned pages**) to get the old behaviour.
 
 ### Redacting a whole table column in a PDF

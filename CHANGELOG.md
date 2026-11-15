@@ -16,6 +16,11 @@ the `version` field in `pyproject.toml`.
   (Payee, Account No, Phone) start chosen. Tables on text pages are found by
   PyMuPDF. On scanned pages they're worked out from where the OCR'd lines sit.
   Changing the choice rebuilds the file without scanning again.
+- **The PDF Options step says up front when a run will be long.** When
+  reading the scanned pages would take a minute or more, it estimates the
+  time ("25 scanned pages, about 3 minutes to read", at a cautious 6
+  seconds a page). A PDF of 300 pages or more gets a warning to split it,
+  since a run cannot be stopped halfway.
 - **Scanned PDF pages are read with OCR.** A scanned page used to be either
   fully black or unredacted. Now its printed text is read (RapidOCR on ONNX
   Runtime; models ship with the package and run offline), names in it are
@@ -23,7 +28,7 @@ the `version` field in `pyproject.toml`.
   could not read with confidence (signatures, handwriting, stamps) is covered
   by a solid black box, so a signature's shape does not show. The page comes
   out as a single cleaned picture, with nothing hidden from the original. On
-  by default, under Customize as "Read the text on scanned pages"; about two
+  by default, under Customize as "Read the text on scanned pages"; several
   seconds a page. The Review step lists the pages read with OCR to check.
   Installing grows by about 100 MB (`rapidocr`, `onnxruntime`, OpenCV
   headless and Shapely).
