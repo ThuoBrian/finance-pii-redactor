@@ -189,8 +189,8 @@ def _main() -> None:
     )
     with holder:
         uploaded = st.file_uploader(
-            "Upload a file (.xlsx, .xls, .pdf, or .docx)",
-            type=["xlsx", "xls", "pdf", "docx"],
+            "Upload a file (.xlsx, .pdf, or .docx)",
+            type=["xlsx", "pdf", "docx"],
             help="The file is processed entirely on your machine.",
             key=wizard.upload_key(),
             # The step heading above says the same; the label stays for
@@ -207,7 +207,7 @@ def _main() -> None:
 
     extension = uploaded.name.rsplit(".", 1)[-1].lower()
 
-    if extension in {"xlsx", "xls"}:
+    if extension == "xlsx":
         run_excel_flow(
             uploaded,
             excel_service=RedactExcelService(
@@ -256,7 +256,10 @@ def _main() -> None:
             steps=steps,
         )
     else:
-        st.error("Unsupported file type. Please upload an Excel, PDF, or Word file.")
+        st.error(
+            "Unsupported file type. Please upload an Excel (.xlsx), PDF, or Word "
+            "file. An older .xls workbook can be re-saved as .xlsx from Excel."
+        )
         st.stop()
 
 
