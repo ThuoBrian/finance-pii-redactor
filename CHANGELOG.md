@@ -218,6 +218,14 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **PDF pages with typed text over a large scanned image are read with OCR.**
+  Only pages with no text layer at all used to count as scans, so a typed
+  heading over a scanned receipt, or a scanner's searchable PDF, had its
+  picture passed through unread: a name visible only in the image survived
+  unless "Black out images" was on. A page whose images cover at least 15%
+  of it is now treated as a scan. Its text layer is still redacted by
+  search first, then the page is read with OCR and rebuilt. With OCR off or
+  not installed, such pages are listed in the scanned-pages warning.
 - **A PDF term that could not be found on the page is no longer reported as
   hidden.** When a name was read from a page's text but no search could match
   it on the page (a ligature or font encoding the search can't see through),

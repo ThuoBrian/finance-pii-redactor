@@ -97,6 +97,10 @@ class PdfDocument(Protocol):
         """Return the columns of every table found in one page's text layer."""
         ...
 
+    def page_size(self, page_index: int) -> tuple[float, float]:
+        """Return one page's (width, height), in the units of its image rects."""
+        ...
+
     def redact_page(
         self,
         page_index: int,

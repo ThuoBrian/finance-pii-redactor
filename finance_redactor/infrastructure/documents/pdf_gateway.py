@@ -297,6 +297,11 @@ class PyMuPdfDocument:
                 rects.append((rect.x0, rect.y0, rect.x1, rect.y1))
         return rects
 
+    def page_size(self, page_index: int) -> tuple[float, float]:
+        """Return one page's (width, height) in points, as image rects use."""
+        rect = self._doc.load_page(page_index).rect
+        return (rect.width, rect.height)
+
     def page_tables(self, page_index: int) -> list[TableColumn]:
         """Return the columns of every table PyMuPDF finds on one page.
 

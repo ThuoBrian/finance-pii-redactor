@@ -313,7 +313,7 @@ def test_a_scanned_pdf_page_is_reported_on_the_review_step() -> None:
     _click(at, "Redact my file")
 
     warnings = [w.value for w in at.warning]
-    assert any("1 of 1 page is a scan" in w and "fully black" in w for w in warnings)
+    assert any("1 of 1 page is a scan" in w and "blacked out" in w for w in warnings)
     # One "Before you share" box, not a stack of separate ones.
     assert len(warnings) == 1 and warnings[0].startswith("**Before you share")
 

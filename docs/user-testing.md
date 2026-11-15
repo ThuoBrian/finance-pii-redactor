@@ -163,8 +163,8 @@ what happened instead — then file it.
   label, the printed text stays readable, the signature is a solid black box
   (no shape showing), and the Review step says the page was read with OCR.
 - [ ] Same file with **Read the text on scanned pages** off: the Review step warns
-  which pages are scans and says they come out fully black (images on) or
-  unredacted (images off). Names inside a scan are not read yet.
+  which pages are scans and says their scanned image is blacked out (images
+  on) or unredacted (images off). Names inside a scan are not read yet.
 
 ### Word
 

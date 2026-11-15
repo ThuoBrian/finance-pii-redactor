@@ -649,6 +649,18 @@ def test_page_tables_is_empty_on_a_page_without_a_table():
     assert document.page_tables(0) == []
 
 
+def test_page_size_is_in_the_same_points_as_image_rects():
+    doc = fitz.open()
+    page = doc.new_page(width=600, height=400)
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 10, 10), False)
+    page.insert_image(fitz.Rect(0, 0, 300, 400), stream=pix.tobytes("png"))
+    document = PyMuPdfDocument(doc)
+
+    assert document.page_size(0) == (600.0, 400.0)
+    assert document.page_image_rects(0) == [(0.0, 0.0, 300.0, 400.0)]
+    document.close()
+
+
 def test_a_name_wrapping_a_line_is_labelled_once_per_occurrence():
     """A two-word name split over two lines is one occurrence: search_for
     returns a rect per line, and only the first gets the label. A second,

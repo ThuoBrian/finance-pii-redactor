@@ -58,6 +58,10 @@ class FakePdfDocument:
         """Return the table columns recorded for this page."""
         return list(self._tables.get(page_index, []))
 
+    def page_size(self, page_index: int) -> tuple[float, float]:
+        """Every fake page is A4 in points."""
+        return (595.0, 842.0)
+
     def remove_external_links(self) -> int:
         """Report the canned link count and remember it was called."""
         self.links_removed_before_render = True
@@ -896,6 +900,62 @@ def test_without_an_ocr_engine_a_scan_is_reported_but_not_read() -> None:
     assert service.can_read_scans is False
     assert scan.scanned_pages == [0]
     assert scan.read_pages == []
+
+
+_OCR_TEXT = "Payment voucher\nPaid to John today\nsmudged footer"
+
+
+@pytest.mark.parametrize(
+    ("image_height", "scanned"),
+    [(117.0, False), (135.0, True)],  # 14% and 16% of an A4 page
+)
+def test_a_text_page_counts_as_a_scan_once_its_images_are_large(
+    image_height: float, scanned: bool
+) -> None:
+    doc = FakePdfDocument(
+        ["Typed heading only"], image_rects={0: [(0, 0, 595, image_height)]}
+    )
+
+    assert _service().scan(doc).scanned_pages == ([0] if scanned else [])
+
+
+def test_images_hanging_off_the_page_count_only_their_visible_part() -> None:
+    # 1000 points tall but only 100 of them on the page: about 12%.
+    doc = FakePdfDocument(["Typed heading"], image_rects={0: [(0, -900, 595, 100)]})
+
+    assert _service().scan(doc).scanned_pages == []
+
+
+def test_a_mixed_page_is_searched_in_its_text_layer_and_rebuilt_from_ocr() -> None:
+    """Typed text over a large scanned image: the image is OCR'd, and the text
+    layer is still search-redacted first, so a name OCR misreads is caught.
+    """
+    doc = FakePdfDocument([_OCR_TEXT], image_rects={0: [(0, 200, 595, 842)]})
+    service = _ocr_service(FakeOcr(_ocr_lines()))
+
+    scan = service.scan(doc)
+    result = service.redact(doc, scan, [], redact_images=False)
+
+    assert scan.scanned_pages == [0] and scan.read_pages == [0]
+    # Text layer: covered by search, with no image sentinel (the rebuild
+    # handles images).
+    assert doc.redactions_by_page[0] == [("John", "[001]")]
+    # OCR: the page is rebuilt with the same label over the same name.
+    assert [label for _, label in doc.rebuilt["names"]] == ["[001]"]
+    assert doc.rebuilt["blackout_other_ink"] is False
+    assert {f.detected_text for f in result.findings} == {"John"}
+    assert result.not_located == ()
+
+
+def test_a_mixed_page_without_ocr_is_reported_and_still_searched() -> None:
+    doc = FakePdfDocument([_OCR_TEXT], image_rects={0: [(0, 200, 595, 842)]})
+    service = _ocr_service(None)
+
+    scan = service.scan(doc)
+    service.redact(doc, scan, [], redact_images=True)
+
+    assert scan.scanned_pages == [0] and scan.read_pages == []
+    assert doc.redactions_by_page[0] == [("John", "[001]"), ("__IMAGE__", "")]
 
 
 def test_reading_scans_can_be_turned_off_per_run() -> None:

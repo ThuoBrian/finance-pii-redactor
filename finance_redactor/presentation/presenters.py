@@ -804,11 +804,13 @@ def scanned_pages_warning(
 ) -> str:
     """Explain what happened to scanned pages, read with OCR or not.
 
-    A scan is a picture of text with no text layer. A page OCR read had its
-    names redacted and, with image black-out on, everything it could not read
-    with confidence blacked out; it still deserves a look, because OCR can
-    misread. A page left unread comes out fully black with image black-out on,
-    and unredacted with it off.
+    A scan is a picture of text with no text layer, or a page that is mostly
+    such a picture under some typed text. A page OCR read had its names
+    redacted and, with image black-out on, everything it could not read with
+    confidence blacked out; it still deserves a look, because OCR can
+    misread. A page left unread has its scanned image blacked out with image
+    black-out on (for a plain scan, the whole page), and unredacted with it
+    off.
     """
     parts = []
     read_set = set(read)
@@ -833,8 +835,9 @@ def scanned_pages_warning(
     if unread:
         n = len(unread)
         outcome = (
-            "Black out images is on, so the download shows "
-            f"{'that page' if n == 1 else 'those pages'} fully black."
+            "Black out images is on, so the scanned image on "
+            f"{'that page' if n == 1 else 'those pages'} is blacked out in the "
+            "download."
             if images_blacked_out
             else "Black out images is off, so "
             f"{'that page goes' if n == 1 else 'those pages go'} into the download "

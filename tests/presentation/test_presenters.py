@@ -680,7 +680,7 @@ def test_scanned_pages_warning_says_what_happens_to_the_pages() -> None:
     off = scanned_pages_warning([0, 2], 3, images_blacked_out=False)
 
     assert on.startswith("**1 of 3 pages is a scan** (page 1)")
-    assert "fully black" in on
+    assert "scanned image on that page is blacked out" in on
     assert off.startswith("**2 of 3 pages are scans** (page 1, 3)")
     assert "unredacted" in off
 

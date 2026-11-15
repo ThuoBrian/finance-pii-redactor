@@ -69,7 +69,8 @@ document once and runs the detector once per page, returning a
 don't need the split; it does not read scanned pages (the app uses
 ``scan``/``redact``).
 
-Scanned pages (images, no text layer) are read with the optional ``ocr``
+Scanned pages (images and no text layer, or a text layer over images that
+cover ``_MIXED_PAGE_IMAGE_SHARE`` of the page) are read with the optional ``ocr``
 engine during ``scan``. Detection then runs on the OCR text, and ``redact``
 rebuilds each such page as a cleaned picture of itself
 (``PdfDocument.rebuild_scanned_page``): printed text the OCR read with
@@ -139,6 +140,14 @@ _OCR_DPI = 200
 # Printed text the OCR read with at least this confidence is kept on a rebuilt
 # page; anything less sure counts as unread and is blacked out with the rest.
 _OCR_MIN_CONFIDENCE = 0.8
+# A page with a text layer is still treated as a scan when its images cover
+# at least this share of it: a typed heading over a scanned receipt, or a
+# scanner's searchable PDF (an invisible OCR layer over a full-page picture).
+# Names visible only in the picture are not in the text layer. A logo or a
+# signature image is typically under 5% of a page; 15% leaves room for those
+# while erring towards OCR, which is slower but never less redacted. Image
+# areas are summed, so overlapping images count twice: again towards OCR.
+_MIXED_PAGE_IMAGE_SHARE = 0.15
 
 
 class RedactionStyle(str, Enum):
@@ -161,14 +170,19 @@ class _PdfPageScan:
     normalized: NormalizedText
     detections: list[PiiDetection]
     bracketed: int
-    # No text layer but at least one image: a scan, whose words detection
-    # cannot see without OCR. Reported to the user.
+    # A scan, whose words detection cannot see without OCR: no text layer but
+    # at least one image, or a text layer plus images covering at least
+    # ``_MIXED_PAGE_IMAGE_SHARE`` of the page. Reported to the user.
     scanned: bool = False
     # What OCR read on a scanned page (empty if it was not read). When set,
     # ``raw_text`` is these lines joined, and detections refer to that text.
     ocr_lines: tuple[OcrLine, ...] = ()
     # The columns of every table on the page, for whole-column redaction.
     tables: tuple[TableColumn, ...] = ()
+    # A scanned page that also has a text layer, read with OCR: that text
+    # layer's own scan, redacted by search before the page is rebuilt from
+    # the OCR, so a name OCR misreads is still caught in the text layer.
+    text_layer: _PdfPageScan | None = None
 
 
 @dataclass(frozen=True)
@@ -189,7 +203,7 @@ class PdfScanResult:
 
     @property
     def scanned_pages(self) -> list[int]:
-        """Zero-based indices of pages that are scans (no text layer, has images)."""
+        """Zero-based indices of pages that are scans or mostly a scanned image."""
         return [index for index, page in enumerate(self.pages) if page.scanned]
 
     @property
@@ -202,7 +216,8 @@ class PdfScanResult:
         """Each table column's key, mapped to its header as first seen."""
         columns: dict[str, str] = {}
         for page in self.pages:
-            for column in page.tables:
+            layer = page.text_layer.tables if page.text_layer else ()
+            for column in (*page.tables, *layer):
                 columns.setdefault(column_key(column.header), column.header)
         return columns
 
@@ -389,7 +404,12 @@ class RedactPdfService:
                     if has_text
                     else []
                 )
-                scanned = not has_text and bool(document.page_image_rects(page_index))
+                image_rects = document.page_image_rects(page_index)
+                scanned = bool(image_rects) and (
+                    not has_text
+                    or _image_share(image_rects, document.page_size(page_index))
+                    >= _MIXED_PAGE_IMAGE_SHARE
+                )
                 lines: tuple[OcrLine, ...] = ()
                 if scanned and read_scans and self._ocr is not None:
                     lines = tuple(
@@ -398,7 +418,16 @@ class RedactPdfService:
                 tables: tuple[TableColumn, ...] = (
                     tuple(document.page_tables(page_index)) if has_text else ()
                 )
+                text_layer = None
                 if lines:
+                    if has_text:
+                        text_layer = _PdfPageScan(
+                            raw_text=raw_text,
+                            normalized=normalized,
+                            detections=detections,
+                            bracketed=0,  # counted once, from the OCR text
+                            tables=tables,
+                        )
                     raw_text = join_lines(lines).text
                     normalized = NormalizedText(raw_text, raw_text, ())
                     detections = self._detector.analyze(
@@ -415,6 +444,7 @@ class RedactPdfService:
                         scanned=scanned,
                         ocr_lines=lines,
                         tables=tables,
+                        text_layer=text_layer,
                     )
                 )
             return PdfScanResult(pages=pages)
@@ -458,21 +488,25 @@ class RedactPdfService:
             findings: list[Finding] = []
             not_located: list[Finding] = []
             bracketed = 0
+            blackout = style == RedactionStyle.BLACKOUT
             for page_index, page in enumerate(scan_result.pages):
-                detections = [
-                    *page.detections,
-                    *find_custom_words(
-                        page.normalized.text, custom_words, self._custom_words_score
-                    ),
-                    *column_detections(
-                        page.normalized.text,
-                        page.tables,
-                        columns,
-                        self._custom_words_score,
-                    ),
-                ]
                 bracketed += page.bracketed
-
+                if page.text_layer is not None:
+                    # Search-redact the text layer first; the rebuild below
+                    # then pictures the page with those names already gone.
+                    # Images are left to the rebuild.
+                    not_located += self._redact_text_layer(
+                        document,
+                        page_index,
+                        page.text_layer,
+                        self._page_detections(page.text_layer, custom_words, columns),
+                        exclude=exclude,
+                        pseudonymizer=pseudonymizer,
+                        findings=findings,
+                        blackout=blackout,
+                        redact_images=False,
+                    )
+                detections = self._page_detections(page, custom_words, columns)
                 if page.ocr_lines:
                     self._rebuild_scanned_page(
                         document,
@@ -481,34 +515,21 @@ class RedactPdfService:
                         self._labelled(
                             page_index, detections, exclude, pseudonymizer, findings
                         ),
-                        blackout=(style == RedactionStyle.BLACKOUT),
+                        blackout=blackout,
                         redact_images=redact_images,
                     )
                     continue
-
-                page_start = len(findings)
-                redactions = self._page_redactions(
-                    page_index=page_index,
-                    raw_text=page.raw_text,
-                    normalized=page.normalized,
-                    detections=detections,
+                not_located += self._redact_text_layer(
+                    document,
+                    page_index,
+                    page,
+                    detections,
                     exclude=exclude,
                     pseudonymizer=pseudonymizer,
                     findings=findings,
+                    blackout=blackout,
+                    redact_images=redact_images,
                 )
-
-                if redact_images and document.page_image_rects(page_index):
-                    redactions.append((IMAGE_REDACTION_SENTINEL, ""))
-
-                if redactions:
-                    missed = document.redact_page(
-                        page_index,
-                        redactions,
-                        blackout=(style == RedactionStyle.BLACKOUT),
-                    )
-                    # Redaction i of this page came from finding i of it:
-                    # ``_page_redactions`` appends both in the same order.
-                    not_located += [findings[page_start + i] for i in missed]
 
             return PdfRedactionResult(
                 data=document.to_bytes(),
@@ -521,6 +542,56 @@ class RedactPdfService:
             )
         finally:
             document.close()
+
+    def _page_detections(
+        self, page: _PdfPageScan, custom_words: list[str], columns: frozenset[str]
+    ) -> list[PiiDetection]:
+        """Return the cached detections plus this call's words and columns."""
+        return [
+            *page.detections,
+            *find_custom_words(
+                page.normalized.text, custom_words, self._custom_words_score
+            ),
+            *column_detections(
+                page.normalized.text,
+                page.tables,
+                columns,
+                self._custom_words_score,
+            ),
+        ]
+
+    def _redact_text_layer(
+        self,
+        document: PdfDocument,
+        page_index: int,
+        page: _PdfPageScan,
+        detections: list[PiiDetection],
+        *,
+        exclude: frozenset[str],
+        pseudonymizer: Pseudonymizer,
+        findings: list[Finding],
+        blackout: bool,
+        redact_images: bool,
+    ) -> list[Finding]:
+        """Redact one page's text layer by search; return the findings not located."""
+        page_start = len(findings)
+        redactions = self._page_redactions(
+            page_index=page_index,
+            raw_text=page.raw_text,
+            normalized=page.normalized,
+            detections=detections,
+            exclude=exclude,
+            pseudonymizer=pseudonymizer,
+            findings=findings,
+        )
+        if redact_images and document.page_image_rects(page_index):
+            redactions.append((IMAGE_REDACTION_SENTINEL, ""))
+        if not redactions:
+            return []
+        missed = document.redact_page(page_index, redactions, blackout=blackout)
+        # Redaction i of this page came from finding i of it:
+        # ``_page_redactions`` appends both in the same order.
+        return [findings[page_start + i] for i in missed]
 
     def _page_redactions(
         self,
@@ -632,3 +703,23 @@ class RedactPdfService:
             blackout_names=blackout,
             blackout_other_ink=redact_images,
         )
+
+
+def _image_share(
+    rects: list[tuple[float, float, float, float]], size: tuple[float, float]
+) -> float:
+    """Share of a page of ``size`` (width, height) that ``rects`` cover.
+
+    Each rect is clipped to the page; overlaps are counted twice, which errs
+    towards treating the page as a scan.
+    """
+    width, height = size
+    if width <= 0 or height <= 0:
+        return 1.0  # a page with no sensible size: assume the worst
+    covered = 0.0
+    for x0, y0, x1, y1 in rects:
+        w = min(x1, width) - max(x0, 0.0)
+        h = min(y1, height) - max(y0, 0.0)
+        if w > 0 and h > 0:
+            covered += w * h
+    return covered / (width * height)
