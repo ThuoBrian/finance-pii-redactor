@@ -60,9 +60,9 @@ def show_step(placeholder: Any, current: int) -> None:
 
     Review gets the wide layout: in the centered column a 10-column Excel
     preview showed 4 columns, and the review table's details view hid 3 of
-    its 8. The prose steps stay centered. The pinned Streamlit lets
-    ``st.set_page_config`` be called again in a run, and the last call wins,
-    as the tracker's does.
+    its 8. The prose steps stay centered. The pinned Streamlit allows
+    ``st.set_page_config`` to be called again in a run, and the last call
+    wins, as the tracker's does.
     """
     st.set_page_config(layout="wide" if current == _REVIEW else "centered")
     placeholder.markdown(steps_markdown(current), text_alignment="center")
