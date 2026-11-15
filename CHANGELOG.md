@@ -82,6 +82,10 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **Long Excel tabs can be paged through in the preview.** The preview stopped
+  at 500 rows with a small caption. A longer tab now gets a "Rows to preview"
+  picker (500 rows at a time) and a clear note saying how many rows and
+  highlighted cells are off screen, and that the download has every row.
 - **One column picker for every Excel tab.** The Options step drew a
   "Columns to scan" box for each tab, so a 10-tab workbook stacked ten of
   them. Now "Which tab's columns?" picks the tab and one box shows its

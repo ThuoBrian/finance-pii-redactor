@@ -34,7 +34,6 @@ from finance_redactor.presentation.presenters import (
     excel_findings_dataframe,
     formatting_note,
     plural,
-    preview_hidden_count,
     preview_styler,
     review_tab_labels,
     scan_result_findings,
@@ -263,6 +262,11 @@ def _review_step(excel_service: RedactExcelService, steps: Any) -> None:
         df = list(scan_sheets.values())[shown]
         redacted_df = redacted_sheets[shown].data
         cell_keys = redacted_sheets[shown].highlighted
+        # A big tab is shown a block of rows at a time; a page of the whole
+        # sheet would only slow the browser. Keys are row positions, and
+        # read_excel gives a 0..n-1 index, so a slice keeps them lined up.
+        start = _preview_rows(len(df), cell_keys, shown)
+        rows = slice(start, start + PREVIEW_MAX_ROWS)
         # One table at a time: the redacted one, or the original when the
         # toggle is on. Rows and columns line up 1:1, so switching loses
         # nothing, and the page is half as long as two stacked tables.
@@ -276,21 +280,16 @@ def _review_step(excel_service: RedactExcelService, steps: Any) -> None:
             }
             st.markdown("**Original** (not redacted)")
             st.dataframe(
-                preview_styler(df, original_keys), width="stretch", hide_index=True
+                preview_styler(df.iloc[rows], original_keys),
+                width="stretch",
+                hide_index=True,
             )
         else:
             st.markdown("**Redacted**")
             st.dataframe(
-                preview_styler(redacted_df, cell_keys),
+                preview_styler(redacted_df.iloc[rows], cell_keys),
                 width="stretch",
                 hide_index=True,
-            )
-        if len(df) > PREVIEW_MAX_ROWS:
-            n_hidden = preview_hidden_count(df, cell_keys)
-            st.caption(
-                f"Showing the first {plural(PREVIEW_MAX_ROWS, 'row')} of "
-                f"{len(df):,}. Highlighted cells below that: {n_hidden:,} "
-                "(listed under Where found). The download has every row."
             )
     with tab_mapping:
         render_crosswalk_section(state.crosswalk)
@@ -333,6 +332,31 @@ def _review_step(excel_service: RedactExcelService, steps: Any) -> None:
             "excel", state.get("excel_excluded_applied", frozenset())
         ),
     )
+
+
+def _preview_rows(n_rows: int, cell_keys: set[tuple[int, str]], tab: int) -> int:
+    """Pick which block of rows to preview, and say plainly what is not shown.
+
+    Returns the first row of the block. A tab that fits on one page needs no
+    choice and gets 0.
+    """
+    if n_rows <= PREVIEW_MAX_ROWS:
+        return 0
+    start: int = st.selectbox(
+        "Rows to preview",
+        options=range(0, n_rows, PREVIEW_MAX_ROWS),
+        format_func=lambda s: f"Rows {s + 1:,} to {min(s + PREVIEW_MAX_ROWS, n_rows):,}",
+        key=f"excel_preview_rows_{tab}",
+    )
+    end = min(start + PREVIEW_MAX_ROWS, n_rows)
+    elsewhere = sum(1 for row, _ in cell_keys if row >= 0 and not start <= row < end)
+    st.info(
+        f"This tab has {n_rows:,} rows. Showing rows {start + 1:,} to {end:,}, "
+        f"so {n_rows - (end - start):,} rows are not on screen, with "
+        f"{plural(elsewhere, 'highlighted cell')} among them. Pick other rows "
+        "above to check them. The download has every row."
+    )
+    return start
 
 
 def _download_step(

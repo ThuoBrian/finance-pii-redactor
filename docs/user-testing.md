@@ -77,9 +77,14 @@ what happened instead — then file it.
   less.
 - [ ] Unchecking an entity type (e.g. `ORGANIZATION`) stops it from being
   redacted.
-- [ ] The **Preview** tab shows a table you can scroll and sort. Changed
-  cells are yellow and start with `»`. It stops at 500 rows and says how many
-  highlighted cells it hid.
+- [ ] The **Preview** tab shows one table you can scroll and sort: the
+  redacted one, or the original with **Compare with original** on. Changed
+  cells are yellow and start with `»`. A tab over 500 rows shows 500 at a
+  time, says how many rows and highlighted cells are off screen, and
+  **Rows to preview** moves to the next block.
+- [ ] A made-up name used as a column header is replaced in the download, and
+  a text ID such as `0041` stays `0041`.
+- [ ] A workbook with nothing to find still offers the download.
 - [ ] The downloaded workbook has **no** Crosswalk sheet. The name mapping is a
   separate CSV in the **Keep private** card.
 - [ ] The app opens one step at a time: Upload, Options, Review, Download.

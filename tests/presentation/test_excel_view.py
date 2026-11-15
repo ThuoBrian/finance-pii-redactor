@@ -174,6 +174,30 @@ def test_preview_shows_one_table_and_the_toggle_switches_it() -> None:
     assert "Jane Doe" in _shown_text(at)  # switched, not stacked
 
 
+def test_a_long_tab_says_what_the_preview_hides_and_pages_through_it() -> None:
+    notes: list[object] = ["ok"] * 1203
+    notes[0] = notes[1100] = "Paid Jane Doe"
+    at = _start({"Payments": {"notes": notes}})
+    _click(at, "Redact my file")
+
+    (note,) = [m.value for m in at.info if "rows are not on screen" in m.value]
+    assert "1,203 rows" in note
+    assert "rows 1 to 500" in note
+    assert "703 rows are not on screen" in note
+    assert "1 highlighted cell among them" in note
+    assert "The download has every row" in note
+    assert _shown_text(at).count("»") == 1  # row 1 only
+
+    at.selectbox(key="excel_preview_rows_0").set_value(1000).run()
+    assert not at.exception, at.exception
+    (note,) = [m.value for m in at.info if "rows are not on screen" in m.value]
+    assert "rows 1,001 to 1,203" in note
+    assert "1,000 rows are not on screen" in note
+    assert _shown_text(at).count("»") == 1  # row 1,101, now on screen
+    (table,) = [t for t in at.dataframe if "»" in str(t.value.to_numpy())]
+    assert len(table.value) == 203
+
+
 def _downloads(at: AppTest) -> list[str]:
     return [element.proto.label for element in at.get("download_button")]
 
