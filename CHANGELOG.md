@@ -91,6 +91,14 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **Each Download card does one job.** The PDF's **Safe to share** card holds
+  the download button and one line about it. The label mapping moved under
+  the cards as its own **Label mapping** section, with the note about the
+  PDF's own bracketed numbers folded into it; a PDF with nothing labelled now
+  says there is no mapping file instead of showing nothing. Excel's
+  formatting note folds under **What is not carried over**, and the warning
+  about tabs left out names the first two and "+ N more" instead of every
+  tab.
 - **The "Where found" tab is gone from Review.** The per-occurrence table
   (page, cell or paragraph of every match) is folded under **Where each term
   was found** at the bottom of the Review step, in all three formats. Review

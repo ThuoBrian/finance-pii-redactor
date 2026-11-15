@@ -423,7 +423,7 @@ def _download_step(
     if left_out:
         st.warning(
             f"{plural(len(left_out), 'tab')} you did not select "
-            f"({', '.join(left_out)}) {'is' if len(left_out) == 1 else 'are'} "
+            f"({name_summary(left_out)}) {'is' if len(left_out) == 1 else 'are'} "
             "not in the download."
         )
     if state.findings.entity_count == 0:
@@ -463,7 +463,10 @@ def _download_step(
         )
         note = formatting_note(state.get("formats", {}), len(sheets))
         if note:
-            st.caption(note)
+            # Folded: it can list several kinds of thing, and the card's job
+            # is the button.
+            with st.expander("What is not carried over"):
+                st.caption(note)
     with private:
         render_crosswalk_download(crosswalk, base_name, key_prefix="excel")
 

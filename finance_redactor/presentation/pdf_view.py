@@ -455,33 +455,20 @@ def _download_step(master_list_fingerprint: str, steps: Any) -> None:
             type="primary",
             width="stretch",
         )
-        caption = (
-            "Matched text and images are covered with black boxes."
-            if blackout
-            else "Matched text is replaced with labels such as [001]. Bank and "
-            "payment details and addresses show as a mask such as [ACCOUNT]."
+        # One line: the card's job is the button.
+        st.caption(
+            (
+                "Matched text and images are covered with black boxes."
+                if blackout
+                else "Names become labels such as [001]; bank details and "
+                "addresses become masks such as [ACCOUNT]."
+            )
+            + (
+                f" {plural(removed_links, 'link target')} removed, link text kept."
+                if removed_links
+                else ""
+            )
         )
-        if removed_links:
-            caption += (
-                f" {plural(removed_links, 'link target')} (websites, email "
-                "addresses, files) removed; the link text stays, redacted "
-                "where it matched."
-            )
-        st.caption(caption)
-        if not blackout:
-            render_pdf_mapping_download(
-                state.pdf_crosswalk, base_name, master_list_fingerprint
-            )
-            bracketed = state.get("pdf_bracketed", 0)
-            if bracketed:
-                # Moved here from Review: it is about reading the output,
-                # next to the file that tells the labels apart.
-                st.caption(
-                    "This PDF already had "
-                    f"{plural(bracketed, 'bracketed number')} of its own (such "
-                    "as footnote markers) that look like the [001] labels. "
-                    "The code list names every label this tool added."
-                )
     with private:
         if blackout:
             st.caption("Black out leaves nothing to decode, so there is no file here.")
@@ -489,5 +476,14 @@ def _download_step(master_list_fingerprint: str, steps: Any) -> None:
             render_pdf_names_download(
                 state.pdf_crosswalk, base_name, master_list_fingerprint
             )
+    # The label mapping is a file of its own, not a property of the PDF, so it
+    # sits under the cards with everything about reading the labels.
+    if not blackout:
+        render_pdf_mapping_download(
+            state.pdf_crosswalk,
+            base_name,
+            master_list_fingerprint,
+            bracketed=state.get("pdf_bracketed", 0),
+        )
 
     wizard.nav(back=("Back to review", wizard.REVIEW), finish=True)

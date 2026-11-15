@@ -134,8 +134,10 @@ what happened instead — then file it.
   row in the mapping (see
   [troubleshooting.md](troubleshooting.md#pdf-detects-names-the-same-way-excel-and-word-do)).
 - [ ] A P.O. box or street address becomes `[ADDRESS]`, with no mapping row.
-- [ ] The mapping tab offers one download (no names) by default. Switch on
-  **Also prepare a mapping with names (Confidential)**: a second download
+- [ ] The Download step offers one mapping download (no names) by default,
+  under the two cards as **Label mapping**. Switch on
+  **Also prepare a mapping with names (Confidential)** in the **Keep
+  private** card: a second download
   appears with a Confidential warning, and its CSV has an `Original name`
   column. The first file still has no names. Upload another PDF and the
   toggle is off again.
@@ -161,8 +163,14 @@ what happened instead — then file it.
 - [ ] The mapping's **Master list** column names the workbook it was made
   from, with a timestamp and row count.
 - [ ] Redact a PDF that already contains bracketed numbers of its own (e.g.
-  a footnote marker `[4]`) — a warning says labels may be ambiguous in the
-  output.
+  a footnote marker `[4]`) — a note in the **Label mapping** section says
+  the PDF had bracketed numbers of its own, and that the mapping names every
+  label the tool added.
+- [ ] A PDF where nothing was found says "there is no mapping file" under the
+  cards instead of showing nothing.
+- [ ] Excel with tabs left unselected: the Download warning names the first
+  two and "+ N more", not every tab. A formatting note, if any, is folded
+  under **What is not carried over** in the Safe to share card.
 - [ ] Switching **Replace with labels** vs **Black out** (under Customize) changes the output as
   described in each option's help text. Blackout produces no mapping, since
   there is nothing to decode.

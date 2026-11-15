@@ -173,7 +173,8 @@ you to the step before, and your choices are kept.
    number (and, for a PDF with a table, whole columns to redact). Most files
    need nothing there.
 4. **Download.** Two cards: **Safe to share** (Internal) and **Keep private**
-   (Confidential). Files are named `redacted-` plus the date and time, never
+   (Confidential). For a PDF, the **Label mapping** (Internal, no names)
+   sits under the cards. Files are named `redacted-` plus the date and time, never
    after your original file, and their document properties (author, title
    and the like) are cleared.
 

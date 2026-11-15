@@ -516,3 +516,21 @@ def test_where_found_is_an_expander_at_the_bottom_not_a_tab(fmt: str) -> None:
 
     assert "Where found" not in [t.label for t in at.tabs]
     assert "Where each term was found (1 occurrence)" in [e.label for e in at.expander]
+
+
+def test_the_pdf_label_mapping_sits_under_the_cards_with_its_note() -> None:
+    at = _start("pdf")
+    _click(at, "Redact my file")
+    _click(at, "Continue to download →")
+
+    assert any(m.value.startswith("**Label mapping**") for m in at.markdown)
+    assert any("No names inside" in c.value for c in at.caption)
+
+
+def test_a_pdf_with_nothing_to_map_says_so_on_download() -> None:
+    at = _start("pdf-scan")  # nothing found, so nothing labelled
+    _click(at, "Redact my file")
+    _click(at, "Continue to download →")
+
+    assert _downloads(at) == ["Download redacted PDF"]
+    assert any("there is no mapping file" in c.value for c in at.caption)

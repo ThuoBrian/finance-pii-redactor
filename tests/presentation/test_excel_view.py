@@ -274,3 +274,13 @@ def test_a_workbook_with_nothing_found_can_still_be_downloaded() -> None:
     assert any("Nothing was detected" in m.value for m in at.info)
     assert _downloads(at) == ["Download redacted workbook"]
     assert at.session_state["excel_bytes"]
+
+
+def test_tabs_left_out_are_summarized_not_listed_in_full() -> None:
+    tabs = {name: {"notes": ["Paid Jane Doe"]} for name in ("Jan", "Feb", "Mar", "Apr")}
+    at = _start(tabs)
+    at.multiselect(key="excel_tabs").set_value(["Jan"]).run()
+    _to_download(at)
+
+    warning = next(w.value for w in at.warning if "did not select" in w.value)
+    assert warning.startswith("3 tabs you did not select (Feb, Mar + 1 more)")
