@@ -59,6 +59,7 @@ from finance_redactor.presentation.session import (
 )
 from finance_redactor.presentation.steps import show_step
 from finance_redactor.presentation.words_view import (
+    additions_expander,
     render_words_box,
     typed_words,
     unapplied_words_note,
@@ -295,34 +296,15 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
     elif blackout:
         st.caption("Matched areas will be blacked out in the downloaded PDF.")
 
-    # One box above the list, not a stack of them: a scanned page and an
-    # item the code list can't decode later are both worth seeing before
-    # the file goes anywhere. Yellow only when something may show.
-    scanned = state.pdf_scan_result.scanned_pages
-    notes = []
-    if scanned:
-        notes.append(
-            scanned_pages_warning(
-                scanned,
-                total_pages,
-                run["redact_images"],
-                read=state.pdf_scan_result.read_pages,
-            )
-        )
-    if not blackout:
-        notes += pdf_mapping_notes(state.pdf_crosswalk)
-    if notes:
-        box = st.warning if scanned else st.info
-        box("**Before you share this PDF**\n\n" + "\n\n".join(notes))
-    # Its own box: these terms were detected but nothing covers them.
+    # Only the warnings that change what to review stay here: scanned pages
+    # to check by eye, and terms nothing covers. The notes about sharing the
+    # file are on Download, next to the file.
+    scanned_note = _scanned_note()
+    if scanned_note:
+        st.warning(scanned_note)
     not_located = state.get("pdf_not_located", ())
     if not_located:
         st.warning(not_located_warning(not_located))
-
-    columns_applied = state.get("pdf_columns_applied", frozenset())
-    columns = _column_picker(state.pdf_scan_result.table_columns, columns_applied)
-    words_applied: list[str] = run["custom_words"]
-    words = render_words_box("pdf", words_applied, warn_label_shaped=True)
 
     review_findings = state.get("pdf_all_findings", [])
     tab_review, tab_mapping, tab_occurrences = st.tabs(
@@ -347,6 +329,12 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
             width="stretch",
             hide_index=True,
         )
+
+    columns_applied = state.get("pdf_columns_applied", frozenset())
+    words_applied: list[str] = run["custom_words"]
+    with additions_expander("pdf", words_applied):
+        columns = _column_picker(state.pdf_scan_result.table_columns, columns_applied)
+        words = render_words_box("pdf", words_applied, warn_label_shaped=True)
 
     if (
         excluded != state.get("pdf_excluded_applied", frozenset())
@@ -393,6 +381,40 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
     )
 
 
+def _scanned_note() -> str:
+    """Return the scanned-pages warning for this result, or "" if none is a scan."""
+    state = st.session_state
+    scan = state.pdf_scan_result
+    if not scan.scanned_pages:
+        return ""
+    return scanned_pages_warning(
+        scan.scanned_pages,
+        state.pdf_pages,
+        state.pdf_run["redact_images"],
+        read=scan.read_pages,
+    )
+
+
+def _before_you_share(blackout: bool) -> None:
+    """Draw what to know before the PDF goes anywhere, above the downloads.
+
+    One box, not a stack: scanned pages, and items the mapping can't decode
+    later. Yellow only when something may show. Terms nothing covers keep
+    their own warning, as on Review, so it can't be read past.
+    """
+    state = st.session_state
+    scanned_note = _scanned_note()
+    notes = [scanned_note] if scanned_note else []
+    if not blackout:
+        notes += pdf_mapping_notes(state.pdf_crosswalk)
+    if notes:
+        box = st.warning if scanned_note else st.info
+        box("**Before you share this PDF**\n\n" + "\n\n".join(notes))
+    not_located = state.get("pdf_not_located", ())
+    if not_located:
+        st.warning(not_located_warning(not_located))
+
+
 def _column_picker(
     table_columns: dict[str, str], applied: frozenset[str]
 ) -> frozenset[str]:
@@ -429,6 +451,7 @@ def _download_step(master_list_fingerprint: str, steps: Any) -> None:
     show_step(steps, 4)
     st.subheader("Download")
     render_exclusion_warning(state.get("pdf_excluded_applied", frozenset()))
+    _before_you_share(blackout)
     safe, private = wizard.download_cards()
     with safe:
         st.download_button(

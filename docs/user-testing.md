@@ -122,8 +122,8 @@ what happened instead — then file it.
 - [ ] An email address and a website URL redact automatically, with nothing
   typed in.
 - [ ] A name/organization **that is on your test master list** redacts with
-  nothing typed into the Review step's "Missed something? Add words or
-  phrases" box.
+  nothing typed into the Review step's "Add something the tool missed"
+  box.
 - [ ] A made-up name the scan missed, typed into that box on the Review step,
   is redacted after **Add and rebuild**, with no second scan, and shows up in
   the review list.
@@ -182,8 +182,8 @@ what happened instead — then file it.
   [troubleshooting.md](troubleshooting.md#a-name-inside-a-word-text-box-smartart-or-embedded-object-is-not-detected)).
 - [ ] Downloaded document keeps original formatting (bold, tables, etc.)
   around the redacted text.
-- [ ] A made-up word typed into "Missed something? Add words or phrases" on
-  the Review step is redacted after **Add and rebuild**.
+- [ ] A made-up word typed into "Add something the tool missed" on the
+  Review step is redacted after **Add and rebuild**. The box starts folded.
 
 ### Rejecting a false positive
 
@@ -215,8 +215,9 @@ what happened instead — then file it.
   **Where found** tab.
 - [ ] With a dozen terms or fewer, there is no filter, search or "Untick all"
   row above the table, just the list. With more, they appear.
-- [ ] A scanned PDF shows one **Before you share this PDF** box above the
-  list, not several.
+- [ ] A scanned PDF warns about its scanned pages on Review. The **Before you
+  share this PDF** box (scanned pages, items the mapping can't decode) is on
+  the Download step, as one box, not several.
 - [ ] There is one **Apply changes** button, under the table. The line at the
   top says what is left: guesses to check, terms left visible, changes not
   applied yet.

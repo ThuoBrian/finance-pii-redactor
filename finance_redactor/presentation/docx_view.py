@@ -42,6 +42,7 @@ from finance_redactor.presentation.session import (
 )
 from finance_redactor.presentation.steps import show_step
 from finance_redactor.presentation.words_view import (
+    additions_expander,
     render_words_box,
     typed_words,
     unapplied_words_note,
@@ -181,9 +182,6 @@ def _review_step(uploaded: Any, docx_service: RedactDocxService, steps: Any) -> 
             )
         )
 
-    words_applied: list[str] = state.docx_run_words
-    words = render_words_box("docx", words_applied)
-
     review_findings = state.get("docx_all_findings", [])
     tab_review, tab_mapping, tab_occurrences = st.tabs(
         review_tab_labels(review_findings)
@@ -203,6 +201,10 @@ def _review_step(uploaded: Any, docx_service: RedactDocxService, steps: Any) -> 
             width="stretch",
             hide_index=True,
         )
+
+    words_applied: list[str] = state.docx_run_words
+    with additions_expander("docx", words_applied):
+        words = render_words_box("docx", words_applied)
 
     if (
         excluded != state.get("docx_excluded_applied", frozenset())

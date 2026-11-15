@@ -161,15 +161,17 @@ you to the step before, and your choices are kept.
 1. **Upload** your Excel, PDF, or Word file.
 2. **Options.** Click **Redact my file**. The recommended settings are
    already chosen; open **Customize** only if you need to, for example to
-   pick tabs and columns, or to add something the tool wouldn't know about,
-   like a codename or a case number.
+   pick tabs and columns.
 3. **Review.** The **Review** tab lists what was found, likeliest mistakes
    first. Untick anything that isn't really a name, then click **Apply
    changes** to rebuild the file without them; everything else stays
    redacted. The **Why it was found** column says why each term matched
    (**Show details** adds the technical columns). Ordinary words
    sometimes get caught, usually because someone added one to the master list
-   as a payee.
+   as a payee. For a PDF or Word file, the folded **Add something the tool
+   missed** box takes a name the scan didn't catch, a codename or a case
+   number (and, for a PDF with a table, whole columns to redact). Most files
+   need nothing there.
 4. **Download.** Two cards: **Safe to share** (Internal) and **Keep private**
    (Confidential). Files are named `redacted-` plus the date and time, never
    after your original file, and their document properties (author, title

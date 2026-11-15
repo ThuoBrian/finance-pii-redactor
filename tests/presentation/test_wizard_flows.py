@@ -322,9 +322,40 @@ def test_a_scanned_pdf_page_is_reported_on_the_review_step() -> None:
     _click(at, "Redact my file")
 
     warnings = [w.value for w in at.warning]
-    assert any("1 of 1 page is a scan" in w and "blacked out" in w for w in warnings)
+    # It changes what to check, so it stays on Review, on its own.
+    assert len(warnings) == 1 and "1 of 1 page is a scan" in warnings[0]
+    assert "blacked out" in warnings[0]
+    assert not any("Before you share" in w for w in warnings)
+
+
+def test_the_before_you_share_box_is_on_the_download_step() -> None:
+    at = _start("pdf-scan")
+    _click(at, "Redact my file")
+    _click(at, "Continue to download →")
+
+    warnings = [w.value for w in at.warning]
     # One "Before you share" box, not a stack of separate ones.
     assert len(warnings) == 1 and warnings[0].startswith("**Before you share")
+    assert "1 of 1 page is a scan" in warnings[0]
+
+
+def test_a_term_nothing_covers_is_warned_about_on_download_too() -> None:
+    at = _start("pdf-unlocated")
+    _click(at, "Redact my file")
+    _click(at, "Continue to download →")
+
+    assert any("could not be found on the page" in w.value for w in at.warning)
+
+
+@pytest.mark.parametrize("fmt", ["pdf", "word"])
+def test_the_rare_path_controls_are_folded_into_one_expander(fmt: str) -> None:
+    from finance_redactor.presentation.words_view import ADDITIONS_LABEL
+
+    at = _start(fmt)
+    _click(at, "Redact my file")
+
+    assert [e.label for e in at.expander if e.label == ADDITIONS_LABEL]
+    assert not at.multiselect  # no table, so no column picker
 
 
 def test_a_term_that_cannot_be_found_on_the_page_is_warned_about() -> None:

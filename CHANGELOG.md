@@ -91,6 +91,14 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **The Review step does one job: checking what was found.** The PDF's
+  "Before you share this PDF" box (items the mapping can't decode, scanned
+  pages) moved to the Download step, next to the files. Review keeps the
+  warnings that change what you check: scanned pages to look at, and terms
+  that could not be found on the page (shown on Download too). The words box
+  and the PDF table-column picker now share one folded box, **Add something
+  the tool missed (most files need nothing here)**, under the review table;
+  the column picker shows only when the PDF has a table.
 - **Start over asks first.** The sidebar's **Start over** used to drop the
   file, findings, review choices and downloads on one click. It now asks for
   confirmation, like **Close the app**, and says what will be lost.
