@@ -54,7 +54,12 @@ _HOW_TO_READ = (
 )
 _CLEAN_RUN = (
     "Nothing here is a guess. Every term came from your master list, words "
-    "you typed, or a strict pattern such as an email or account number."
+    "you typed, a table column you chose, or a strict pattern such as an "
+    "email or account number."
+)
+_NOTHING_FOUND = (
+    "Nothing to review: no names or private details were found. If you "
+    "expected some, check the options you scanned with."
 )
 # Rows the editor shows before it scrolls inside itself, so the Apply button
 # under it is never far away.
@@ -107,6 +112,7 @@ def render_deselect_editor(
     toggle, but the returned set only changes on the Apply click.
     """
     if not findings:
+        st.caption(_NOTHING_FOUND)
         return frozenset()
 
     state = st.session_state

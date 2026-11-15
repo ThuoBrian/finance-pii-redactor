@@ -91,6 +91,17 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **Consistent, readable wording across the steps.** The step tracker says
+  "Options", like the page. The Review tab counts every term as well as the
+  guesses ("Review (57 terms, 2 to check)"), so it no longer reads as a
+  smaller job than it is. The mapping is called "mapping" everywhere: the
+  "Code list" tab is now **Mapping**. Tables on screen show "Email address"
+  and "Model guess" rather than `EMAIL_ADDRESS` and `model`; the downloaded
+  CSVs keep the raw codes. An empty Review tab says nothing was found, and
+  the "Nothing here is a guess" note now also lists table columns you chose.
+  The **Hide in output?** column keeps its name: it was renamed from
+  "Redact?" on purpose, and a tick means hidden, which matches every warning
+  about terms that "will not be hidden".
 - **Each Download card does one job.** The PDF's **Safe to share** card holds
   the download button and one line about it. The label mapping moved under
   the cards as its own **Label mapping** section, with the note about the

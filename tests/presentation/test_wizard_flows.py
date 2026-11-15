@@ -170,7 +170,7 @@ def test_each_format_walks_options_review_download_and_back(fmt: str) -> None:
 
     _click(at, "Redact my file")
     assert [s.value for s in at.subheader] == ["Review what was found"]
-    assert at.tabs[0].label == "Review (1 to check)"
+    assert at.tabs[0].label == "Review (1 term, 1 to check)"
 
     _click(at, "Continue to download →")
     assert [s.value for s in at.subheader] == ["Download"]

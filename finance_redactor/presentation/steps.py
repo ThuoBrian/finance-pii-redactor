@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-STEPS = ("Upload", "Set options", "Review", "Download")
+STEPS = ("Upload", "Options", "Review", "Download")
 
 
 def steps_markdown(current: int) -> str:

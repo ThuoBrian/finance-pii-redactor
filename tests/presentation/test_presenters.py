@@ -297,7 +297,7 @@ def test_editor_reports_the_source_so_the_user_knows_which_fix_applies() -> None
 
     table = detection_editor_dataframe(findings)
 
-    assert set(table["Source"]) == {"master list", "pattern match"}
+    assert set(table["Source"]) == {"Master list", "Pattern match"}
 
 
 def test_editor_defaults_to_redacting_everything() -> None:
@@ -527,7 +527,7 @@ def test_filter_shows_one_source_and_all_by_default() -> None:
 
     assert len(filter_editor_rows(table, None)) == 7
     assert len(filter_editor_rows(table, "All")) == 7
-    assert set(filter_editor_rows(table, "Model guesses")["Source"]) == {"model"}
+    assert set(filter_editor_rows(table, "Model guesses")["Source"]) == {"Model guess"}
     assert len(filter_editor_rows(table, "Model guesses")) == 4
 
 
@@ -557,14 +557,14 @@ def test_review_comes_first_and_counts_the_model_guesses() -> None:
     findings = _mixed_findings()  # 4 model guesses among 7 terms
 
     assert review_tab_labels(findings) == [
-        "Review (4 to check)",
-        "Code list",
+        "Review (7 terms, 4 to check)",
+        "Mapping",
     ]
     assert review_tab_labels(findings, preview=True)[1] == "Preview"
 
 
 def test_review_tab_label_has_no_count_when_nothing_is_a_guess() -> None:
-    assert review_tab_labels([_finding("Care Organisation")])[0] == "Review"
+    assert review_tab_labels([_finding("Care Organisation")])[0] == "Review (1 term)"
     assert review_tab_labels([])[0] == "Review"
 
 
@@ -714,7 +714,7 @@ def test_findings_from_before_a_module_reload_still_sort_and_hint() -> None:
 
     assert list(table["Detected text"]) == ["Across", "Care Organisation"]
     assert table.loc[0, "Hint"] == "ordinary word"
-    assert review_tab_labels(findings)[0] == "Review (1 to check)"
+    assert review_tab_labels(findings)[0] == "Review (2 terms, 1 to check)"
 
 
 def test_scanned_pages_warning_says_what_happens_to_the_pages() -> None:
@@ -848,3 +848,28 @@ def test_carried_over_notice_says_the_terms_stay_visible() -> None:
     assert one.startswith("Kept 1 term you unticked last time: `salaries`.")
     assert "It stays visible" in one and "to hide it." in one
     assert "They stay visible" in two and "to hide them." in two
+
+
+def test_where_found_tables_read_as_words_not_codes() -> None:
+    findings = [
+        Finding(
+            page=0,
+            detected_text="someone@example.org",
+            entity_type="EMAIL_ADDRESS",
+            score=1.0,
+            source=DetectionSource.CUSTOM,
+        )
+    ]
+
+    row = findings_dataframe(findings, "Page").iloc[0]
+
+    assert (row["Entity type"], row["Source"]) == ("Email address", "Typed word")
+
+
+def test_every_source_has_a_readable_label() -> None:
+    from finance_redactor.presentation.presenters import source_label
+
+    labels = {source_label(source) for source in DetectionSource}
+
+    assert len(labels) == len(DetectionSource)
+    assert all(label[0].isupper() and "_" not in label for label in labels)

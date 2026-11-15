@@ -1,7 +1,7 @@
 """Rendering of the mapping between what was redacted and what replaced it.
 
 Two schemes live here, because PDF and Excel/Word differ in what they write
-into a document. Each has a review table (the Review step's Code list tab) and
+into a document. Each has a review table (the Review step's Mapping tab) and
 downloads (the Download step, sorted into an Internal and a Confidential card).
 
 PDF stamps a document-local ``[001]`` label. :func:`render_pdf_mapping_download`
@@ -26,6 +26,7 @@ import streamlit as st
 from finance_redactor.domain.pseudonyms import Assignment
 from finance_redactor.presentation.presenters import (
     crosswalk_dataframe,
+    entity_label,
     pdf_mapping_dataframe,
     pdf_mapping_with_names_dataframe,
     pdf_review_dataframe,
@@ -157,7 +158,10 @@ def render_crosswalk_section(crosswalk: list[Assignment]) -> None:
             "hint only; it was **not** applied automatically. Fix the source "
             "document or add an alias, then re-run."
         )
-    st.dataframe(crosswalk_dataframe(crosswalk), width="stretch", hide_index=True)
+    # Readable kinds on screen; the downloaded CSV keeps the raw codes.
+    table = crosswalk_dataframe(crosswalk)
+    table["Entity type"] = table["Entity type"].map(entity_label)
+    st.dataframe(table, width="stretch", hide_index=True)
 
 
 def render_crosswalk_download(

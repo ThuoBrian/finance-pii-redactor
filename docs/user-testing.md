@@ -201,7 +201,7 @@ what happened instead — then file it.
 - [ ] Add a row to your test master list whose `Name` is an ordinary word
   (`Salaries` works), then redact a document that uses that word normally.
   It should be redacted — that is the bug this control exists for.
-- [ ] Open **Check what was detected**. The word appears as **one** row, not
+- [ ] Open the **Review** tab. The word appears as **one** row, not
   one per occurrence, with **Why it was found** = "On your master list".
   Turn on **Show details**: the row has an **Occurrences** count and
   **Source** = `master list`, and your ticks are unchanged.
@@ -221,8 +221,13 @@ what happened instead — then file it.
 - [ ] With a mix of terms (a few ordinary words, an ALL-CAPS heading, a
   curated name), the likeliest false positives are at the top and the curated
   name is last. The status line above the table matches what you see.
-- [ ] The review step opens on the **Review** tab, labelled with how many model
-  guesses there are to check. The per-occurrence table is folded under
+- [ ] The review step opens on the **Review** tab, labelled with how many
+  terms were found and how many are model guesses to check, e.g. "Review
+  (57 terms, 2 to check)". The other tab is **Mapping** (plus **Preview** in
+  Excel); the step tracker reads Upload, Options, Review, Download. Tables
+  show readable kinds and sources ("Email address", "Model guess"), not
+  codes. A file with nothing found says so on the Review tab instead of
+  showing a blank tab. The per-occurrence table is folded under
   **Where each term was found** at the bottom of the step, not in a tab.
 - [ ] With a dozen terms or fewer, there is no filter, search or "Untick all"
   row above the table, just the list. With more, they appear.

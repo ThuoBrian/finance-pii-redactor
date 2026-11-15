@@ -111,6 +111,24 @@ def entity_label(entity_type: str) -> str:
     return entity_type.replace("_", " ").capitalize()
 
 
+# How each detection source reads on screen. Keyed on the value, not the
+# member: Streamlit re-imports changed modules, so findings kept in session
+# state can hold members of an older copy of the enum.
+_SOURCE_LABELS = {
+    DetectionSource.MODEL.value: "Model guess",
+    DetectionSource.MASTER_LIST.value: "Master list",
+    DetectionSource.CUSTOM.value: "Typed word",
+    DetectionSource.PATTERN.value: "Pattern match",
+    DetectionSource.TABLE_COLUMN.value: "Table column",
+}
+
+
+def source_label(source: DetectionSource) -> str:
+    """Readable form of a detection source, e.g. ``custom word`` -> ``Typed word``."""
+    value = str(source.value)
+    return _SOURCE_LABELS.get(value, value.capitalize())
+
+
 def plural(count: int, singular: str, plural_form: str | None = None) -> str:
     """Return ``"1 name"`` / ``"2 names"``: a count with the right noun form."""
     word = singular if count == 1 else (plural_form or f"{singular}s")
@@ -182,9 +200,9 @@ def excel_findings_dataframe(scan_result: WorkbookScanResult) -> pd.DataFrame:
             "Row": cell.row + 1,
             "Column": cell.column,
             "Detected text": detection.text,
-            "Entity type": detection.entity_type,
+            "Entity type": entity_label(detection.entity_type),
             "Confidence": round(detection.score, 2),
-            "Source": detection.source.value,
+            "Source": source_label(detection.source),
         }
         for sheet, sheet_result in scan_result.sheets.items()
         for cell in sheet_result.findings
@@ -196,9 +214,9 @@ def excel_findings_dataframe(scan_result: WorkbookScanResult) -> pd.DataFrame:
             "Row": None,
             "Column": TAB_NAME_LABEL,
             "Detected text": detection.text,
-            "Entity type": detection.entity_type,
+            "Entity type": entity_label(detection.entity_type),
             "Confidence": round(detection.score, 2),
-            "Source": detection.source.value,
+            "Source": source_label(detection.source),
         }
         for sheet, detections in scan_result.tab_names.items()
         for detection in detections
@@ -209,9 +227,9 @@ def excel_findings_dataframe(scan_result: WorkbookScanResult) -> pd.DataFrame:
             "Row": None,
             "Column": f"{header} {HEADER_LABEL}",
             "Detected text": detection.text,
-            "Entity type": detection.entity_type,
+            "Entity type": entity_label(detection.entity_type),
             "Confidence": round(detection.score, 2),
-            "Source": detection.source.value,
+            "Source": source_label(detection.source),
         }
         for sheet, by_header in scan_result.headers.items()
         for header, detections in by_header.items()
@@ -299,7 +317,7 @@ def pdf_review_dataframe(crosswalk: list[Assignment]) -> pd.DataFrame:
         {
             "Label": a.label,
             "Original name": a.original_name,
-            "Entity type": a.entity_type,
+            "Entity type": entity_label(a.entity_type),
             "Category": a.category or "(unknown)",
             "Internal ID": a.internal_id or "",
             "Flagged": (
@@ -419,9 +437,9 @@ def findings_dataframe(findings: list[Finding], page_label: str) -> pd.DataFrame
             {
                 page_label: f.page + 1,
                 "Detected text": f.detected_text,
-                "Entity type": f.entity_type,
+                "Entity type": entity_label(f.entity_type),
                 "Confidence": round(f.score, 2),
-                "Source": f.source.value,
+                "Source": source_label(f.source),
             }
             for f in findings
         ]
@@ -473,11 +491,11 @@ _SOURCE_TIER = {
 # Filter choices for the review table: label -> the Source values it shows.
 ALL_SOURCES = "All"
 SOURCE_FILTERS = {
-    "Model guesses": DetectionSource.MODEL.value,
-    "Typed words": DetectionSource.CUSTOM.value,
-    "Table columns": DetectionSource.TABLE_COLUMN.value,
-    "Pattern matches": DetectionSource.PATTERN.value,
-    "Master list": DetectionSource.MASTER_LIST.value,
+    "Model guesses": source_label(DetectionSource.MODEL),
+    "Typed words": source_label(DetectionSource.CUSTOM),
+    "Table columns": source_label(DetectionSource.TABLE_COLUMN),
+    "Pattern matches": source_label(DetectionSource.PATTERN),
+    "Master list": source_label(DetectionSource.MASTER_LIST),
 }
 
 
@@ -566,7 +584,7 @@ def detection_editor_dataframe(
             _TERM_COLUMN: finding.detected_text,
             _WHY_COLUMN: why_found(finding, hint),
             "Kind": entity_label(finding.entity_type),
-            "Source": finding.source.value,
+            "Source": source_label(finding.source),
             "Confidence": round(score, 2),
             "Hint": hint,
             "Occurrences": counts[key],
@@ -645,7 +663,7 @@ def search_editor_rows(table: pd.DataFrame, text: str | None) -> pd.DataFrame:
 
 def model_guess_count(table: pd.DataFrame) -> int:
     """Return how many terms in the review table are model guesses."""
-    return int((table["Source"] == DetectionSource.MODEL.value).sum())
+    return int((table["Source"] == source_label(DetectionSource.MODEL)).sum())
 
 
 def review_tab_labels(
@@ -658,12 +676,16 @@ def review_tab_labels(
     label that changed on every tick would throw the reviewer back to the
     first tab.
     """
-    n = model_guess_count(detection_editor_dataframe(findings)) if findings else 0
-    review = f"Review ({n} to check)" if n else "Review"
+    review = "Review"
+    if findings:
+        table = detection_editor_dataframe(findings)
+        n = model_guess_count(table)
+        terms = plural(len(table), "term")
+        review = f"Review ({terms}, {n} to check)" if n else f"Review ({terms})"
     return [
         review,
         *(["Preview"] if preview else []),
-        "Code list",
+        "Mapping",
     ]
 
 
@@ -768,17 +790,17 @@ def review_summary(table: pd.DataFrame) -> str:
     by_source = Counter(table["Source"])
     hinted = int((table["Hint"] != "").sum())
     parts = []
-    model = by_source[DetectionSource.MODEL.value]
+    model = by_source[source_label(DetectionSource.MODEL)]
     if model:
         guess = plural(model, "model guess", "model guesses")
         parts.append(f"{guess} ({hinted} worth a closer look)" if hinted else guess)
     for label, source in (
-        ("typed word", DetectionSource.CUSTOM.value),
-        ("table cell", DetectionSource.TABLE_COLUMN.value),
-        ("pattern match", DetectionSource.PATTERN.value),
-        ("master-list name", DetectionSource.MASTER_LIST.value),
+        ("typed word", DetectionSource.CUSTOM),
+        ("table cell", DetectionSource.TABLE_COLUMN),
+        ("pattern match", DetectionSource.PATTERN),
+        ("master-list name", DetectionSource.MASTER_LIST),
     ):
-        count = by_source[source]
+        count = by_source[source_label(source)]
         if count:
             parts.append(
                 plural(count, label, label + "es" if label.endswith("h") else None)
@@ -859,7 +881,7 @@ def pdf_mapping_notes(crosswalk: Sequence[Assignment]) -> list[str]:
     if missing:
         notes.append(
             f"**{plural(missing, 'redacted item')} not on the master list.** "
-            "They are hidden, but the code list can't say who they are later. "
+            "They are hidden, but the mapping can't say who they are later. "
             "Add them to the master list and redact again if that matters."
         )
     if ambiguous:
