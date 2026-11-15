@@ -284,3 +284,67 @@ def _all_zip_text(data: bytes) -> bytes:
 
     with zipfile.ZipFile(BytesIO(data)) as archive:
         return b"".join(archive.read(name) for name in archive.namelist())
+
+
+# --- Hidden surfaces: every part of the output is checked ---------------------
+
+_NAME = "Jane Testperson"
+
+
+def _redact_token(gateway: PythonDocxDocument, token: str) -> int:
+    """Replace every occurrence of ``token`` in every block, as the use case would.
+
+    Returns how many blocks contained it, so a test can prove the scan saw it.
+    """
+    hits = 0
+    for index in range(gateway.block_count):
+        text = gateway.block_text(index)
+        spans = []
+        start = text.find(token)
+        while start != -1:
+            spans.append((Span(start, start + len(token)), "STF-1"))
+            start = text.find(token, start + 1)
+        if spans:
+            hits += 1
+            gateway.replace_block_text(index, spans)
+    return hits
+
+
+def _zip_parts(data: bytes) -> dict[str, bytes]:
+    import zipfile
+
+    with zipfile.ZipFile(BytesIO(data)) as archive:
+        return {name: archive.read(name) for name in archive.namelist()}
+
+
+def _assert_gone(data: bytes, *tokens: str) -> None:
+    """Fail naming the part (never the value) if a token survives anywhere."""
+    for name, blob in _zip_parts(data).items():
+        for number, token in enumerate(tokens):
+            assert token.encode() not in blob, f"token #{number} survives in {name}"
+
+
+@pytest.mark.parametrize(
+    "attr",
+    ["first_page_header", "even_page_header", "first_page_footer", "even_page_footer"],
+)
+def test_first_and_even_page_headers_and_footers_are_redacted(attr):
+    def build(document):
+        document.add_paragraph("Body text")
+        section = document.sections[0]
+        section.different_first_page_header_footer = True
+        document.settings.odd_and_even_pages_header_footer = True
+        getattr(section, attr).paragraphs[0].text = f"Prepared by {_NAME}"
+
+    source = _build_docx(build)
+    assert _NAME.encode() in _all_zip_text(source)  # the fixture really carries it
+    gateway = PythonDocxDocument.open(source)
+
+    assert _redact_token(gateway, _NAME) == 1
+    _assert_gone(gateway.to_bytes(), _NAME)
+
+
+def test_unused_headers_and_footers_are_not_added_to_the_output():
+    gateway = PythonDocxDocument.open(_build_docx(lambda d: d.add_paragraph("x")))
+    parts = _zip_parts(gateway.to_bytes())
+    assert not [name for name in parts if "header" in name or "footer" in name]

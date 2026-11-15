@@ -179,8 +179,9 @@ def _strip_hyperlinks(document: Document) -> int:
 def _collect_paragraphs(document: Document) -> list[Paragraph]:
     """Enumerate every paragraph in the document: body, tables, headers/footers.
 
-    Headers/footers linked across sections (``is_linked_to_previous``) share
-    the same underlying part, so each distinct part is only visited once
+    Every section's default, first-page and even-page header and footer is
+    visited. Headers/footers linked across sections (``is_linked_to_previous``)
+    share the same underlying part, so each distinct part is only visited once
     (tracked by ``id(part)``) to avoid scanning/replacing the same text twice.
 
     Known limitation: text inside text boxes, SmartArt, and embedded objects
@@ -193,7 +194,19 @@ def _collect_paragraphs(document: Document) -> list[Paragraph]:
 
     seen_part_ids: set[int] = set()
     for section in document.sections:
-        for header_or_footer in (section.header, section.footer):
+        for header_or_footer in (
+            section.header,
+            section.first_page_header,
+            section.even_page_header,
+            section.footer,
+            section.first_page_footer,
+            section.even_page_footer,
+        ):
+            # A linked one has no part of its own: its text is the prior
+            # section's part, visited there. Touching ``.part`` or
+            # ``.paragraphs`` here would add an empty part to the output.
+            if header_or_footer.is_linked_to_previous:
+                continue
             part_id = id(header_or_footer.part)
             if part_id in seen_part_ids:
                 continue

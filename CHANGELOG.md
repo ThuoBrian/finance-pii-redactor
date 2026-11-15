@@ -218,6 +218,11 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **Word first-page and even-page headers and footers are redacted.** Only the
+  default header and footer of each section were scanned, so a name in a
+  "Different first page" or "Different odd and even pages" header or footer
+  came through unchanged. All six are scanned now. A Word file with no header
+  or footer no longer gets an empty one added.
 - **Review tick boxes respond to a single click.** Every other tick or
   untick in the "Hide in output?" column was ignored, so a box seemed to
   need a double click. Each click now registers.
