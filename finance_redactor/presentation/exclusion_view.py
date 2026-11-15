@@ -34,6 +34,7 @@ from finance_redactor.presentation.presenters import (
     REDACT_COLUMN,
     SOURCE_FILTERS,
     apply_notice,
+    carried_over_notice,
     detection_editor_dataframe,
     filter_editor_rows,
     merge_pending,
@@ -139,6 +140,10 @@ def render_deselect_editor(
         if applied is not None:
             box = st.warning if not_located else st.success
             box(apply_notice(applied, not_located))
+        # Set by a flow that redacted again and kept the last run's unticks.
+        carried = state.pop(carried_key(key_prefix), None)
+        if carried:
+            st.info(carried_over_notice(carried))
         # Filled at the end, once this run's ticks are known; drawn here so
         # the line sits at the top where the reviewer looks first. It carries
         # the term count, so there is no separate heading.
@@ -260,6 +265,11 @@ def render_deselect_editor(
     # the *applied* one until Apply is clicked: callers rebuild the output
     # whenever it changes. Only the click's own rerun returns the pending set.
     return pending if clicked else excluded
+
+
+def carried_key(key_prefix: str) -> str:
+    """Session key a flow sets to the unticked terms it carried into a new run."""
+    return f"{key_prefix}_review_carried"
 
 
 def unapplied_changes_note(key_prefix: str, excluded: frozenset[str]) -> str | None:

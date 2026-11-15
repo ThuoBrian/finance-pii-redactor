@@ -253,6 +253,10 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **Going back to Options and redacting again keeps your review.** Changing
+  one option used to wipe every untick from the Review step. Terms you
+  unticked, and PDF table columns you added, now carry over to the new run
+  when it finds them again, and a note on Review lists the kept terms.
 - **A Word file uploaded after a PDF no longer keeps the PDF's results in
   memory.** Each format cleared a different list of earlier results on a new
   upload, and Word's left out every PDF one. All three now clear the same

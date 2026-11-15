@@ -22,6 +22,7 @@ from finance_redactor.presentation.crosswalk_view import (
     render_crosswalk_section,
 )
 from finance_redactor.presentation.exclusion_view import (
+    carried_key,
     render_deselect_editor,
     render_exclusion_warning,
     unapplied_changes_note,
@@ -30,6 +31,7 @@ from finance_redactor.presentation.presenters import (
     ENTITY_HELP,
     PREVIEW_MAX_ROWS,
     THRESHOLD_HELP,
+    carry_over_exclusions,
     entity_label,
     excel_findings_dataframe,
     formatting_note,
@@ -259,16 +261,23 @@ def _options_step(
                 float(state["excel_threshold"]),
                 on_progress=_on_progress,
             )
+            # Back from Review: keep the terms unticked there that this run
+            # found again, rather than wiping the review.
+            carried = carry_over_exclusions(
+                state.get("excel_excluded_applied", frozenset()),
+                scan_result_findings(scan_result),
+            )
             status.update(label="Replacing names with codes...")
             redacted_sheets, crosswalk = excel_service.redact_workbook(
-                to_scan, scan_result, columns_by_sheet
+                to_scan, scan_result, columns_by_sheet, exclude=carried
             )
         state.findings = scan_result
         state.scan_sheets = to_scan
         state.scan_columns = columns_by_sheet
         state.redacted_sheets = redacted_sheets
         state.crosswalk = crosswalk
-        state.excel_excluded_applied = frozenset()
+        state.excel_excluded_applied = carried
+        state[carried_key("excel")] = carried
         state.excel_bytes = None
         wizard.go(wizard.REVIEW)
 

@@ -590,6 +590,30 @@ def merge_findings(
     return merged
 
 
+def carry_over_exclusions(
+    previous: frozenset[str], findings: Sequence[Finding]
+) -> frozenset[str]:
+    """Return the terms unticked last run that the new run found again.
+
+    Going back to Options and redacting again must not throw away the review
+    already done. A term the new scan no longer finds has nothing to leave
+    visible, so it is dropped rather than kept as a silent exception.
+    """
+    return previous & {term_key(f.detected_text) for f in findings}
+
+
+def carried_over_notice(carried: frozenset[str]) -> str:
+    """Say which unticked terms were kept from the last run (on screen only)."""
+    terms = ", ".join(f"`{term}`" for term in sorted(carried))
+    n = len(carried)
+    it = "it" if n == 1 else "them"
+    return (
+        f"Kept {plural(n, 'term')} you unticked last time: {terms}. "
+        f"{'It stays' if n == 1 else 'They stay'} visible in this file. "
+        f"Tick {it} again and click **Apply changes** to hide {it}."
+    )
+
+
 def term_key(term: object) -> str:
     """Return the normalized form a row is compared by (matches ``exclude``)."""
     return normalize(str(term))

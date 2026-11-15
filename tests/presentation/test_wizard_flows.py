@@ -410,3 +410,49 @@ def test_a_pdf_table_offers_its_columns_with_name_like_ones_chosen() -> None:
     assert at.session_state["pdf_columns_applied"] == frozenset({"payee", "amount"})
     listed = {f.detected_text for f in at.session_state["pdf_all_findings"]}
     assert {"100.00", "250.00"} <= listed
+
+
+def test_unticked_terms_survive_going_back_to_options_and_redacting_again() -> None:
+    at = _start("excel-long")
+    _click(at, "Redact my file")
+    _click(at, "Untick all shown (13)")
+    _click(at, "Apply changes (13 pending)")
+    at.run()
+    applied = at.session_state["excel_excluded_applied"]
+
+    _click(at, "← Back to options")
+    _click(at, "Redact my file")
+
+    assert len(applied) == 13
+    assert at.session_state["excel_excluded_applied"] == applied
+    assert any(i.value.startswith("Kept 13 terms you unticked") for i in at.info)
+    redacted = at.session_state["redacted_sheets"][0].data
+    assert "Paid Jane Doe" in set(redacted["notes"])  # still left visible
+
+
+def test_a_word_untick_survives_redacting_again() -> None:
+    from docx import Document
+
+    from finance_redactor.presentation.presenters import term_key
+
+    at = _start("word")
+    _click(at, "Redact my file")
+    # As if "Jane Doe" had been unticked and applied on Review.
+    at.session_state["docx_excluded_applied"] = frozenset({term_key("Jane Doe")})
+
+    _click(at, "← Back to options")
+    _click(at, "Redact my file")
+
+    text = Document(BytesIO(at.session_state["docx_buffer"])).paragraphs[0].text
+    assert "Jane Doe" in text
+    assert at.session_state["docx_excluded_applied"] == {term_key("Jane Doe")}
+    listed = {f.detected_text for f in at.session_state["docx_all_findings"]}
+    assert "Jane Doe" in listed  # still on the list, so it can be re-ticked
+
+
+def test_a_first_redact_has_nothing_to_carry_over() -> None:
+    at = _start("pdf")
+    _click(at, "Redact my file")
+
+    assert at.session_state["pdf_excluded_applied"] == frozenset()
+    assert not any(i.value.startswith("Kept ") for i in at.info)

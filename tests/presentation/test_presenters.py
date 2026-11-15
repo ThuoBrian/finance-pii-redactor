@@ -21,6 +21,8 @@ from finance_redactor.presentation.presenters import (
     CHANGED_MARKER,
     HIGHLIGHT_HEX,
     apply_notice,
+    carried_over_notice,
+    carry_over_exclusions,
     crosswalk_dataframe,
     detection_editor_dataframe,
     excel_findings_dataframe,
@@ -827,3 +829,23 @@ def test_pdf_mapping_notes_cover_missing_and_ambiguous_items() -> None:
     assert "1 redacted item not on the master list" in notes[0]
     assert "matched more than one" in notes[1]
     assert pdf_mapping_notes([item(False, "17728")]) == []
+
+
+def test_carry_over_keeps_only_unticked_terms_the_new_scan_found_again() -> None:
+    previous = frozenset({"salaries", "acme sample ltd"})
+    findings = [_finding("SALARIES"), _finding("Jane Test")]
+
+    assert carry_over_exclusions(previous, findings) == frozenset({"salaries"})
+
+
+def test_carry_over_of_nothing_is_nothing() -> None:
+    assert carry_over_exclusions(frozenset(), [_finding("Salaries")]) == frozenset()
+
+
+def test_carried_over_notice_says_the_terms_stay_visible() -> None:
+    one = carried_over_notice(frozenset({"salaries"}))
+    two = carried_over_notice(frozenset({"salaries", "totals"}))
+
+    assert one.startswith("Kept 1 term you unticked last time: `salaries`.")
+    assert "It stays visible" in one and "to hide it." in one
+    assert "They stay visible" in two and "to hide them." in two

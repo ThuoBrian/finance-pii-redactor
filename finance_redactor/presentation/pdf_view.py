@@ -36,11 +36,13 @@ from finance_redactor.presentation.crosswalk_view import (
     render_pdf_names_download,
 )
 from finance_redactor.presentation.exclusion_view import (
+    carried_key,
     render_deselect_editor,
     render_exclusion_warning,
     unapplied_changes_note,
 )
 from finance_redactor.presentation.presenters import (
+    carry_over_exclusions,
     findings_dataframe,
     merge_findings,
     not_located_warning,
@@ -173,8 +175,12 @@ def _options_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> N
                 )
                 uploaded.seek(0)
                 status.update(label="Building the redacted PDF...")
-                # Name-, account- and contact-like columns start chosen.
-                columns = suggested_columns(scan_result.table_columns)
+                # Name-, account- and contact-like columns start chosen, plus
+                # any the user added on an earlier run of this file.
+                columns = suggested_columns(scan_result.table_columns) | (
+                    state.get("pdf_columns_applied", frozenset())
+                    & set(scan_result.table_columns)
+                )
                 result = pdf_service.redact(
                     uploaded,
                     scan_result,
@@ -183,6 +189,23 @@ def _options_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> N
                     redact_images=redact_images,
                     columns=columns,
                 )
+                # Back from Review: keep the terms unticked there that this
+                # run found again, rather than wiping the review.
+                carried = carry_over_exclusions(
+                    state.get("pdf_excluded_applied", frozenset()), result.findings
+                )
+                built = result
+                if carried:
+                    uploaded.seek(0)
+                    built = pdf_service.redact(
+                        uploaded,
+                        scan_result,
+                        custom_words,
+                        style=style,
+                        redact_images=redact_images,
+                        exclude=carried,
+                        columns=columns,
+                    )
         except EncryptedPdfError:
             st.error(
                 "This PDF is password-protected, so its pages can't be "
@@ -198,19 +221,20 @@ def _options_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> N
             )
             return
         state.pdf_scan_result = scan_result
-        state.pdf_buffer = result.data
-        state.pdf_findings = result.findings
-        state.pdf_pages = result.page_count
-        state.pdf_crosswalk = result.crosswalk
-        state.pdf_bracketed = result.source_bracketed_numbers
-        state.pdf_links = result.removed_links
-        state.pdf_not_located = result.not_located
+        state.pdf_buffer = built.data
+        state.pdf_findings = built.findings
+        state.pdf_pages = built.page_count
+        state.pdf_crosswalk = built.crosswalk
+        state.pdf_bracketed = built.source_bracketed_numbers
+        state.pdf_links = built.removed_links
+        state.pdf_not_located = built.not_located
         # The unfiltered detections, kept as the deselect editor's stable
         # row list. Never overwritten by a re-run below, so a term can be
         # unticked and re-ticked; refiltering it would take the tick box
         # away with the row and strand the decision.
         state.pdf_all_findings = result.findings
-        state.pdf_excluded_applied = frozenset()
+        state.pdf_excluded_applied = carried
+        state[carried_key("pdf")] = carried
         state.pdf_columns_applied = columns
         state[_COLUMNS_KEY] = sorted(columns)
         # The settings this result was built with. The later steps read

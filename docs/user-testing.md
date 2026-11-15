@@ -201,6 +201,9 @@ what happened instead — then file it.
   un-redacted.
 - [ ] Re-tick it and click **Apply changes** again. The file goes back to
   fully redacted.
+- [ ] Untick a term and apply, then go **Back to options** and click **Redact
+  my file** again. The term is still unticked, with a note saying so, and the
+  rest of the review is unchanged.
 - [ ] With a mix of terms (a few ordinary words, an ALL-CAPS heading, a
   curated name), the likeliest false positives are at the top and the curated
   name is last. The status line above the table matches what you see.

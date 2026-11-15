@@ -21,6 +21,7 @@ from finance_redactor.presentation.crosswalk_view import (
     render_crosswalk_section,
 )
 from finance_redactor.presentation.exclusion_view import (
+    carried_key,
     render_deselect_editor,
     render_exclusion_warning,
     unapplied_changes_note,
@@ -28,6 +29,7 @@ from finance_redactor.presentation.exclusion_view import (
 from finance_redactor.presentation.presenters import (
     ENTITY_HELP,
     THRESHOLD_HELP,
+    carry_over_exclusions,
     entity_label,
     findings_dataframe,
     merge_findings,
@@ -114,6 +116,17 @@ def _options_step(
                 uploaded.seek(0)
                 status.update(label="Replacing names with codes...")
                 result = docx_service.redact(uploaded, scan_result, custom_words)
+                # Back from Review: keep the terms unticked there that this
+                # run found again, rather than wiping the review.
+                carried = carry_over_exclusions(
+                    state.get("docx_excluded_applied", frozenset()), result.findings
+                )
+                built = result
+                if carried:
+                    uploaded.seek(0)
+                    built = docx_service.redact(
+                        uploaded, scan_result, custom_words, exclude=carried
+                    )
         except UnreadableFileError:
             st.error(
                 "This file could not be read as a Word document. It may be "
@@ -123,15 +136,16 @@ def _options_step(
             )
             return
         state.docx_scan_result = scan_result
-        state.docx_buffer = result.data
-        state.docx_findings = result.findings
-        state.docx_blocks = result.block_count
-        state.docx_crosswalk = result.crosswalk
-        state.docx_links = result.removed_links
+        state.docx_buffer = built.data
+        state.docx_findings = built.findings
+        state.docx_blocks = built.block_count
+        state.docx_crosswalk = built.crosswalk
+        state.docx_links = built.removed_links
         # Unfiltered baseline for the deselect editor - see pdf_view for
         # why this must not be refiltered on a re-run.
         state.docx_all_findings = result.findings
-        state.docx_excluded_applied = frozenset()
+        state.docx_excluded_applied = carried
+        state[carried_key("docx")] = carried
         # The words this result was built with; the later steps read these,
         # not the text box, which is only drawn on Options.
         state.docx_run_words = custom_words
