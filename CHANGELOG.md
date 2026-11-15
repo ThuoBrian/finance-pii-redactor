@@ -316,9 +316,8 @@ the `version` field in `pyproject.toml`.
   drawn before the upload box, and those buttons restarted the page before
   the box was drawn. They now act without restarting it. Start over's new
   confirm step works the same way.
-- **Word's confidence slider stops at 0.90**, like Excel's. Above that, every
-  master-list match is dropped, which the slider's own help text warns
-  against. (PDF has no confidence slider; it runs at fixed settings.)
+- **Word's confidence slider stops at 0.85**, like Excel's. (PDF has no
+  confidence slider; it runs at fixed settings.)
 - **Going back to Options and redacting again keeps your review.** Changing
   one option used to wipe every untick from the Review step. Terms you
   unticked, and PDF table columns you added, now carry over to the new run
@@ -414,9 +413,9 @@ the `version` field in `pyproject.toml`.
   two-word name split over a line break was covered on both lines but had its
   `[001]` label stamped on each part. Only the first part is labelled now;
   both are still covered.
-- **The Excel confidence slider stops at 0.90.** Its own help text said not
-  to go above 0.90, because master-list matches score exactly 0.90 and a
-  higher threshold drops every one of them, yet the slider went to 1.0.
+- **The Excel confidence slider stops at 0.85.** It went to 1.0. Above 0.85
+  the bank-account, M-Pesa and SWIFT patterns stop being masked, and above
+  0.90 every master-list match is dropped.
 - **An Excel file with nothing found can still be downloaded.** The Download
   step used to say "Nothing was detected" and offer no file, so a workbook
   trimmed to some tabs could not be saved. The rebuilt workbook is now

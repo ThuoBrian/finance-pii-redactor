@@ -499,13 +499,13 @@ def test_options_has_a_back_button_to_upload(fmt: str) -> None:
 
 
 def test_the_word_threshold_slider_stops_at_the_master_list_score() -> None:
-    """Above 0.90 every master-list match is dropped; the slider can't go there."""
+    """Above 0.85 bank and payment details stop being masked; the slider can't go there."""
     from finance_redactor.config import DEFAULT_SETTINGS
 
     at = _start("word")
     slider = at.slider(key="docx_threshold")
 
-    assert slider.max == DEFAULT_SETTINGS.custom_match_score == 0.9
+    assert slider.max == DEFAULT_SETTINGS.max_threshold == 0.85
     assert slider.value == DEFAULT_SETTINGS.default_threshold
 
 

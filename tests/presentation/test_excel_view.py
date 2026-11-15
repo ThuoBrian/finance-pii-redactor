@@ -97,13 +97,13 @@ def test_a_name_in_a_column_header_does_not_reach_the_download() -> None:
 
 
 def test_the_threshold_slider_stops_at_the_master_list_score() -> None:
-    """Above 0.90 every master-list match is dropped; the slider can't go there."""
+    """Above 0.85 bank and payment details stop being masked; the slider can't go there."""
     from finance_redactor.config import DEFAULT_SETTINGS
 
     at = _start({"Payments": {"notes": ["ok"]}})
     slider = at.slider(key="excel_threshold")
 
-    assert slider.max == DEFAULT_SETTINGS.custom_match_score == 0.9
+    assert slider.max == DEFAULT_SETTINGS.max_threshold == 0.85
     assert slider.value == DEFAULT_SETTINGS.default_threshold
 
 

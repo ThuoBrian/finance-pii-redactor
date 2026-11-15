@@ -96,7 +96,8 @@ THRESHOLD_HELP = (
     "How sure the tool must be before it hides something. Lower catches more "
     "(fewer missed names, but more words that were not names); higher catches "
     "less. Lowering it is the safe direction. If unsure, keep the default. "
-    "Do not go above 0.90 - that stops matching every name on the master list."
+    "It stops at 0.85, the highest setting that still hides bank and payment "
+    "details."
 )
 ENTITY_HELP = (
     "The kinds of sensitive information to look for: people, organizations, "

@@ -89,3 +89,11 @@ def test_engine_rejects_a_card_number_that_fails_luhn(regex_engine) -> None:
         "Card 4111 1111 1111 1112", ["CREDIT_CARD"], 0.4
     )
     assert detections == []
+
+
+def test_the_threshold_slider_cannot_switch_off_bank_detail_masks() -> None:
+    """The slider's top value must not exceed the bank-detail pattern score."""
+    from finance_redactor.infrastructure.detection import financial_recognizers
+
+    assert DEFAULT_SETTINGS.max_threshold <= financial_recognizers._SCORE
+    assert DEFAULT_SETTINGS.max_threshold < DEFAULT_SETTINGS.custom_match_score

@@ -89,12 +89,12 @@ def _options_step(
     state.setdefault("docx_entities", list(settings.supported_entities))
 
     with st.expander("Customize: kinds of information, confidence"):
-        # The detection threshold. Capped at the score master-list matches
-        # get: anything higher drops every one (as in Excel).
+        # The detection threshold. Capped at the
+        # bank-detail pattern score: anything higher stops masking them.
         st.slider(
             "Confidence threshold",
             min_value=0.1,
-            max_value=settings.custom_match_score,
+            max_value=settings.max_threshold,
             step=0.05,
             help=THRESHOLD_HELP,
             key="docx_threshold",

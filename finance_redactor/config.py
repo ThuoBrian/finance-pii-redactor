@@ -209,6 +209,11 @@ class Settings:
     fixed_masks: Mapping[str, str] = _DEFAULT_FIXED_MASKS
     custom_match_score: float = 0.9
     default_threshold: float = 0.35
+    # Highest value the Confidence threshold slider allows. Equal to the score
+    # of the bank-account, M-Pesa and SWIFT patterns (financial_recognizers.py),
+    # so no slider setting can stop those being masked. It also stays below
+    # custom_match_score, so master-list names always match.
+    max_threshold: float = 0.85
     fuzzy_match_threshold: float = 0.84
     # Confidence shown for an ad-hoc "words to redact" match (domain/custom_words.py) -
     # an exact, user-typed term is maximal confidence, unlike a spaCy model guess.
