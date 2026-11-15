@@ -92,3 +92,16 @@ def test_a_name_in_a_column_header_does_not_reach_the_download() -> None:
     _to_download(at)
 
     assert b"Jane Doe" not in _xml(at.session_state["excel_bytes"])
+
+
+def _downloads(at: AppTest) -> list[str]:
+    return [element.proto.label for element in at.get("download_button")]
+
+
+def test_a_workbook_with_nothing_found_can_still_be_downloaded() -> None:
+    at = _start({"Payments": {"notes": ["ok", "fine"]}})
+    _to_download(at)
+
+    assert any("Nothing was detected" in m.value for m in at.info)
+    assert _downloads(at) == ["Download redacted workbook"]
+    assert at.session_state["excel_bytes"]

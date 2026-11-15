@@ -327,38 +327,44 @@ def _download_step(
             "not in the download."
         )
     if state.findings.entity_count == 0:
-        st.info("Nothing was detected, so the file is already clean.")
-    else:
-        # Built once per result and kept in session_state: every widget click
-        # reruns this script, and re-serializing the workbook each time is
-        # wasted work. Cleared wherever the redacted sheets change.
-        if state.get("excel_bytes") is None:
-            formats = state.get("formats", {})
-            state.excel_bytes = excel_gateway.write(
-                [(s.name, s.data, s.highlighted) for s in redacted_sheets],
-                None,  # the crosswalk leaves as its own Confidential file
-                [formats.get(name) for name in scan_sheets],
-            )
-        safe, private = wizard.download_cards()
-        with safe:
-            st.download_button(
-                label="Download redacted workbook",
-                data=state.excel_bytes,
-                file_name=f"{base_name}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary",
-                width="stretch",
-            )
-            st.caption(
-                "Names are replaced with codes such as STF-10010, and changed "
-                "cells are yellow. Bank and payment details show as a mask "
-                "such as [ACCOUNT]. Tab names and column headers are checked "
-                "too."
-            )
-            note = formatting_note(state.get("formats", {}), len(sheets))
-            if note:
-                st.caption(note)
-        with private:
-            render_crosswalk_download(crosswalk, base_name, key_prefix="excel")
+        # Not "the file is clean": only the chosen columns were scanned.
+        st.info(
+            "Nothing was detected in the columns you chose, so no cell was "
+            "changed. The workbook is still rebuilt from cell values, so you "
+            "can download it below."
+        )
+    # Built once per result and kept in session_state: every widget click
+    # reruns this script, and re-serializing the workbook each time is
+    # wasted work. Cleared wherever the redacted sheets change. Always built,
+    # even with nothing found: the user may want the trimmed tabs, and the
+    # rebuilt file leaves comments, formulas and properties behind.
+    if state.get("excel_bytes") is None:
+        formats = state.get("formats", {})
+        state.excel_bytes = excel_gateway.write(
+            [(s.name, s.data, s.highlighted) for s in redacted_sheets],
+            None,  # the crosswalk leaves as its own Confidential file
+            [formats.get(name) for name in scan_sheets],
+        )
+    safe, private = wizard.download_cards()
+    with safe:
+        st.download_button(
+            label="Download redacted workbook",
+            data=state.excel_bytes,
+            file_name=f"{base_name}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+            width="stretch",
+        )
+        st.caption(
+            "Names are replaced with codes such as STF-10010, and changed "
+            "cells are yellow. Bank and payment details show as a mask "
+            "such as [ACCOUNT]. Tab names and column headers are checked "
+            "too."
+        )
+        note = formatting_note(state.get("formats", {}), len(sheets))
+        if note:
+            st.caption(note)
+    with private:
+        render_crosswalk_download(crosswalk, base_name, key_prefix="excel")
 
     wizard.nav(back=("Back to review", wizard.REVIEW), finish=True)

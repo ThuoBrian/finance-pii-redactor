@@ -218,6 +218,10 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **An Excel file with nothing found can still be downloaded.** The Download
+  step used to say "Nothing was detected" and offer no file, so a workbook
+  trimmed to some tabs could not be saved. The rebuilt workbook is now
+  always offered, with the note kept above it.
 - **Excel column headers are redacted.** A name used as a column header went
   into the download unchanged, because only cells and tab names were
   scanned. Every header of a scanned tab is now checked, chosen column or
