@@ -105,8 +105,11 @@ what happened instead — then file it.
   gets the same ID on every tab.
 - [ ] A tab named after a made-up person or vendor is renamed in the download.
   A tab you untick is **not** in the download.
-- [ ] Editing the master list workbook, saving, and clicking **🔄 Refresh
-  master list** picks up the change without restarting the app.
+- [ ] Editing the master list workbook, saving, and clicking **Refresh** on
+  the sidebar's master-list card picks up the change without restarting the
+  app. The card shows the summary line, a "things to tidy" badge when there
+  is anything to tidy, and **Refresh**; the workbook's path is folded under
+  **Where it is**.
 
 ### File names and properties (all formats)
 

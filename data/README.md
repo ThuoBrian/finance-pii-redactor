@@ -135,8 +135,9 @@ Each sheet must have these columns:
 
 ## Data-quality checks (shown on load)
 
-When the workbook loads, the app surfaces any of these in the **Advanced
-settings** panel so the IDs it emits stay trustworthy:
+When the workbook loads, the app surfaces any of these on the master-list
+card in the sidebar, behind its "things to tidy" badge, so the IDs it emits
+stay trustworthy:
 
 - **Rows skipped because their Category cell doesn't match** (warning) — a
   row is loaded only when its `Category` cell matches its sheet (`Staff` on

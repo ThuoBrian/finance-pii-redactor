@@ -91,6 +91,11 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **The sidebar's master-list card is flatter.** **Refresh** sits on the card
+  instead of inside a "Location and refresh" expander; the workbook's path
+  and how to edit it fold into one **Where it is** expander. The summary line
+  and the "things to tidy" badge are unchanged. `data/README.md` no longer
+  points to an "Advanced settings" panel for the data-quality findings.
 - **The Review step does one job: checking what was found.** The PDF's
   "Before you share this PDF" box (items the mapping can't decode, scanned
   pages) moved to the Download step, next to the files. Review keeps the
