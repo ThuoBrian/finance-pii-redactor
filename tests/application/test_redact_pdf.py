@@ -1113,3 +1113,14 @@ def test_table_columns_on_a_scanned_page_come_from_the_ocr_lines() -> None:
     names = doc.rebuilt["names"]
     assert [label for _box, label in names] == ["[001]", "[002]"]
     assert [box[1] for box, _label in names] == [130.0, 160.0]  # rows 1 and 2
+
+
+def test_scan_reports_progress_once_per_page() -> None:
+    seen: list[tuple[int, int]] = []
+
+    _service().scan(
+        FakePdfDocument(["John paid", "", "Mary paid"]),
+        on_progress=lambda done, total: seen.append((done, total)),
+    )
+
+    assert seen == [(1, 3), (2, 3), (3, 3)]

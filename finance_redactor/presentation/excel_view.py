@@ -45,7 +45,7 @@ from finance_redactor.presentation.session import (
     output_stem,
     reset_on_new_upload,
 )
-from finance_redactor.presentation.steps import show_step
+from finance_redactor.presentation.steps import progress_bar, show_step
 
 # Scan-size warning (see scan_size_warning). About a minute of scanning, or a
 # workbook big enough that holding it twice in memory starts to drag.
@@ -247,21 +247,13 @@ def _options_step(
 
     if st.button("Redact my file", type="primary", width="stretch"):
         with st.status("Scanning for names...", expanded=True) as status:
-            progress = st.progress(0.0)
-
-            def _on_progress(done: int, total: int) -> None:
-                progress.progress(
-                    done / total if total else 1.0,
-                    text=f"{done:,} of {total:,} unique values checked",
-                )
-
             to_scan = {name: sheets[name] for name in selected_tabs}
             scan_result = excel_service.scan_workbook(
                 to_scan,
                 columns_by_sheet,
                 list(state["excel_entities"]),
                 float(state["excel_threshold"]),
-                on_progress=_on_progress,
+                on_progress=progress_bar("unique value"),
             )
             # Back from Review: keep the terms unticked there that this run
             # found again, rather than wiping the review.

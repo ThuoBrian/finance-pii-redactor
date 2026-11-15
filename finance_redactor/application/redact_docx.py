@@ -25,7 +25,7 @@ callers that don't need the split.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from finance_redactor.application.ports import PiiDetector, WordDocumentFactory
@@ -167,7 +167,12 @@ class RedactDocxService:
             document.close()
 
     def scan(
-        self, source: object, entities: list[str], threshold: float
+        self,
+        source: object,
+        entities: list[str],
+        threshold: float,
+        *,
+        on_progress: Callable[[int, int], None] | None = None,
     ) -> DocxScanResult:
         """Run the detector once per block and cache the result for ``redact``.
 
@@ -181,6 +186,9 @@ class RedactDocxService:
         Every block is recorded, including blank ones (with an empty
         ``detections`` list), so block indices stay aligned between this
         result and ``redact``'s enumeration of it.
+
+        ``on_progress`` (if given) is called as ``(done, total)`` after each
+        block.
         """
         document = self._open_document(source)
         try:
@@ -193,6 +201,8 @@ class RedactDocxService:
                     else []
                 )
                 blocks.append(_DocxBlockScan(text=text, detections=detections))
+                if on_progress is not None:
+                    on_progress(block_index + 1, document.block_count)
             return DocxScanResult(blocks=blocks)
         finally:
             document.close()

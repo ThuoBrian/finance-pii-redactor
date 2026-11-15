@@ -41,7 +41,7 @@ from finance_redactor.presentation.session import (
     output_stem,
     reset_on_new_upload,
 )
-from finance_redactor.presentation.steps import show_step
+from finance_redactor.presentation.steps import progress_bar, show_step
 from finance_redactor.presentation.words_view import (
     additions_expander,
     render_words_box,
@@ -112,11 +112,12 @@ def _options_step(
     if st.button("Redact my file", type="primary", width="stretch"):
         uploaded.seek(0)
         try:
-            with st.status("Scanning the document...", expanded=False) as status:
+            with st.status("Scanning the document...", expanded=True) as status:
                 scan_result = docx_service.scan(
                     uploaded,
                     list(state["docx_entities"]),
                     float(state["docx_threshold"]),
+                    on_progress=progress_bar("paragraph"),
                 )
                 uploaded.seek(0)
                 status.update(label="Replacing names with codes...")

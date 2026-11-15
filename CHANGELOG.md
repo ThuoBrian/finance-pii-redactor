@@ -8,6 +8,9 @@ the `version` field in `pyproject.toml`.
 
 ### Added
 
+- **PDF and Word scans show live progress**, like Excel's. The scanning box
+  now has a progress bar ("12 of 40 pages checked", or paragraphs for Word),
+  so a long OCR run no longer looks frozen.
 - **A Back button on the Options step**, in all three formats. It returns to
   Upload with the file still loaded: **Continue to options** carries on with
   your choices, and dropping in a different file starts that one fresh.

@@ -88,7 +88,7 @@ labelled, mapped and resolved against the master list by the same code.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
 
@@ -406,7 +406,13 @@ class RedactPdfService:
         finally:
             document.close()
 
-    def scan(self, source: object, *, read_scans: bool = True) -> PdfScanResult:
+    def scan(
+        self,
+        source: object,
+        *,
+        read_scans: bool = True,
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> PdfScanResult:
         """Run the detector once per page and cache the result for ``redact``.
 
         Pure and read-only: no custom words, no dedupe, no ``exclude``, no
@@ -415,6 +421,9 @@ class RedactPdfService:
         the hood) - the whole point of splitting it out is that the caller
         runs it exactly once per upload, then reuses the result across every
         tick change in the review table via :meth:`redact`.
+
+        ``on_progress`` (if given) is called as ``(done, total)`` after each
+        page, so a long OCR run can show how far it has got.
         """
         document = self._open_document(source)
         try:
@@ -474,6 +483,8 @@ class RedactPdfService:
                         text_layer=text_layer,
                     )
                 )
+                if on_progress is not None:
+                    on_progress(page_index + 1, document.page_count)
             return PdfScanResult(pages=pages)
         finally:
             document.close()

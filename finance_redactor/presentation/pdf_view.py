@@ -58,7 +58,7 @@ from finance_redactor.presentation.session import (
     output_stem,
     reset_on_new_upload,
 )
-from finance_redactor.presentation.steps import show_step
+from finance_redactor.presentation.steps import progress_bar, show_step
 from finance_redactor.presentation.words_view import (
     additions_expander,
     render_words_box,
@@ -171,10 +171,12 @@ def _options_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> N
         try:
             with st.status(
                 "Scanning the PDF (scanned pages take a few seconds each)...",
-                expanded=False,
+                expanded=True,
             ) as status:
                 scan_result = pdf_service.scan(
-                    uploaded, read_scans=bool(state["pdf_read_scans"])
+                    uploaded,
+                    read_scans=bool(state["pdf_read_scans"]),
+                    on_progress=progress_bar("page"),
                 )
                 uploaded.seek(0)
                 status.update(label="Building the redacted PDF...")

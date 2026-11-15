@@ -9,7 +9,12 @@ what the user sees.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
+
+import streamlit as st
+
+from finance_redactor.presentation.presenters import plural
 
 STEPS = ("Upload", "Options", "Review", "Download")
 
@@ -30,6 +35,23 @@ def steps_markdown(current: int) -> str:
         else:
             parts.append(f":gray-badge[{label}]")
     return " ".join(parts)
+
+
+def progress_bar(unit: str) -> Callable[[int, int], None]:
+    """Draw a progress bar and return the ``(done, total)`` callback that moves it.
+
+    For a scan's ``on_progress``, so a long run (OCR above all) shows how far
+    it has got instead of looking frozen. ``unit`` names what is counted.
+    """
+    bar = st.progress(0.0)
+
+    def update(done: int, total: int) -> None:
+        bar.progress(
+            done / total if total else 1.0,
+            text=f"{done:,} of {plural(total, unit)} checked",
+        )
+
+    return update
 
 
 def show_step(placeholder: Any, current: int) -> None:
