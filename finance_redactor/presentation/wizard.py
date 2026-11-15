@@ -75,11 +75,19 @@ def start_over() -> None:
     Clearing the session also drops the document and its findings from
     memory, which is the point for a tool that handles real names.
     """
+    _clear_session()
+    st.rerun()
+
+
+def _clear_session() -> None:
     next_round = int(st.session_state.get(_ROUND_KEY, 0)) + 1
     st.session_state.clear()
     st.session_state[_ROUND_KEY] = next_round
     st.session_state[STEP_KEY] = UPLOAD
-    st.rerun()
+
+
+def _ask_start_over(asking: bool) -> None:
+    st.session_state[_START_OVER_CONFIRM_KEY] = asking
 
 
 def render_start_over() -> None:
@@ -88,26 +96,40 @@ def render_start_over() -> None:
     Start over throws away the findings, every review choice and the files
     built for download, so one misclick must not do it (the same two-step
     pattern as ``shutdown.render_quit_control``).
+
+    The buttons act through ``on_click`` callbacks, never ``st.rerun()``: the
+    sidebar is drawn before the uploader, and a rerun from here would end the
+    run before the uploader is drawn, which makes Streamlit drop the file.
     """
-    state = st.session_state
-    if state.get(_START_OVER_CONFIRM_KEY):
+    if st.session_state.get(_START_OVER_CONFIRM_KEY):
         st.warning(
             "Start over? This file's findings, your review choices and the "
             "downloads built from them will be lost. Download anything you "
             "need first."
         )
         yes, cancel = st.columns(2)
-        if yes.button(
-            "Yes, start over", type="primary", width="stretch", key="start_over_yes"
-        ):
-            start_over()
-        if cancel.button("Cancel", width="stretch", key="start_over_cancel"):
-            state[_START_OVER_CONFIRM_KEY] = False
-            st.rerun()
+        yes.button(
+            "Yes, start over",
+            type="primary",
+            width="stretch",
+            key="start_over_yes",
+            on_click=_clear_session,
+        )
+        cancel.button(
+            "Cancel",
+            width="stretch",
+            key="start_over_cancel",
+            on_click=_ask_start_over,
+            args=(False,),
+        )
         return
-    if st.button("Start over", width="stretch", key="sidebar_start_over"):
-        state[_START_OVER_CONFIRM_KEY] = True
-        st.rerun()
+    st.button(
+        "Start over",
+        width="stretch",
+        key="sidebar_start_over",
+        on_click=_ask_start_over,
+        args=(True,),
+    )
 
 
 def nav(

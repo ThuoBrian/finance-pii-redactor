@@ -40,6 +40,9 @@ def _card_script() -> None:
             age_seconds=120,
             on_refresh=refresh,
         )
+    # Stands in for the uploader, drawn after the sidebar: Refresh must not
+    # end the run before it, or Streamlit drops the uploaded file.
+    st.text_input("Probe", key="probe")
 
 
 def test_refresh_is_on_the_card_and_the_path_is_folded_away() -> None:
@@ -51,6 +54,8 @@ def test_refresh_is_on_the_card_and_the_path_is_folded_away() -> None:
     assert not at.expander[0].button  # Refresh is not inside the expander
     assert any("Names List.xlsx" in c.value for c in at.expander[0].caption)
 
+    at.text_input(key="probe").set_value("still here").run()
     at.button(key="master_list_refresh").click().run()
 
     assert at.session_state["refreshed"] is True
+    assert at.text_input(key="probe").value == "still here"

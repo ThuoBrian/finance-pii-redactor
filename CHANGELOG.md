@@ -304,6 +304,12 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **The sidebar buttons no longer drop the uploaded file.** Refresh on the
+  master-list card, and Cancel under Close the app, emptied the upload box
+  and sent you back to Upload, losing the review in progress. The sidebar is
+  drawn before the upload box, and those buttons restarted the page before
+  the box was drawn. They now act without restarting it. Start over's new
+  confirm step works the same way.
 - **Word's confidence slider stops at 0.90**, like Excel's. Above that, every
   master-list match is dropped, which the slider's own help text warns
   against. (PDF has no confidence slider; it runs at fixed settings.)

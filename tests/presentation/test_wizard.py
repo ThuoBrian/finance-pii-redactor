@@ -58,3 +58,26 @@ def test_cancel_keeps_the_results_and_the_button() -> None:
     assert at.session_state["pdf_buffer"] == b"made-up redacted file"
     assert not at.warning
     assert [b.label for b in at.button] == ["Start over"]
+
+
+def _script_with_a_main_widget() -> None:
+    import streamlit as st
+
+    from finance_redactor.presentation import wizard
+
+    with st.sidebar:
+        wizard.render_start_over()
+    # Stands in for the uploader, which is drawn after the sidebar. A rerun
+    # fired from the sidebar would end the run before it, and Streamlit then
+    # drops its value: the uploaded file would vanish.
+    st.text_input("Probe", key="probe")
+
+
+def test_start_over_and_cancel_keep_the_widgets_below_them() -> None:
+    at = AppTest.from_function(_script_with_a_main_widget).run()
+    at.text_input(key="probe").set_value("still here").run()
+
+    _click(at, "Start over")
+    assert at.text_input(key="probe").value == "still here"
+    _click(at, "Cancel")
+    assert at.text_input(key="probe").value == "still here"

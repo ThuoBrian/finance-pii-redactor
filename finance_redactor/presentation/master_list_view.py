@@ -84,14 +84,16 @@ def render_master_list_card(
                 for issue in issues:
                     _render_issue(issue)
         # Refresh is the button people use, so it sits on the card itself.
-        if on_refresh is not None and st.button(
-            "Refresh",
-            key="master_list_refresh",
-            width="stretch",
-            help="Re-read the master list after editing it or changing its folder.",
-        ):
-            on_refresh()
-            st.rerun()
+        # A callback, not st.rerun(): a rerun from the sidebar ends the run
+        # before the uploader is drawn, and Streamlit then drops the file.
+        if on_refresh is not None:
+            st.button(
+                "Refresh",
+                key="master_list_refresh",
+                width="stretch",
+                help="Re-read the master list after editing it or changing its folder.",
+                on_click=on_refresh,
+            )
         with st.expander("Where it is"):
             st.caption(f"`{master_list_path}`")
             st.caption(
