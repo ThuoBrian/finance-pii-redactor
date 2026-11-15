@@ -218,6 +218,10 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **Excel column headers are redacted.** A name used as a column header went
+  into the download unchanged, because only cells and tab names were
+  scanned. Every header of a scanned tab is now checked, chosen column or
+  not, shows in the Review table, and is replaced and highlighted yellow.
 - **Excel IDs keep their leading zeros.** A text cell such as `0041` used to
   come out of the redacted workbook as the number `41`. Cells are now kept as
   written: text stays text, and numbers and dates stay numbers and dates.

@@ -203,8 +203,11 @@ def test_scan_workbook_analyzes_a_value_repeated_across_tabs_once():
         sheets, {"Jan": ["notes"], "Feb": ["notes"]}, ["PERSON"], 0.35
     )
 
-    # The two tab names are analyzed too; "John paid" runs once, not twice.
-    assert sorted(detector.calls) == sorted(["John paid", "no name", "Jan", "Feb"])
+    # The tab names and the shared header are analyzed too; "John paid" and
+    # "notes" each run once, not twice.
+    assert sorted(detector.calls) == sorted(
+        ["John paid", "no name", "Jan", "Feb", "notes"]
+    )
 
 
 def test_workbook_gives_one_pseudonym_and_one_crosswalk_row_across_tabs():
@@ -270,3 +273,85 @@ def test_workbook_skips_columns_not_chosen_for_a_tab():
 
     assert redacted[0].data.loc[0, "other"] == "John"
     assert "John" not in redacted[0].data.loc[0, "notes"]
+
+
+def test_a_name_used_as_a_column_header_is_redacted_even_if_not_chosen():
+    """Every header is scanned: the whole tab, headers and all, is downloaded."""
+    service = _service(CountingDetector())
+    sheets = {
+        "Jan": pd.DataFrame(
+            {"notes": ["John paid"], "John": [100], "Unnamed: 2": ["x"]}
+        )
+    }
+    columns = {"Jan": ["notes"]}  # the "John" column is not chosen
+    scan = service.scan_workbook(sheets, columns, ["PERSON"], 0.35)
+
+    redacted, crosswalk = service.redact_workbook(sheets, scan, columns)
+
+    assert list(scan.headers) == ["Jan"]
+    assert list(scan.headers["Jan"]) == ["John"]
+    assert scan.entity_count == 2  # one cell, one header
+    pseudonym = crosswalk[0].pseudonym
+    assert len(crosswalk) == 1  # the header shares the cell's pseudonym
+    data = redacted[0].data
+    assert list(data.columns) == ["notes", pseudonym, "Unnamed: 2"]
+    assert data.loc[0, pseudonym] == 100
+    assert redacted[0].highlighted == {(0, "notes"), (-1, pseudonym)}
+
+
+def test_header_highlights_follow_a_renamed_column():
+    service = _service(CountingDetector())
+    sheets = {"Jan": pd.DataFrame({"John": ["John paid", "ok"]})}
+    columns = {"Jan": ["John"]}
+    scan = service.scan_workbook(sheets, columns, ["PERSON"], 0.35)
+
+    redacted, crosswalk = service.redact_workbook(sheets, scan, columns)
+
+    pseudonym = crosswalk[0].pseudonym
+    assert redacted[0].data.loc[0, pseudonym] == f"{pseudonym} paid"
+    assert redacted[0].highlighted == {(0, pseudonym), (-1, pseudonym)}
+
+
+def test_two_headers_redacting_to_one_name_both_survive():
+    """``John`` and ``JOHN`` share a pseudonym; neither column is lost."""
+
+    class CaseBlindDetector(CountingDetector):
+        def analyze(self, text, entities, threshold):
+            idx = text.lower().find("john")
+            if idx == -1:
+                return []
+            return [
+                PiiDetection(
+                    entity_type="PERSON",
+                    span=Span(idx, idx + 4),
+                    score=0.99,
+                    text=text[idx : idx + 4],
+                    source=DetectionSource.MODEL,
+                )
+            ]
+
+    service = _service(CaseBlindDetector())
+    sheets = {"Jan": pd.DataFrame({"John": [1], "JOHN": [2]})}
+    scan = service.scan_workbook(sheets, {"Jan": []}, ["PERSON"], 0.35)
+
+    redacted, _ = service.redact_workbook(sheets, scan, {"Jan": []})
+
+    data = redacted[0].data
+    assert len(data.columns) == 2
+    assert data.columns.is_unique
+    assert not any("john" in str(c).lower() for c in data.columns)
+    assert list(data.iloc[0]) == [1, 2]
+
+
+def test_an_excluded_header_keeps_its_name():
+    service = _service(CountingDetector())
+    sheets = {"Jan": pd.DataFrame({"John": ["ok"]})}
+    scan = service.scan_workbook(sheets, {"Jan": ["John"]}, ["PERSON"], 0.35)
+
+    redacted, crosswalk = service.redact_workbook(
+        sheets, scan, {"Jan": ["John"]}, exclude=frozenset({"john"})
+    )
+
+    assert list(redacted[0].data.columns) == ["John"]
+    assert redacted[0].highlighted == set()
+    assert crosswalk == []

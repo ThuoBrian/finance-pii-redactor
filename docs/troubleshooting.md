@@ -308,6 +308,7 @@ This file records known errors, edge cases, and their solutions when developing 
 - **A number format shows as General:** a custom format with readable text in it (more than 4 characters in quotes, or several escaped letters) is not copied, because the text could be a name.
 - **"The formatting could not be read":** the workbook loaded for scanning but openpyxl could not read its styles. The download is plain, with values only. Open it in Excel and save a fresh copy, then upload that.
 - **Not fixed by this:** a sheet with a title row above the table still shows `Unnamed: N` in the column picker. That comes from how the sheet is first read: row 1 is always taken as the header.
+- **Column headers and tab names are scanned.** Every header in a scanned tab is checked, whether or not its column is chosen under **Columns to scan**, because the whole tab goes into the download. A redacted header is yellow like a changed cell. If two headers redact to the same text, the second gets ` (2)` so neither column is lost. A blank header stays blank.
 - **IDs like `0041` keep their zeros.** Cells are read as written (`dtype=object` in `excel_gateway.read_sheets`), so a text `0041` stays `0041`. A number stored as `41` with a `0000` number format also still shows `0041`, because the number format is carried over.
 
 ## Testing and linting

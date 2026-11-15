@@ -240,6 +240,13 @@ def _review_step(excel_service: RedactExcelService, steps: Any) -> None:
         df = list(scan_sheets.values())[shown]
         redacted_df = redacted_sheets[shown].data
         cell_keys = redacted_sheets[shown].highlighted
+        # A redacted header renames its column; columns keep their order, so
+        # map each highlighted key back to the original header by position.
+        original_keys = {
+            (row, df.columns[redacted_df.columns.get_loc(col)])
+            for row, col in cell_keys
+            if col in redacted_df.columns
+        }
         # Stacked, not side by side: in the centered layout two half-width
         # tables would hide most columns. The rows line up in both.
         st.markdown("**Redacted**")
@@ -247,7 +254,9 @@ def _review_step(excel_service: RedactExcelService, steps: Any) -> None:
             preview_styler(redacted_df, cell_keys), width="stretch", hide_index=True
         )
         st.markdown("**Original**")
-        st.dataframe(preview_styler(df, cell_keys), width="stretch", hide_index=True)
+        st.dataframe(
+            preview_styler(df, original_keys), width="stretch", hide_index=True
+        )
         if len(df) > PREVIEW_MAX_ROWS:
             n_hidden = preview_hidden_count(df, cell_keys)
             st.caption(
@@ -343,7 +352,8 @@ def _download_step(
             st.caption(
                 "Names are replaced with codes such as STF-10010, and changed "
                 "cells are yellow. Bank and payment details show as a mask "
-                "such as [ACCOUNT]. Tab names are checked too."
+                "such as [ACCOUNT]. Tab names and column headers are checked "
+                "too."
             )
             note = formatting_note(state.get("formats", {}), len(sheets))
             if note:
