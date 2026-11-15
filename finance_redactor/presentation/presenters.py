@@ -638,15 +638,50 @@ def review_status(
     return " · ".join(parts) + "."
 
 
-def apply_notice(left_visible: frozenset[str]) -> str:
-    """Return the confirmation shown once after Apply rebuilds the file."""
-    if not left_visible:
-        return "Rebuilt the file. Every detected term is hidden."
-    n = len(left_visible)
-    verb = "is" if n == 1 else "are"
+def apply_notice(left_visible: frozenset[str], not_located: int = 0) -> str:
+    """Return the confirmation shown once after Apply rebuilds the file.
+
+    "Every detected term is hidden" is said only when it is true: no term
+    left visible on purpose and none the PDF search failed to find.
+    """
+    parts = ["Rebuilt the file."]
+    if left_visible:
+        n = len(left_visible)
+        verb = "is" if n == 1 else "are"
+        parts.append(
+            f"{plural(n, 'term')} {verb} left visible; "
+            "they are listed above the download."
+        )
+    if not_located:
+        verb = "was" if not_located == 1 else "were"
+        parts.append(
+            f"{plural(not_located, 'detected term')} {verb} not found on the "
+            "page and may still show; see the warning above."
+        )
+    if len(parts) == 1:
+        parts.append("Every detected term is hidden.")
+    return " ".join(parts)
+
+
+def not_located_warning(not_located: Sequence[Finding]) -> str:
+    """Warn about detected terms the PDF search could not find on the page.
+
+    Nothing covers these: the text was read from the page, but no search
+    variant matched the page's own text (ligatures, unusual encoding). The
+    terms are listed for the operator's own screen, never logged.
+    """
+    if not not_located:
+        return ""
+    pages = sorted({f.page for f in not_located})
+    terms = ", ".join(sorted({f"`{f.detected_text}`" for f in not_located}))
+    n = len(not_located)
     return (
-        f"Rebuilt the file. {plural(n, 'term')} {verb} left visible; "
-        "they are listed above the download."
+        f"**{plural(n, 'detected term')} could not be found on the page, so "
+        f"{'it is' if n == 1 else 'they are'} not covered** ({_page_list(pages)}): "
+        f"{terms}. The text was read from the PDF, but its letters are stored "
+        "in a way the search could not match. Check those pages in the "
+        "download before sharing it; anything still showing has to be "
+        "covered by hand."
     )
 
 

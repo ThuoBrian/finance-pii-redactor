@@ -86,17 +86,18 @@ class FakePdfDocument:
         page_index: int,
         replacements: list[tuple[str | list[str], str]],
         blackout: bool = False,
-    ) -> list[object]:
-        """Apply replacements for this test document.
+    ) -> list[int]:
+        """Apply replacements for this test document; return those not found.
 
         Each candidate list is tried in order; the first candidate found in the
-        page text is replaced and recorded. Unknown candidate lists are ignored.
+        page text is replaced and recorded. Like the real gateway, the indices
+        of text replacements no candidate matched are returned.
         The ``__IMAGE__`` sentinel is treated as a request to redact images.
         """
-        rects: list[object] = []
+        missed: list[int] = []
         self.blackout_by_page[page_index] = blackout
         image_sentinel = "__IMAGE__"
-        for candidates, replacement in replacements:
+        for index, (candidates, replacement) in enumerate(replacements):
             if isinstance(candidates, str):
                 candidates = [candidates]
             if image_sentinel in candidates:
@@ -104,7 +105,6 @@ class FakePdfDocument:
                     self.redactions_by_page.setdefault(page_index, []).append(
                         (image_sentinel, "")
                     )
-                    rects.append((image_sentinel, ""))
                 continue
             page_text = self._pages[page_index]
             for candidate in candidates:
@@ -115,9 +115,10 @@ class FakePdfDocument:
                     self.redactions_by_page.setdefault(page_index, []).append(
                         (candidate, replacement)
                     )
-                    rects.append((candidate, replacement))
                     break
-        return rects
+            else:
+                missed.append(index)
+        return missed
 
 
 class FakeDetector:
@@ -236,6 +237,71 @@ def test_custom_word_with_pdf_artifacts_is_detected_after_normalization() -> Non
     assert result.findings[0].detected_text == "Acme Supplies"
     # The page text was updated using whichever candidate the gateway could find.
     assert result.crosswalk[0].label in doc._pages[0]
+
+
+class _UnsearchableDocument(FakePdfDocument):
+    """A page whose text is readable but which no search can match.
+
+    Stands in for a PDF whose letters are stored oddly (ligatures, a custom
+    encoding): the text layer reads fine, every search variant fails.
+    """
+
+    def redact_page(
+        self,
+        page_index: int,
+        replacements: list[tuple[str | list[str], str]],
+        blackout: bool = False,
+    ) -> list[int]:
+        """Locate nothing: report every text replacement as not found."""
+        unfindable = [(["⁣not on this page"], label) for _, label in replacements]
+        return super().redact_page(page_index, unfindable, blackout)
+
+
+@pytest.mark.parametrize("split", [True, False])
+def test_a_term_no_search_variant_finds_is_reported_not_located(split: bool) -> None:
+    """A detected term the gateway cannot find is in ``not_located``.
+
+    It stays in ``findings`` (it was detected, and the reviewer can see it),
+    but is no longer silently counted as hidden.
+    """
+    doc = _UnsearchableDocument(["Zorbo Quillfeather paid", "Nothing here"])
+    service = _service()
+    if split:
+        result = service.redact(doc, service.scan(doc), ["Zorbo Quillfeather"])
+    else:
+        result = service.execute(doc, ["Zorbo Quillfeather"])
+
+    assert [f.detected_text for f in result.findings] == ["Zorbo Quillfeather"]
+    assert [(f.page, f.detected_text) for f in result.not_located] == [
+        (0, "Zorbo Quillfeather")
+    ]
+
+
+def test_located_terms_are_not_reported_and_pages_line_up() -> None:
+    """Only the term that was not found is reported, on its own page."""
+
+    class SecondPageUnsearchable(FakePdfDocument):
+        def redact_page(
+            self,
+            page_index: int,
+            replacements: list[tuple[str | list[str], str]],
+            blackout: bool = False,
+        ) -> list[int]:
+            if page_index == 1:
+                replacements = [(["⁣absent"], label) for _, label in replacements]
+            return super().redact_page(page_index, replacements, blackout)
+
+    doc = SecondPageUnsearchable(["Ann Example paid", "Bo Sample signed"])
+    result = _service().execute(doc, ["Ann Example", "Bo Sample"])
+
+    assert [(f.page, f.detected_text) for f in result.not_located] == [(1, "Bo Sample")]
+
+
+def test_nothing_is_reported_not_located_when_every_term_is_found() -> None:
+    doc = FakePdfDocument(["John paid"], image_rects={0: [(0, 0, 10, 10)]})
+    result = _service().execute(doc, ["John"], redact_images=True)
+
+    assert result.not_located == ()
 
 
 def test_document_is_closed_even_if_page_text_raises() -> None:

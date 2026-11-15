@@ -39,6 +39,7 @@ from finance_redactor.presentation.exclusion_view import (
 from finance_redactor.presentation.presenters import (
     findings_dataframe,
     merge_findings,
+    not_located_warning,
     pdf_mapping_notes,
     plural,
     review_tab_labels,
@@ -87,6 +88,7 @@ def run_pdf_flow(
             PDF_NAMES_TOGGLE_KEY,
             "pdf_bracketed",
             "pdf_links",
+            "pdf_not_located",
             "pdf_all_findings",
             "pdf_excluded_applied",
             "pdf_columns_applied",
@@ -210,6 +212,7 @@ def _options_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> N
         state.pdf_crosswalk = result.crosswalk
         state.pdf_bracketed = result.source_bracketed_numbers
         state.pdf_links = result.removed_links
+        state.pdf_not_located = result.not_located
         # The unfiltered detections, kept as the deselect editor's stable
         # row list. Never overwritten by a re-run below, so a term can be
         # unticked and re-ticked; refiltering it would take the tick box
@@ -276,6 +279,10 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
     if notes:
         box = st.warning if scanned else st.info
         box("**Before you share this PDF**\n\n" + "\n\n".join(notes))
+    # Its own box: these terms were detected but nothing covers them.
+    not_located = state.get("pdf_not_located", ())
+    if not_located:
+        st.warning(not_located_warning(not_located))
 
     columns_applied = state.get("pdf_columns_applied", frozenset())
     columns = _column_picker(state.pdf_scan_result.table_columns, columns_applied)
@@ -296,6 +303,7 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
             review_findings,
             key_prefix="pdf",
             excluded=state.get("pdf_excluded_applied", frozenset()),
+            not_located=len(not_located),
         )
     with tab_occurrences:
         st.markdown(f"**All detections ({plural(n_entities, 'finding')})**")
@@ -328,6 +336,7 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
         state.pdf_buffer = rerun.data
         state.pdf_findings = rerun.findings
         state.pdf_crosswalk = rerun.crosswalk
+        state.pdf_not_located = rerun.not_located
         state.pdf_excluded_applied = excluded
         if columns != columns_applied or words != words_applied:
             # A newly chosen column or typed word brings terms the first run

@@ -77,10 +77,10 @@ def _flow(fmt: str) -> None:
             settings=S,
             steps=steps,
         )
-    elif fmt in ("pdf", "pdf-scan", "pdf-table"):
+    elif fmt in ("pdf", "pdf-scan", "pdf-table", "pdf-unlocated"):
         doc = fitz.open()
         page = doc.new_page()
-        if fmt == "pdf":
+        if fmt in ("pdf", "pdf-unlocated"):
             page.insert_text((72, 100), "Paid to Jane Doe for field work.")
         elif fmt == "pdf-table":  # a ruled table of made-up payees
             rows = [
@@ -102,8 +102,16 @@ def _flow(fmt: str) -> None:
             page.insert_image(fitz.Rect(0, 0, 595, 842), stream=pix.tobytes("png"))
         buffer = BytesIO(doc.tobytes())
         buffer.name = "made_up.pdf"
+
+        class Unsearchable(PyMuPdfDocument):
+            # Text that reads fine but that no search variant can match
+            # (an odd font encoding): the real gateway reports it.
+            def redact_page(self, page_index, redactions, *, blackout=False):
+                unfindable = [(["⁣absent"], label) for _, label in redactions]
+                return super().redact_page(page_index, unfindable, blackout=blackout)
+
         service = RedactPdfService(
-            PyMuPdfDocument.open,
+            Unsearchable.open if fmt == "pdf-unlocated" else PyMuPdfDocument.open,
             {},
             S.auto_prefixes,
             Detector(),
@@ -308,6 +316,27 @@ def test_a_scanned_pdf_page_is_reported_on_the_review_step() -> None:
     assert any("1 of 1 page is a scan" in w and "fully black" in w for w in warnings)
     # One "Before you share" box, not a stack of separate ones.
     assert len(warnings) == 1 and warnings[0].startswith("**Before you share")
+
+
+def test_a_term_that_cannot_be_found_on_the_page_is_warned_about() -> None:
+    at = _start("pdf-unlocated")
+    _click(at, "Redact my file")
+
+    warnings = [w.value for w in at.warning]
+    assert any(
+        w.startswith("**1 detected term could not be found on the page")
+        and "`Jane Doe`" in w
+        for w in warnings
+    )
+    shown = [m.value for m in [*at.success, *at.info, *at.warning, *at.caption]]
+    assert not any("Every detected term is hidden" in m for m in shown)
+
+
+def test_a_normal_pdf_has_no_not_found_warning() -> None:
+    at = _start("pdf")
+    _click(at, "Redact my file")
+
+    assert not any("could not be found" in w.value for w in at.warning)
 
 
 def _continue_button(at: AppTest):

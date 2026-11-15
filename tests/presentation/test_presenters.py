@@ -30,6 +30,7 @@ from finance_redactor.presentation.presenters import (
     formatting_note,
     merge_findings,
     merge_pending,
+    not_located_warning,
     pdf_mapping_dataframe,
     pdf_mapping_notes,
     pdf_mapping_with_names_dataframe,
@@ -613,6 +614,37 @@ def test_apply_notice_says_what_was_left_visible() -> None:
     assert apply_notice(frozenset({"across"})) == (
         "Rebuilt the file. 1 term is left visible; they are listed above the download."
     )
+
+
+def test_apply_notice_never_says_all_hidden_when_a_term_was_not_found() -> None:
+    notice = apply_notice(frozenset(), not_located=2)
+
+    assert "Every detected term is hidden" not in notice
+    assert "2 detected terms were not found on the page" in notice
+
+
+def _unlocated(page: int, text: str) -> Finding:
+    return Finding(
+        page=page,
+        detected_text=text,
+        entity_type="PERSON",
+        score=1.0,
+        source=DetectionSource.CUSTOM,
+    )
+
+
+def test_not_located_warning_names_the_terms_and_pages() -> None:
+    warning = not_located_warning(
+        [_unlocated(2, "Zorbo Quillfeather"), _unlocated(0, "Ann Example")]
+    )
+
+    assert warning.startswith("**2 detected terms could not be found on the page")
+    assert "(page 1, 3)" in warning
+    assert "`Ann Example`, `Zorbo Quillfeather`" in warning
+
+
+def test_not_located_warning_is_empty_when_everything_was_found() -> None:
+    assert not_located_warning([]) == ""
 
 
 def test_findings_from_before_a_module_reload_still_sort_and_hint() -> None:

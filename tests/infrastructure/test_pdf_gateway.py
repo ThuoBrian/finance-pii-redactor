@@ -51,6 +51,33 @@ def test_redact_page_removes_name_split_across_a_line_break():
     assert text.count("ORG-AUTO-D4D8B") == 1
 
 
+def test_redact_page_reports_a_term_no_search_variant_finds():
+    """A ligature the page's font cannot encode reads back as a replacement
+    character, so neither the expanded spelling nor the ligature itself is
+    found by ``search_for``. The gateway must say so instead of dropping it.
+    """
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "Paid Ruﬁna Testperson today.")
+    page.insert_text((72, 140), "Approved by Bo Sample.")
+    document = PyMuPdfDocument(doc)
+
+    missed = document.redact_page(
+        0,
+        [
+            (["Rufina Testperson", "Ruﬁna Testperson"], "[001]"),
+            (["Bo Sample"], "[002]"),
+            (IMAGE_REDACTION_SENTINEL, ""),
+        ],
+    )
+    text = document.page_text(0)
+    document.close()
+
+    assert missed == [0]
+    assert "Bo Sample" not in text
+    assert "Testperson" in text  # not covered: exactly why it is reported
+
+
 def test_search_variants_collapses_whitespace():
     variants = _search_variants("Acme   Supplies")
     assert "Acme Supplies" in variants

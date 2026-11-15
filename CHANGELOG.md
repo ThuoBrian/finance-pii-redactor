@@ -218,6 +218,13 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **A PDF term that could not be found on the page is no longer reported as
+  hidden.** When a name was read from a page's text but no search could match
+  it on the page (a ligature or font encoding the search can't see through),
+  nothing covered it, yet the Review step counted it as redacted and Apply
+  said "Every detected term is hidden". Such terms now get their own warning
+  on the Review step, naming them and their pages, and the reassurance only
+  appears when every term was found.
 - **Review tick boxes respond to a single click.** Every other tick or
   untick in the "Hide in output?" column was ignored, so a box seemed to
   need a double click. Each click now registers.

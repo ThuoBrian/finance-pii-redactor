@@ -303,8 +303,8 @@ class PyMuPdfDocument:
         redactions: list[tuple[str | list[str], str]],
         *,
         blackout: bool = False,
-    ) -> None:
-        """Apply redactions to one page.
+    ) -> list[int]:
+        """Apply redactions to one page; return the ones that were not located.
 
         Each text redaction is ``(search_text, label)`` or
         ``([primary_search, ...fallbacks], label)``. When ``blackout`` is True,
@@ -314,7 +314,10 @@ class PyMuPdfDocument:
         from the file, not just covered.
 
         If ``search_text`` is not found exactly, a small set of normalized
-        variants is tried before giving up.
+        variants is tried before giving up. The returned list holds the
+        indices (into ``redactions``) of every text redaction that no variant
+        could find on the page: nothing was covered for those, so the caller
+        must say so rather than report them as hidden.
         """
         page = self._doc.load_page(page_index)
         # Reused across every search_for call below: apply_redactions() is only
@@ -322,7 +325,8 @@ class PyMuPdfDocument:
         # change mid-loop, and building one snapshot avoids PyMuPDF re-parsing
         # the page for every candidate of every detection.
         textpage = page.get_textpage()
-        for search_item, label in redactions:
+        not_located: list[int] = []
+        for redaction_index, (search_item, label) in enumerate(redactions):
             if search_item == IMAGE_REDACTION_SENTINEL:
                 for x0, y0, x1, y1 in self.page_image_rects(page_index):
                     page.add_redact_annot(
@@ -356,12 +360,12 @@ class PyMuPdfDocument:
                 if rects:
                     matched_candidate = candidate
                     break
+            if rects:
+                rects = _drop_embedded_hits(
+                    rects, textpage.extractText(), matched_candidate
+                )
             if not rects:
-                continue
-            rects = _drop_embedded_hits(
-                rects, textpage.extractText(), matched_candidate
-            )
-            if not rects:
+                not_located.append(redaction_index)
                 continue
             # A candidate containing a line break (e.g. the dehyphenated raw-text
             # fallback) matches one logical occurrence that PyMuPDF reports as one
@@ -388,6 +392,7 @@ class PyMuPdfDocument:
             # If an unusual image format defeats pixel editing, remove every
             # image a redaction touches instead. Over-redaction, never a leak.
             page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_REMOVE)
+        return not_located
 
     def remove_external_links(self) -> int:
         """Delete every link that leaves the document; return how many.

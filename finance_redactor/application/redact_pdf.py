@@ -54,7 +54,9 @@ redacted.
 
 Behavior preserved from the original ``redact_pdf``: pages without text are
 skipped; a finding is recorded for every kept match even when its text
-cannot be located on the page; redactions are applied per page.
+cannot be located on the page; redactions are applied per page. A finding
+whose text the gateway could not locate is also listed in the result's
+``not_located``, because nothing covers it and the UI must say so.
 
 ``execute`` runs the whole pipeline - including the detector call - every
 time, which is wasteful when only ``exclude`` changed (unticking a false
@@ -287,6 +289,7 @@ class RedactPdfService:
             # that overlap a redaction, which would make this count too low.
             removed_links = document.remove_external_links()
             findings: list[Finding] = []
+            not_located: list[Finding] = []
             bracketed = 0
             for page_index in range(document.page_count):
                 raw_text = document.page_text(page_index)
@@ -320,6 +323,7 @@ class RedactPdfService:
                 # irrelevant to the output; it only fixes the label numbering.
                 bracketed += len(_BRACKETED_NUMBER.findall(normalized.text))
 
+                page_start = len(findings)
                 redactions = self._page_redactions(
                     page_index=page_index,
                     raw_text=raw_text,
@@ -334,11 +338,14 @@ class RedactPdfService:
                     redactions.append((IMAGE_REDACTION_SENTINEL, ""))
 
                 if redactions:
-                    document.redact_page(
+                    missed = document.redact_page(
                         page_index,
                         redactions,
                         blackout=(style == RedactionStyle.BLACKOUT),
                     )
+                    # Redaction i of this page came from finding i of it:
+                    # ``_page_redactions`` appends both in the same order.
+                    not_located += [findings[page_start + i] for i in missed]
 
             return PdfRedactionResult(
                 data=document.to_bytes(),
@@ -347,6 +354,7 @@ class RedactPdfService:
                 crosswalk=pseudonymizer.crosswalk(),
                 source_bracketed_numbers=bracketed,
                 removed_links=removed_links,
+                not_located=tuple(not_located),
             )
         finally:
             document.close()
@@ -448,6 +456,7 @@ class RedactPdfService:
             # ``apply_redactions`` deletes overlapping links.
             removed_links = document.remove_external_links()
             findings: list[Finding] = []
+            not_located: list[Finding] = []
             bracketed = 0
             for page_index, page in enumerate(scan_result.pages):
                 detections = [
@@ -477,6 +486,7 @@ class RedactPdfService:
                     )
                     continue
 
+                page_start = len(findings)
                 redactions = self._page_redactions(
                     page_index=page_index,
                     raw_text=page.raw_text,
@@ -491,11 +501,14 @@ class RedactPdfService:
                     redactions.append((IMAGE_REDACTION_SENTINEL, ""))
 
                 if redactions:
-                    document.redact_page(
+                    missed = document.redact_page(
                         page_index,
                         redactions,
                         blackout=(style == RedactionStyle.BLACKOUT),
                     )
+                    # Redaction i of this page came from finding i of it:
+                    # ``_page_redactions`` appends both in the same order.
+                    not_located += [findings[page_start + i] for i in missed]
 
             return PdfRedactionResult(
                 data=document.to_bytes(),
@@ -504,6 +517,7 @@ class RedactPdfService:
                 crosswalk=pseudonymizer.crosswalk(),
                 source_bracketed_numbers=bracketed,
                 removed_links=removed_links,
+                not_located=tuple(not_located),
             )
         finally:
             document.close()
