@@ -490,12 +490,32 @@ class PyMuPdfDocument:
                 )
 
     def to_bytes(self) -> bytes:
-        """Render the redacted document to bytes, without the original's metadata.
+        """Render the redacted document to bytes, without its hidden surfaces.
 
-        The Info dictionary (author, title, subject, keywords, creator,
-        producer, dates) and the XMP packet are removed first: they can name
-        the author or the document and survive text redaction untouched.
+        Removed first, because each can name a person and none of them is in
+        the page text that detection reads: the Info dictionary (author,
+        title, subject, keywords, creator, producer, dates) and the XMP
+        packet; every annotation (comments, sticky notes, free text, stamps,
+        file attachments); form fields and their values; the outline
+        (bookmarks); and embedded files. Link annotations are not touched
+        here (see :meth:`remove_external_links`). Removing rather than
+        redacting these is deliberate over-redaction: a form value or a
+        comment is lost from the copy, never leaked.
         """
+        for page in self._doc:
+            # Defensive: every redaction is applied where it is added, but an
+            # unapplied one deleted below would leave its text in place.
+            if any(a.type[0] == fitz.PDF_ANNOT_REDACT for a in page.annots()):
+                page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_PIXELS)
+            while (widget := page.first_widget) is not None:
+                page.delete_widget(widget)
+            while (annot := page.first_annot) is not None:
+                page.delete_annot(annot)
+        catalog = self._doc.pdf_catalog()
+        self._doc.xref_set_key(catalog, "AcroForm", "null")
+        self._doc.set_toc([])
+        for name in self._doc.embfile_names():
+            self._doc.embfile_del(name)
         self._doc.set_metadata({})
         self._doc.del_xml_metadata()
         output = BytesIO()

@@ -33,6 +33,7 @@ This file records known errors, edge cases, and their solutions when developing 
   - [A scanned PDF page comes out as a picture with black boxes](#a-scanned-pdf-page-comes-out-as-a-picture-with-black-boxes)
   - [Redacting a whole table column in a PDF](#redacting-a-whole-table-column-in-a-pdf)
   - [A blacked-out image or signature could be pulled back out of a PDF](#a-blacked-out-image-or-signature-could-be-pulled-back-out-of-a-pdf)
+  - [Comments, form fields, bookmarks and attachments are gone from a redacted PDF](#comments-form-fields-bookmarks-and-attachments-are-gone-from-a-redacted-pdf)
   - [Redacting a name in a PDF also blacks out/deletes part of the line above it](#redacting-a-name-in-a-pdf-also-blacks-outdeletes-part-of-the-line-above-it)
   - [A name inside a Word text box, SmartArt, or embedded object is not detected](#a-name-inside-a-word-text-box-smartart-or-embedded-object-is-not-detected)
   - [Why doesn't the tool touch dates/times?](#why-doesnt-the-tool-touch-datestimes)
@@ -267,6 +268,12 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Solution:** It now uses `PDF_REDACT_IMAGE_PIXELS`, which blanks the pixels under every redaction; an image covered completely is dropped, and the save (`garbage=3`) discards the orphaned data. If an unusual image format defeats pixel editing, the page falls back to removing every image a redaction touches: over-redaction, never a leak. Text redactions that overlap an image (a name printed over a background picture) now blank those pixels too.
 - **Re-redact old files:** a PDF blacked out before this fix still carries its images. Run the original through the tool again.
 
+### Comments, form fields, bookmarks and attachments are gone from a redacted PDF
+
+- **Cause:** Deliberate. None of these is part of the page text that detection reads, and each can name a person: a comment and its author, a sticky note, a free-text box or stamp, a file attached to a page or to the document, a filled-in form field, a bookmark title. `PyMuPdfDocument.to_bytes` removes them all on save, along with the document properties and XMP metadata. They are removed, not redacted, so their content is lost from the copy rather than checked.
+- **Kept:** the page content itself, and links to another page of the same PDF. Links that leave the document are removed separately (see "A link no longer works in the redacted file").
+- **Not covered:** JavaScript actions and optional-content (hidden) layers are not inspected.
+
 ### Redacting a name in a PDF also blacks out/deletes part of the line above it
 
 - **Symptom (fixed):** In a tightly single-spaced PDF, blacking out (or pseudonymizing) a name also covers, and can even delete, part of an unrelated line directly above it.
@@ -297,7 +304,7 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Applies to:** Word and PDF. Excel output is rebuilt from cell values and never kept links.
 - **Cause:** Deliberate. A link's destination can name a person (`mailto:jane.doe@example.org` behind "click here") or a private file path, and nothing on the page shows it. So every link that leaves the document is removed: web and email links, file launches, and links into other PDFs. Links to another page of the same PDF stay. The visible text stays and goes through detection like any other text. The download section says how many were removed.
 - **Word detail:** python-docx does not include hyperlinked runs in `paragraph.runs`, so before this change the visible text of a Word hyperlink was never scanned at all. `docx_gateway.py` now unwraps hyperlinks (and `HYPERLINK` field codes) when the file is opened, before any text is read.
-- **Not covered:** other PDF annotations, bookmarks and metadata, and Word document properties. These are still open.
+- **Not covered:** Word document properties are still open. For PDF, see "Comments, form fields, bookmarks and attachments are gone from a redacted PDF".
 
 ### What Excel formatting is kept, and what is not
 

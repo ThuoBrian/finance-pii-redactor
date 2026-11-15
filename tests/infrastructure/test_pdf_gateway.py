@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+import zlib
+
 import fitz
 import pytest
 
@@ -290,6 +293,98 @@ def test_to_bytes_strips_document_properties_and_xmp():
     )
     for leaked in (b"Pat Example", b"Payroll Review", b"Example PDF Tool", b"xmpmeta"):
         assert leaked not in out
+
+
+# Made-up names, one per hidden surface, none of them in the page text.
+_HIDDEN = {
+    "comment": "Zelda Quorn",
+    "comment author": "Pomona Vexley",
+    "free text": "Ignatz Brumble",
+    "attachment annotation": "Hortensia Blewitt",
+    "form field": "Barnaby Quillon",
+    "bookmark": "Cornelius Wapshot",
+    "embedded file": "Philippa Drumble",
+}
+
+
+def _pdf_with_hidden_surfaces() -> bytes:
+    doc = fitz.open()
+    doc.new_page()
+    doc.new_page()
+    page = doc[0]
+    page.insert_text((72, 72), "Quarterly payment summary.")
+    page.insert_link(
+        {"kind": fitz.LINK_GOTO, "from": fitz.Rect(72, 90, 200, 105), "page": 1}
+    )
+    note = page.add_text_annot((100, 200), f"Ask {_HIDDEN['comment']}")
+    note.set_info(title=_HIDDEN["comment author"])
+    note.update()
+    page.add_freetext_annot(fitz.Rect(100, 300, 400, 330), _HIDDEN["free text"])
+    page.add_file_annot(
+        (50, 400), f"from {_HIDDEN['attachment annotation']}".encode(), "note.txt"
+    )
+    field = fitz.Widget()
+    field.field_type = fitz.PDF_WIDGET_TYPE_TEXT
+    field.field_name = "payee"
+    field.field_value = _HIDDEN["form field"]
+    field.rect = fitz.Rect(100, 500, 300, 520)
+    page.add_widget(field)
+    doc.set_toc([[1, f"Report for {_HIDDEN['bookmark']}", 1]])
+    doc.embfile_add(
+        "notes.txt", f"by {_HIDDEN['embedded file']}".encode(), filename="notes.txt"
+    )
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def _inflated_streams(pdf: bytes) -> bytes:
+    """Every stream in ``pdf`` decompressed, read with zlib rather than PyMuPDF.
+
+    A second reader, so a surface PyMuPDF's own API no longer lists but
+    whose bytes are still in the file is caught too.
+    """
+    out = []
+    for match in re.finditer(rb"stream\r?\n(.*?)endstream", pdf, re.DOTALL):
+        try:
+            out.append(zlib.decompressobj().decompress(match.group(1)))
+        except zlib.error:
+            out.append(match.group(1))
+    return b"\n".join(out)
+
+
+def test_to_bytes_removes_annotations_fields_bookmarks_and_attachments():
+    data = _pdf_with_hidden_surfaces()
+    source = fitz.open(stream=data, filetype="pdf")
+    carried = data + _inflated_streams(data)
+    assert source.embfile_count() == 1 and source.get_toc()  # fixture is real
+    assert len(list(source[0].annots())) == 3 and len(list(source[0].widgets())) == 1
+    for name in _HIDDEN.values():  # every surface really carries its name
+        assert name.encode() in carried or name in str(source.get_toc()), name
+    source.close()
+
+    document = PyMuPdfDocument.open(data)
+    out = document.to_bytes()
+    document.close()
+
+    reopened = fitz.open(stream=out, filetype="pdf")
+    page = reopened[0]
+    assert list(page.annots()) == []
+    assert list(page.widgets()) == []
+    assert not reopened.is_form_pdf
+    assert reopened.get_toc() == []
+    assert reopened.embfile_count() == 0
+    # Internal page jumps are links, not annotations to strip.
+    assert [link["kind"] for link in page.get_links()] == [fitz.LINK_GOTO]
+    assert "Quarterly payment summary." in page.get_text()
+    xref_dump = "\n".join(
+        reopened.xref_object(x) for x in range(1, reopened.xref_length())
+    )
+    reopened.close()
+
+    everything = out + _inflated_streams(out) + xref_dump.encode()
+    for surface, name in _HIDDEN.items():
+        assert name.encode() not in everything, surface
 
 
 def _text_pdf_bytes(*lines: str) -> bytes:

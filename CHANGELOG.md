@@ -225,6 +225,12 @@ the `version` field in `pyproject.toml`.
   said "Every detected term is hidden". Such terms now get their own warning
   on the Review step, naming them and their pages, and the reassurance only
   appears when every term was found.
+- **PDF comments, form fields, bookmarks and attachments no longer survive
+  redaction.** None of them is page text, so detection never saw them, and
+  each could carry a name: a comment or its author, a filled-in form field, a
+  bookmark title, a file attached to the document. The redacted PDF now drops
+  them all on save, as it already did for document properties. Links to
+  another page of the same PDF are kept.
 - **A PDF name that wraps onto the next line gets one label, not two.** A
   two-word name split over a line break was covered on both lines but had its
   `[001]` label stamped on each part. Only the first part is labelled now;
