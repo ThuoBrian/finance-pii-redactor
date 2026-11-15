@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+import zlib
+
 import fitz
 import pytest
 
@@ -10,6 +13,7 @@ from finance_redactor.domain.errors import EncryptedPdfError, UnreadableFileErro
 from finance_redactor.infrastructure.documents.pdf_gateway import (
     PyMuPdfDocument,
     _drop_embedded_hits,
+    _first_rect_of_each_match,
     _search_variants,
     _tighten_to_line,
 )
@@ -51,6 +55,33 @@ def test_redact_page_removes_name_split_across_a_line_break():
     assert "Acme" not in text
     assert "Sup" not in text
     assert text.count("ORG-AUTO-D4D8B6F0") == 1
+
+
+def test_redact_page_reports_a_term_no_search_variant_finds():
+    """A ligature the page's font cannot encode reads back as a replacement
+    character, so neither the expanded spelling nor the ligature itself is
+    found by ``search_for``. The gateway must say so instead of dropping it.
+    """
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "Paid Ruﬁna Testperson today.")
+    page.insert_text((72, 140), "Approved by Bo Sample.")
+    document = PyMuPdfDocument(doc)
+
+    missed = document.redact_page(
+        0,
+        [
+            (["Rufina Testperson", "Ruﬁna Testperson"], "[001]"),
+            (["Bo Sample"], "[002]"),
+            (IMAGE_REDACTION_SENTINEL, ""),
+        ],
+    )
+    text = document.page_text(0)
+    document.close()
+
+    assert missed == [0]
+    assert "Bo Sample" not in text
+    assert "Testperson" in text  # not covered: exactly why it is reported
 
 
 def test_search_variants_collapses_whitespace():
@@ -264,6 +295,98 @@ def test_to_bytes_strips_document_properties_and_xmp():
     )
     for leaked in (b"Pat Example", b"Payroll Review", b"Example PDF Tool", b"xmpmeta"):
         assert leaked not in out
+
+
+# Made-up names, one per hidden surface, none of them in the page text.
+_HIDDEN = {
+    "comment": "Zelda Quorn",
+    "comment author": "Pomona Vexley",
+    "free text": "Ignatz Brumble",
+    "attachment annotation": "Hortensia Blewitt",
+    "form field": "Barnaby Quillon",
+    "bookmark": "Cornelius Wapshot",
+    "embedded file": "Philippa Drumble",
+}
+
+
+def _pdf_with_hidden_surfaces() -> bytes:
+    doc = fitz.open()
+    doc.new_page()
+    doc.new_page()
+    page = doc[0]
+    page.insert_text((72, 72), "Quarterly payment summary.")
+    page.insert_link(
+        {"kind": fitz.LINK_GOTO, "from": fitz.Rect(72, 90, 200, 105), "page": 1}
+    )
+    note = page.add_text_annot((100, 200), f"Ask {_HIDDEN['comment']}")
+    note.set_info(title=_HIDDEN["comment author"])
+    note.update()
+    page.add_freetext_annot(fitz.Rect(100, 300, 400, 330), _HIDDEN["free text"])
+    page.add_file_annot(
+        (50, 400), f"from {_HIDDEN['attachment annotation']}".encode(), "note.txt"
+    )
+    field = fitz.Widget()
+    field.field_type = fitz.PDF_WIDGET_TYPE_TEXT
+    field.field_name = "payee"
+    field.field_value = _HIDDEN["form field"]
+    field.rect = fitz.Rect(100, 500, 300, 520)
+    page.add_widget(field)
+    doc.set_toc([[1, f"Report for {_HIDDEN['bookmark']}", 1]])
+    doc.embfile_add(
+        "notes.txt", f"by {_HIDDEN['embedded file']}".encode(), filename="notes.txt"
+    )
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def _inflated_streams(pdf: bytes) -> bytes:
+    """Every stream in ``pdf`` decompressed, read with zlib rather than PyMuPDF.
+
+    A second reader, so a surface PyMuPDF's own API no longer lists but
+    whose bytes are still in the file is caught too.
+    """
+    out = []
+    for match in re.finditer(rb"stream\r?\n(.*?)endstream", pdf, re.DOTALL):
+        try:
+            out.append(zlib.decompressobj().decompress(match.group(1)))
+        except zlib.error:
+            out.append(match.group(1))
+    return b"\n".join(out)
+
+
+def test_to_bytes_removes_annotations_fields_bookmarks_and_attachments():
+    data = _pdf_with_hidden_surfaces()
+    source = fitz.open(stream=data, filetype="pdf")
+    carried = data + _inflated_streams(data)
+    assert source.embfile_count() == 1 and source.get_toc()  # fixture is real
+    assert len(list(source[0].annots())) == 3 and len(list(source[0].widgets())) == 1
+    for name in _HIDDEN.values():  # every surface really carries its name
+        assert name.encode() in carried or name in str(source.get_toc()), name
+    source.close()
+
+    document = PyMuPdfDocument.open(data)
+    out = document.to_bytes()
+    document.close()
+
+    reopened = fitz.open(stream=out, filetype="pdf")
+    page = reopened[0]
+    assert list(page.annots()) == []
+    assert list(page.widgets()) == []
+    assert not reopened.is_form_pdf
+    assert reopened.get_toc() == []
+    assert reopened.embfile_count() == 0
+    # Internal page jumps are links, not annotations to strip.
+    assert [link["kind"] for link in page.get_links()] == [fitz.LINK_GOTO]
+    assert "Quarterly payment summary." in page.get_text()
+    xref_dump = "\n".join(
+        reopened.xref_object(x) for x in range(1, reopened.xref_length())
+    )
+    reopened.close()
+
+    everything = out + _inflated_streams(out) + xref_dump.encode()
+    for surface, name in _HIDDEN.items():
+        assert name.encode() not in everything, surface
 
 
 def _text_pdf_bytes(*lines: str) -> bytes:
@@ -526,3 +649,54 @@ def test_page_tables_is_empty_on_a_page_without_a_table():
     document = PyMuPdfDocument.open(_wrapped_name_pdf_bytes())
 
     assert document.page_tables(0) == []
+
+
+def test_page_size_is_in_the_same_points_as_image_rects():
+    doc = fitz.open()
+    page = doc.new_page(width=600, height=400)
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 10, 10), False)
+    page.insert_image(fitz.Rect(0, 0, 300, 400), stream=pix.tobytes("png"))
+    document = PyMuPdfDocument(doc)
+
+    assert document.page_size(0) == (600.0, 400.0)
+    assert document.page_image_rects(0) == [(0.0, 0.0, 300.0, 400.0)]
+    document.close()
+
+
+def test_a_name_wrapping_a_line_is_labelled_once_per_occurrence():
+    """A two-word name split over two lines is one occurrence: search_for
+    returns a rect per line, and only the first gets the label. A second,
+    unwrapped occurrence still gets its own label.
+    """
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "Signed by Jane")
+    page.insert_text((72, 130), "Doe on Monday.")
+    page.insert_text((72, 160), "Witness: Jane Doe.")
+    document = PyMuPdfDocument(doc)
+
+    assert document.redact_page(0, [(["Jane Doe"], "[001]")]) == []
+    redacted = PyMuPdfDocument.open(document.to_bytes())
+    document.close()
+    text = redacted.page_text(0)
+    redacted.close()
+
+    assert "Jane" not in text
+    assert "Doe" not in text
+    assert text.count("[001]") == 2
+
+
+@pytest.mark.parametrize(
+    ("n_rects", "page_text", "candidate", "expected"),
+    [
+        (2, "by Jane\nDoe on", "Jane Doe", [True, False]),
+        (3, "Jane\nDoe and Jane Doe", "jane doe", [True, False, True]),
+        (2, "Jane Doe, Jane Doe", "Jane Doe", [True, True]),
+        # Counts don't line up: label every rect, the old behaviour...
+        (3, "Jane Doe", "Jane Doe", [True, True, True]),
+        # ...except a candidate that is one wrapped occurrence by construction.
+        (2, "unrelated", "Acme Sup-\nplies", [True, False]),
+    ],
+)
+def test_first_rect_of_each_match(n_rects, page_text, candidate, expected):
+    assert _first_rect_of_each_match(n_rects, page_text, candidate) == expected

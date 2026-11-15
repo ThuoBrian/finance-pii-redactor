@@ -33,6 +33,7 @@ This file records known errors, edge cases, and their solutions when developing 
   - [A scanned PDF page comes out as a picture with black boxes](#a-scanned-pdf-page-comes-out-as-a-picture-with-black-boxes)
   - [Redacting a whole table column in a PDF](#redacting-a-whole-table-column-in-a-pdf)
   - [A blacked-out image or signature could be pulled back out of a PDF](#a-blacked-out-image-or-signature-could-be-pulled-back-out-of-a-pdf)
+  - [Comments, form fields, bookmarks and attachments are gone from a redacted PDF](#comments-form-fields-bookmarks-and-attachments-are-gone-from-a-redacted-pdf)
   - [Redacting a name in a PDF also blacks out/deletes part of the line above it](#redacting-a-name-in-a-pdf-also-blacks-outdeletes-part-of-the-line-above-it)
   - [A name inside a Word text box, SmartArt, or embedded object is not detected](#a-name-inside-a-word-text-box-smartart-or-embedded-object-is-not-detected)
   - [Comments and tracked changes are gone from the redacted Word file](#comments-and-tracked-changes-are-gone-from-the-redacted-word-file)
@@ -227,11 +228,11 @@ This file records known errors, edge cases, and their solutions when developing 
 
 - **Symptom:** A word/phrase typed into PDF's words box (Review step) (or, for Word, a name/organization) is matched but not replaced, or isn't matched at all even though it's visibly present on the page.
 - **Cause 1:** The PDF page is a scanned image and contains no selectable text layer.
-- **Solution 1:** Scanned pages are read with OCR (see "A scanned PDF page comes out as a picture with black boxes" below). If **Read the text on scanned pages** is off, or OCR is not installed, the Review step says which pages are scans and what happened to them: fully black with **Also black out images** on, unredacted with it off.
+- **Solution 1:** Scanned pages are read with OCR (see "A scanned PDF page comes out as a picture with black boxes" below). If **Read the text on scanned pages** is off, or OCR is not installed, the Review step says which pages are scans and what happened to them: the scanned image blacked out with **Also black out images** on (for a plain scan, the whole page), unredacted with it off.
 - **Cause 2:** The same span was detected by both the spaCy model and the master list, or a name appears under two categories. In PDF a name under two categories surfaces as an `ambiguous` row in the label mapping rather than a wrong ID.
 - **Solution 2:** The code deduplicates overlapping spans (master-list source wins over an overlapping model source regardless of length; leftmost/longest breaks ties within the same source — see the entry above on a name followed by a bare hyphen), but a name listed under two categories (e.g. Vendor *and* Funder) can still conflict. Keep each name in a single category.
 - **Cause 3:** PyMuPDF extracts text with artifacts that break exact matching — typographic ligatures (`ﬁ` instead of `fi`), line-break hyphenation (`Acme Sup-\nplies`), and irregular whitespace. Whatever is doing the matching (PDF's `find_custom_words`, or Word/Excel's master-list recognizer and spaCy) sees a different string than the one being searched for.
-- **Solution 3:** The PDF flow normalizes extracted text before matching: ligatures are expanded, soft line-break hyphens are removed, and whitespace is collapsed - this applies to a typed custom word/phrase exactly the same way it applies to a detected name. Match spans are mapped back to the original extracted text, and `page.search_for()` tries a small set of fallback variants (whitespace-collapsed, punctuation-stripped, `&`/`and` swapped, common suffix stripped) when the exact text is not found. The occurrence is still reported in the detection details and crosswalk even if it cannot be written.
+- **Solution 3:** The PDF flow normalizes extracted text before matching: ligatures are expanded, soft line-break hyphens are removed, and whitespace is collapsed - this applies to a typed custom word/phrase exactly the same way it applies to a detected name. Match spans are mapped back to the original extracted text, and `page.search_for()` tries a small set of fallback variants (whitespace-collapsed, punctuation-stripped, `&`/`and` swapped, common suffix stripped) when the exact text is not found. If no variant is found either, nothing covers the term: it is still listed in the detection details and crosswalk, and the Review step shows a separate warning, "detected term could not be found on the page", naming it and its page. Check that page in the download and cover the term by hand before sharing. The gateway reports these back (`PyMuPdfDocument.redact_page` returns their indices), so they are never counted as hidden.
 
 ### A short word is redacted inside longer words in a PDF
 
@@ -243,11 +244,12 @@ This file records known errors, edge cases, and their solutions when developing 
 ### A scanned PDF page comes out as a picture with black boxes
 
 - **What happens:** a scanned page (a picture of text, no text layer) is read with OCR (`infrastructure/ocr/rapid_ocr.py`, RapidOCR on ONNX Runtime, models bundled, no network). Names found in the text are replaced with labels. With **Also black out images** on, every mark the OCR could not read with confidence (below 0.8: signatures, handwriting, stamps, smudged text) is covered by a solid black box over the whole group of marks, so a signature's shape does not show. The page is then rebuilt as a single new picture, so nothing hidden from the original survives.
+- **Pages with typed text over a large scan count too.** A page that has a text layer but whose images cover at least 15% of it (`_MIXED_PAGE_IMAGE_SHARE` in `application/redact_pdf.py`) is treated as a scan: a typed heading over a scanned receipt, or a scanner's "searchable PDF" with an invisible text layer over the picture. Its text layer is redacted by search first, then the page is read with OCR and rebuilt like any other scan, so a name visible only in the picture is caught too. A logo or a signature image is usually well under 15% and leaves the page as text. The cost is time: a 200-page searchable scan is now read with OCR page by page.
 - **The text on that page is no longer selectable.** It is a picture now; the labels are the only real text on it.
 - **OCR can misread.** A misread name may not be detected. The Review step lists the pages read with OCR: check them in the download before sharing.
 - **A word after a name can be redacted with it.** The language model sometimes runs a name into the next line ("Jane Doe" then "Signature:"). This is kept on purpose: stopping it would also split a name that wraps onto the next line, and half a name would show.
 - **A form's ruled lines** are blacked out line by line rather than as one box, so the text inside the form stays readable.
-- **Slower:** about two seconds a page, plus about two seconds the first time OCR runs in a session.
+- **Slower:** several seconds a page, read one after another. Measured on an 8-core Windows laptop: about 6.5 seconds for a sparse page and 11.5 for a dense one, plus 15-20 seconds to load the model the first time OCR runs in a session. Faster machines do better. Before the run, the Options step estimates the time once reading the scans would take a minute or more (`OCR_SECONDS_PER_PAGE`, 6 seconds, in `application/redact_pdf.py`), and warns about any PDF of 300 pages or more (`LARGE_PDF_PAGES`): a run cannot be stopped halfway, so split a file that long.
 - **Turn it off** under **Customize** (**Read the text on scanned pages**) to get the old behaviour.
 
 ### Redacting a whole table column in a PDF
@@ -270,6 +272,12 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Cause:** `PyMuPdfDocument.redact_page` applied redactions with `images=PDF_REDACT_IMAGE_NONE`, which draws the black box over an image and leaves the image itself untouched.
 - **Solution:** It now uses `PDF_REDACT_IMAGE_PIXELS`, which blanks the pixels under every redaction; an image covered completely is dropped, and the save (`garbage=3`) discards the orphaned data. If an unusual image format defeats pixel editing, the page falls back to removing every image a redaction touches: over-redaction, never a leak. Text redactions that overlap an image (a name printed over a background picture) now blank those pixels too.
 - **Re-redact old files:** a PDF blacked out before this fix still carries its images. Run the original through the tool again.
+
+### Comments, form fields, bookmarks and attachments are gone from a redacted PDF
+
+- **Cause:** Deliberate. None of these is part of the page text that detection reads, and each can name a person: a comment and its author, a sticky note, a free-text box or stamp, a file attached to a page or to the document, a filled-in form field, a bookmark title. `PyMuPdfDocument.to_bytes` removes them all on save, along with the document properties and XMP metadata. They are removed, not redacted, so their content is lost from the copy rather than checked.
+- **Kept:** the page content itself, and links to another page of the same PDF. Links that leave the document are removed separately (see "A link no longer works in the redacted file").
+- **Not covered:** JavaScript actions and optional-content (hidden) layers are not inspected.
 
 ### Redacting a name in a PDF also blacks out/deletes part of the line above it
 
@@ -307,7 +315,7 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Applies to:** Word and PDF. Excel output is rebuilt from cell values and never kept links.
 - **Cause:** Deliberate. A link's destination can name a person (`mailto:jane.doe@example.org` behind "click here") or a private file path, and nothing on the page shows it. So every link that leaves the document is removed: web and email links, file launches, and links into other PDFs. Links to another page of the same PDF stay. The visible text stays and goes through detection like any other text. The download section says how many were removed.
 - **Word detail:** python-docx does not include hyperlinked runs in `paragraph.runs`, so before this change the visible text of a Word hyperlink was never scanned at all. `docx_gateway.py` now unwraps hyperlinks (and `HYPERLINK` field codes) when the file is opened, before any text is read.
-- **Not covered:** other PDF annotations, bookmarks and metadata, and Word document properties. These are still open.
+- **Not covered:** Word document properties are still open. For PDF, see "Comments, form fields, bookmarks and attachments are gone from a redacted PDF".
 
 ### What Excel formatting is kept, and what is not
 

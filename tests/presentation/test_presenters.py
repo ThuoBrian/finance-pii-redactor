@@ -30,6 +30,8 @@ from finance_redactor.presentation.presenters import (
     formatting_note,
     merge_findings,
     merge_pending,
+    not_located_warning,
+    pdf_job_size_note,
     pdf_mapping_dataframe,
     pdf_mapping_notes,
     pdf_mapping_with_names_dataframe,
@@ -615,6 +617,71 @@ def test_apply_notice_says_what_was_left_visible() -> None:
     )
 
 
+def test_apply_notice_never_says_all_hidden_when_a_term_was_not_found() -> None:
+    notice = apply_notice(frozenset(), not_located=2)
+
+    assert "Every detected term is hidden" not in notice
+    assert "2 detected terms were not found on the page" in notice
+
+
+def _unlocated(page: int, text: str) -> Finding:
+    return Finding(
+        page=page,
+        detected_text=text,
+        entity_type="PERSON",
+        score=1.0,
+        source=DetectionSource.CUSTOM,
+    )
+
+
+def test_not_located_warning_names_the_terms_and_pages() -> None:
+    warning = not_located_warning(
+        [_unlocated(2, "Zorbo Quillfeather"), _unlocated(0, "Ann Example")]
+    )
+
+    assert warning.startswith("**2 detected terms could not be found on the page")
+    assert "(page 1, 3)" in warning
+    assert "`Ann Example`, `Zorbo Quillfeather`" in warning
+
+
+def _job_note(scanned: int, total: int, reading_scans: bool = True) -> str:
+    return pdf_job_size_note(
+        scanned,
+        total,
+        reading_scans=reading_scans,
+        seconds_per_page=6.0,
+        large_pages=300,
+    )
+
+
+def test_pdf_job_size_note_estimates_ocr_time_for_many_scans() -> None:
+    note = _job_note(25, 40)
+
+    # 25 pages at 6 seconds is 150 seconds: rounded up to 3 minutes.
+    assert note.startswith("**25 scanned pages, about 3 minutes to read.**")
+    assert "This PDF has" not in note
+
+
+def test_pdf_job_size_note_stays_quiet_under_a_minute() -> None:
+    assert _job_note(9, 9) == ""  # 54 seconds
+    assert _job_note(10, 10).startswith("**10 scanned pages, about 1 minute")
+
+
+def test_pdf_job_size_note_skips_the_estimate_when_scans_are_not_read() -> None:
+    assert _job_note(200, 200, reading_scans=False) == ""
+
+
+def test_pdf_job_size_note_warns_about_a_very_long_pdf() -> None:
+    note = _job_note(0, 300)
+
+    assert note.startswith("**This PDF has 300 pages.**")
+    assert _job_note(0, 299) == ""
+
+
+def test_not_located_warning_is_empty_when_everything_was_found() -> None:
+    assert not_located_warning([]) == ""
+
+
 def test_findings_from_before_a_module_reload_still_sort_and_hint() -> None:
     """Streamlit re-imports changed modules, so a finding kept in session state
     can hold a member of an older copy of ``DetectionSource``. It is equal in
@@ -648,7 +715,7 @@ def test_scanned_pages_warning_says_what_happens_to_the_pages() -> None:
     off = scanned_pages_warning([0, 2], 3, images_blacked_out=False)
 
     assert on.startswith("**1 of 3 pages is a scan** (page 1)")
-    assert "fully black" in on
+    assert "scanned image on that page is blacked out" in on
     assert off.startswith("**2 of 3 pages are scans** (page 1, 3)")
     assert "unredacted" in off
 

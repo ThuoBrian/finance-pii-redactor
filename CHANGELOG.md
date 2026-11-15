@@ -16,6 +16,11 @@ the `version` field in `pyproject.toml`.
   (Payee, Account No, Phone) start chosen. Tables on text pages are found by
   PyMuPDF. On scanned pages they're worked out from where the OCR'd lines sit.
   Changing the choice rebuilds the file without scanning again.
+- **The PDF Options step says up front when a run will be long.** When
+  reading the scanned pages would take a minute or more, it estimates the
+  time ("25 scanned pages, about 3 minutes to read", at a cautious 6
+  seconds a page). A PDF of 300 pages or more gets a warning to split it,
+  since a run cannot be stopped halfway.
 - **Scanned PDF pages are read with OCR.** A scanned page used to be either
   fully black or unredacted. Now its printed text is read (RapidOCR on ONNX
   Runtime; models ship with the package and run offline), names in it are
@@ -23,7 +28,7 @@ the `version` field in `pyproject.toml`.
   could not read with confidence (signatures, handwriting, stamps) is covered
   by a solid black box, so a signature's shape does not show. The page comes
   out as a single cleaned picture, with nothing hidden from the original. On
-  by default, under Customize as "Read the text on scanned pages"; about two
+  by default, under Customize as "Read the text on scanned pages"; several
   seconds a page. The Review step lists the pages read with OCR to check.
   Installing grows by about 100 MB (`rapidocr`, `onnxruntime`, OpenCV
   headless and Shapely).
@@ -289,6 +294,31 @@ the `version` field in `pyproject.toml`.
   case it gets a flagged auto-code). This also fixes an offset bug: a
   dotted capital `İ` anywhere before a name shifted that name's redaction one
   character to the right. Surname-only matching stays off, as before.
+- **PDF pages with typed text over a large scanned image are read with OCR.**
+  Only pages with no text layer at all used to count as scans, so a typed
+  heading over a scanned receipt, or a scanner's searchable PDF, had its
+  picture passed through unread: a name visible only in the image survived
+  unless "Black out images" was on. A page whose images cover at least 15%
+  of it is now treated as a scan. Its text layer is still redacted by
+  search first, then the page is read with OCR and rebuilt. With OCR off or
+  not installed, such pages are listed in the scanned-pages warning.
+- **A PDF term that could not be found on the page is no longer reported as
+  hidden.** When a name was read from a page's text but no search could match
+  it on the page (a ligature or font encoding the search can't see through),
+  nothing covered it, yet the Review step counted it as redacted and Apply
+  said "Every detected term is hidden". Such terms now get their own warning
+  on the Review step, naming them and their pages, and the reassurance only
+  appears when every term was found.
+- **PDF comments, form fields, bookmarks and attachments no longer survive
+  redaction.** None of them is page text, so detection never saw them, and
+  each could carry a name: a comment or its author, a filled-in form field, a
+  bookmark title, a file attached to the document. The redacted PDF now drops
+  them all on save, as it already did for document properties. Links to
+  another page of the same PDF are kept.
+- **A PDF name that wraps onto the next line gets one label, not two.** A
+  two-word name split over a line break was covered on both lines but had its
+  `[001]` label stamped on each part. Only the first part is labelled now;
+  both are still covered.
 - **Review tick boxes respond to a single click.** Every other tick or
   untick in the "Hide in output?" column was ignored, so a box seemed to
   need a double click. Each click now registers.

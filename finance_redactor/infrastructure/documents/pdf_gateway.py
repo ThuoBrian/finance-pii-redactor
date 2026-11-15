@@ -112,6 +112,32 @@ def _drop_embedded_hits(
     ]
 
 
+def _first_rect_of_each_match(
+    n_rects: int, page_text: str, candidate: str
+) -> list[bool]:
+    """Say which of ``n_rects`` search hits should carry the label.
+
+    ``page.search_for`` matches a multi-word candidate across a line break
+    and returns one rect per line of that one occurrence. Each occurrence of
+    ``candidate`` in ``page_text`` (any run of whitespace, line breaks
+    included, between its words) is counted with the lines it spans; only
+    the first rect of each gets the label. If the counts don't line up with
+    the hits, a candidate holding a line break keeps its label on the first
+    rect only (it is one occurrence by construction) and any other candidate
+    is labelled on every rect, as before. Only labels depend on this: every
+    rect is covered either way.
+    """
+    pattern = r"\s+".join(re.escape(word) for word in candidate.split())
+    flags: list[bool] = []
+    for match in re.finditer(pattern, page_text, re.IGNORECASE):
+        flags += [True] + [False] * match.group().count("\n")
+    if len(flags) == n_rects:
+        return flags
+    if "\n" in candidate:
+        return [index == 0 for index in range(n_rects)]
+    return [True] * n_rects
+
+
 def _is_word_char(char: str) -> bool:
     return bool(char) and (char.isalnum() or char == "_")
 
@@ -271,6 +297,11 @@ class PyMuPdfDocument:
                 rects.append((rect.x0, rect.y0, rect.x1, rect.y1))
         return rects
 
+    def page_size(self, page_index: int) -> tuple[float, float]:
+        """Return one page's (width, height) in points, as image rects use."""
+        rect = self._doc.load_page(page_index).rect
+        return (rect.width, rect.height)
+
     def page_tables(self, page_index: int) -> list[TableColumn]:
         """Return the columns of every table PyMuPDF finds on one page.
 
@@ -303,8 +334,8 @@ class PyMuPdfDocument:
         redactions: list[tuple[str | list[str], str]],
         *,
         blackout: bool = False,
-    ) -> None:
-        """Apply redactions to one page.
+    ) -> list[int]:
+        """Apply redactions to one page; return the ones that were not located.
 
         Each text redaction is ``(search_text, label)`` or
         ``([primary_search, ...fallbacks], label)``. When ``blackout`` is True,
@@ -314,7 +345,10 @@ class PyMuPdfDocument:
         from the file, not just covered.
 
         If ``search_text`` is not found exactly, a small set of normalized
-        variants is tried before giving up.
+        variants is tried before giving up. The returned list holds the
+        indices (into ``redactions``) of every text redaction that no variant
+        could find on the page: nothing was covered for those, so the caller
+        must say so rather than report them as hidden.
         """
         page = self._doc.load_page(page_index)
         # Reused across every search_for call below: apply_redactions() is only
@@ -322,7 +356,8 @@ class PyMuPdfDocument:
         # change mid-loop, and building one snapshot avoids PyMuPDF re-parsing
         # the page for every candidate of every detection.
         textpage = page.get_textpage()
-        for search_item, label in redactions:
+        not_located: list[int] = []
+        for redaction_index, (search_item, label) in enumerate(redactions):
             if search_item == IMAGE_REDACTION_SENTINEL:
                 for x0, y0, x1, y1 in self.page_image_rects(page_index):
                     page.add_redact_annot(
@@ -356,20 +391,21 @@ class PyMuPdfDocument:
                 if rects:
                     matched_candidate = candidate
                     break
+            if rects:
+                rects = _drop_embedded_hits(
+                    rects, textpage.extractText(), matched_candidate
+                )
             if not rects:
+                not_located.append(redaction_index)
                 continue
-            rects = _drop_embedded_hits(
-                rects, textpage.extractText(), matched_candidate
+            # One occurrence that wraps a line comes back as one rect per line.
+            # Label only its first rect so the pseudonym isn't stamped once per
+            # line fragment; every rect still gets covered.
+            first_rects = _first_rect_of_each_match(
+                len(rects), textpage.extractText(), matched_candidate
             )
-            if not rects:
-                continue
-            # A candidate containing a line break (e.g. the dehyphenated raw-text
-            # fallback) matches one logical occurrence that PyMuPDF reports as one
-            # rect per line it spans. Label only the first rect so the pseudonym
-            # isn't stamped once per line fragment; every rect still gets covered.
-            spans_multiple_lines = "\n" in matched_candidate
-            for index, rect in enumerate(rects):
-                show_label = not blackout and (index == 0 or not spans_multiple_lines)
+            for rect, is_first in zip(rects, first_rects, strict=True):
+                show_label = is_first and not blackout
                 page.add_redact_annot(
                     _tighten_to_line(rect),
                     text=label if show_label else None,
@@ -388,6 +424,7 @@ class PyMuPdfDocument:
             # If an unusual image format defeats pixel editing, remove every
             # image a redaction touches instead. Over-redaction, never a leak.
             page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_REMOVE)
+        return not_located
 
     def remove_external_links(self) -> int:
         """Delete every link that leaves the document; return how many.
@@ -458,12 +495,32 @@ class PyMuPdfDocument:
                 )
 
     def to_bytes(self) -> bytes:
-        """Render the redacted document to bytes, without the original's metadata.
+        """Render the redacted document to bytes, without its hidden surfaces.
 
-        The Info dictionary (author, title, subject, keywords, creator,
-        producer, dates) and the XMP packet are removed first: they can name
-        the author or the document and survive text redaction untouched.
+        Removed first, because each can name a person and none of them is in
+        the page text that detection reads: the Info dictionary (author,
+        title, subject, keywords, creator, producer, dates) and the XMP
+        packet; every annotation (comments, sticky notes, free text, stamps,
+        file attachments); form fields and their values; the outline
+        (bookmarks); and embedded files. Link annotations are not touched
+        here (see :meth:`remove_external_links`). Removing rather than
+        redacting these is deliberate over-redaction: a form value or a
+        comment is lost from the copy, never leaked.
         """
+        for page in self._doc:
+            # Defensive: every redaction is applied where it is added, but an
+            # unapplied one deleted below would leave its text in place.
+            if any(a.type[0] == fitz.PDF_ANNOT_REDACT for a in page.annots()):
+                page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_PIXELS)
+            while (widget := page.first_widget) is not None:
+                page.delete_widget(widget)
+            while (annot := page.first_annot) is not None:
+                page.delete_annot(annot)
+        catalog = self._doc.pdf_catalog()
+        self._doc.xref_set_key(catalog, "AcroForm", "null")
+        self._doc.set_toc([])
+        for name in self._doc.embfile_names():
+            self._doc.embfile_del(name)
         self._doc.set_metadata({})
         self._doc.del_xml_metadata()
         output = BytesIO()

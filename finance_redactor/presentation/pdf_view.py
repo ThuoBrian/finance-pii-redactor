@@ -21,7 +21,12 @@ from typing import Any
 
 import streamlit as st
 
-from finance_redactor.application.redact_pdf import RedactionStyle, RedactPdfService
+from finance_redactor.application.redact_pdf import (
+    LARGE_PDF_PAGES,
+    OCR_SECONDS_PER_PAGE,
+    RedactionStyle,
+    RedactPdfService,
+)
 from finance_redactor.domain.errors import EncryptedPdfError, UnreadableFileError
 from finance_redactor.domain.tables import suggested_columns
 from finance_redactor.presentation import wizard
@@ -39,6 +44,8 @@ from finance_redactor.presentation.exclusion_view import (
 from finance_redactor.presentation.presenters import (
     findings_dataframe,
     merge_findings,
+    not_located_warning,
+    pdf_job_size_note,
     pdf_mapping_notes,
     plural,
     review_tab_labels,
@@ -87,12 +94,14 @@ def run_pdf_flow(
             PDF_NAMES_TOGGLE_KEY,
             "pdf_bracketed",
             "pdf_links",
+            "pdf_not_located",
             "pdf_all_findings",
             "pdf_excluded_applied",
             "pdf_columns_applied",
             _COLUMNS_KEY,
             "pdf_scan_result",
             "pdf_run",
+            "pdf_job_size",
             "excel_bytes",
         ),
     )
@@ -154,7 +163,7 @@ def _options_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> N
                 "A scanned page is a picture of text. With this on, the printed "
                 "text is read, names in it are redacted, and anything that could "
                 "not be read with confidence (signatures, handwriting, stamps) "
-                "is blacked out when 'black out images' is on. Slower: about two "
+                "is blacked out when 'black out images' is on. Slower: several "
                 "seconds a page."
                 if pdf_service.can_read_scans
                 else "OCR is not installed on this computer; re-run the installer."
@@ -164,6 +173,17 @@ def _options_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> N
 
     style = state["pdf_style"]
     redact_images = bool(state["pdf_redact_images"])
+    reading_scans = bool(state["pdf_read_scans"]) and pdf_service.can_read_scans
+    scanned, total = _job_size(uploaded, pdf_service)
+    size_note = pdf_job_size_note(
+        scanned,
+        total,
+        reading_scans=reading_scans,
+        seconds_per_page=OCR_SECONDS_PER_PAGE,
+        large_pages=LARGE_PDF_PAGES,
+    )
+    if size_note:
+        st.warning(size_note)
     # Words typed for an earlier file in this session carry over.
     custom_words = typed_words("pdf")
 
@@ -210,6 +230,7 @@ def _options_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> N
         state.pdf_crosswalk = result.crosswalk
         state.pdf_bracketed = result.source_bracketed_numbers
         state.pdf_links = result.removed_links
+        state.pdf_not_located = result.not_located
         # The unfiltered detections, kept as the deselect editor's stable
         # row list. Never overwritten by a re-run below, so a term can be
         # unticked and re-ticked; refiltering it would take the tick box
@@ -226,6 +247,24 @@ def _options_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> N
             "redact_images": redact_images,
         }
         wizard.go(wizard.REVIEW)
+
+
+def _job_size(uploaded: Any, pdf_service: RedactPdfService) -> tuple[int, int]:
+    """Return ``(scanned pages, total pages)``, counted once per upload.
+
+    ``(0, 0)`` for a file that cannot be opened: the Redact click reports
+    that properly.
+    """
+    state = st.session_state
+    if "pdf_job_size" not in state:
+        uploaded.seek(0)
+        try:
+            state.pdf_job_size = pdf_service.count_scanned_pages(uploaded)
+        except (EncryptedPdfError, UnreadableFileError):
+            state.pdf_job_size = (0, 0)
+        uploaded.seek(0)
+    scanned, total = state.pdf_job_size
+    return scanned, total
 
 
 def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> None:
@@ -276,6 +315,10 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
     if notes:
         box = st.warning if scanned else st.info
         box("**Before you share this PDF**\n\n" + "\n\n".join(notes))
+    # Its own box: these terms were detected but nothing covers them.
+    not_located = state.get("pdf_not_located", ())
+    if not_located:
+        st.warning(not_located_warning(not_located))
 
     columns_applied = state.get("pdf_columns_applied", frozenset())
     columns = _column_picker(state.pdf_scan_result.table_columns, columns_applied)
@@ -296,6 +339,7 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
             review_findings,
             key_prefix="pdf",
             excluded=state.get("pdf_excluded_applied", frozenset()),
+            not_located=len(not_located),
         )
     with tab_occurrences:
         st.markdown(f"**All detections ({plural(n_entities, 'finding')})**")
@@ -328,6 +372,7 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
         state.pdf_buffer = rerun.data
         state.pdf_findings = rerun.findings
         state.pdf_crosswalk = rerun.crosswalk
+        state.pdf_not_located = rerun.not_located
         state.pdf_excluded_applied = excluded
         if columns != columns_applied or words != words_applied:
             # A newly chosen column or typed word brings terms the first run

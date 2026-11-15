@@ -7,6 +7,7 @@ Collected here, they are the presentation layer's single rendering vocabulary.
 
 from __future__ import annotations
 
+import math
 from collections import Counter
 from collections.abc import Mapping, Sequence
 
@@ -638,15 +639,81 @@ def review_status(
     return " · ".join(parts) + "."
 
 
-def apply_notice(left_visible: frozenset[str]) -> str:
-    """Return the confirmation shown once after Apply rebuilds the file."""
-    if not left_visible:
-        return "Rebuilt the file. Every detected term is hidden."
-    n = len(left_visible)
-    verb = "is" if n == 1 else "are"
+def apply_notice(left_visible: frozenset[str], not_located: int = 0) -> str:
+    """Return the confirmation shown once after Apply rebuilds the file.
+
+    "Every detected term is hidden" is said only when it is true: no term
+    left visible on purpose and none the PDF search failed to find.
+    """
+    parts = ["Rebuilt the file."]
+    if left_visible:
+        n = len(left_visible)
+        verb = "is" if n == 1 else "are"
+        parts.append(
+            f"{plural(n, 'term')} {verb} left visible; "
+            "they are listed above the download."
+        )
+    if not_located:
+        verb = "was" if not_located == 1 else "were"
+        parts.append(
+            f"{plural(not_located, 'detected term')} {verb} not found on the "
+            "page and may still show; see the warning above."
+        )
+    if len(parts) == 1:
+        parts.append("Every detected term is hidden.")
+    return " ".join(parts)
+
+
+def pdf_job_size_note(
+    scanned: int,
+    total_pages: int,
+    *,
+    reading_scans: bool,
+    seconds_per_page: float,
+    large_pages: int,
+) -> str:
+    """Say up front how long a big PDF will take; empty for a quick one.
+
+    The OCR estimate shows once reading the scans would take a minute or
+    more; the page-count warning once the file has ``large_pages`` pages.
+    """
+    parts = []
+    seconds = scanned * seconds_per_page if reading_scans else 0
+    if seconds >= 60:
+        minutes = math.ceil(seconds / 60)
+        parts.append(
+            f"**{plural(scanned, 'scanned page')}, about "
+            f"{plural(minutes, 'minute')} to read.** Scanned pages are read "
+            "one at a time; leave this tab open until the review appears."
+        )
+    if total_pages >= large_pages:
+        parts.append(
+            f"**This PDF has {plural(total_pages, 'page')}.** A file this long "
+            "can take a long time and a lot of memory, and a run cannot be "
+            "stopped halfway. Consider splitting it into smaller files."
+        )
+    return "\n\n".join(parts)
+
+
+def not_located_warning(not_located: Sequence[Finding]) -> str:
+    """Warn about detected terms the PDF search could not find on the page.
+
+    Nothing covers these: the text was read from the page, but no search
+    variant matched the page's own text (ligatures, unusual encoding). The
+    terms are listed for the operator's own screen, never logged.
+    """
+    if not not_located:
+        return ""
+    pages = sorted({f.page for f in not_located})
+    terms = ", ".join(sorted({f"`{f.detected_text}`" for f in not_located}))
+    n = len(not_located)
     return (
-        f"Rebuilt the file. {plural(n, 'term')} {verb} left visible; "
-        "they are listed above the download."
+        f"**{plural(n, 'detected term')} could not be found on the page, so "
+        f"{'it is' if n == 1 else 'they are'} not covered** ({_page_list(pages)}): "
+        f"{terms}. The text was read from the PDF, but its letters are stored "
+        "in a way the search could not match. Check those pages in the "
+        "download before sharing it; anything still showing has to be "
+        "covered by hand."
     )
 
 
@@ -769,11 +836,13 @@ def scanned_pages_warning(
 ) -> str:
     """Explain what happened to scanned pages, read with OCR or not.
 
-    A scan is a picture of text with no text layer. A page OCR read had its
-    names redacted and, with image black-out on, everything it could not read
-    with confidence blacked out; it still deserves a look, because OCR can
-    misread. A page left unread comes out fully black with image black-out on,
-    and unredacted with it off.
+    A scan is a picture of text with no text layer, or a page that is mostly
+    such a picture under some typed text. A page OCR read had its names
+    redacted and, with image black-out on, everything it could not read with
+    confidence blacked out; it still deserves a look, because OCR can
+    misread. A page left unread has its scanned image blacked out with image
+    black-out on (for a plain scan, the whole page), and unredacted with it
+    off.
     """
     parts = []
     read_set = set(read)
@@ -798,8 +867,9 @@ def scanned_pages_warning(
     if unread:
         n = len(unread)
         outcome = (
-            "Black out images is on, so the download shows "
-            f"{'that page' if n == 1 else 'those pages'} fully black."
+            "Black out images is on, so the scanned image on "
+            f"{'that page' if n == 1 else 'those pages'} is blacked out in the "
+            "download."
             if images_blacked_out
             else "Black out images is off, so "
             f"{'that page goes' if n == 1 else 'those pages go'} into the download "

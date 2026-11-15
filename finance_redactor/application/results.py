@@ -92,6 +92,11 @@ class PdfRedactionResult:
 
     ``removed_links`` counts link targets (URLs, files, other documents)
     deleted from the output; their visible text went through detection.
+
+    ``not_located`` holds the findings that were detected in the page text
+    but could not be found on the page itself (ligatures, encoding, OCR
+    drift), so nothing covers them. They are still in ``findings``; the UI
+    must warn about them rather than say every term is hidden.
     """
 
     data: bytes
@@ -100,6 +105,7 @@ class PdfRedactionResult:
     crosswalk: list[Assignment]
     source_bracketed_numbers: int = 0
     removed_links: int = 0
+    not_located: tuple[Finding, ...] = ()
 
     @property
     def entity_count(self) -> int:

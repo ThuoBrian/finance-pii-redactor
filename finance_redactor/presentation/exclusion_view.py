@@ -65,6 +65,7 @@ def render_deselect_editor(
     *,
     key_prefix: str,
     excluded: frozenset[str] = frozenset(),
+    not_located: int = 0,
 ) -> frozenset[str]:
     """Render the tickable detections table and return the terms to exclude.
 
@@ -86,6 +87,11 @@ def render_deselect_editor(
     editor is re-keyed (``version``) whenever the rows or ticks change under
     it. ``excluded`` is the *applied* set; a change of it, or of the
     findings, resets the pending set to it.
+
+    ``not_located`` counts detected terms the last build could not find on
+    the page (PDF only). The Apply confirmation is worded on the run after the
+    rebuild, from that run's count, so it never says every term is hidden
+    when one was not found.
 
     The editor's input is built from ``base``, a copy of the pending set taken
     at the last re-key, never from the live one. Streamlit counts the input
@@ -127,9 +133,12 @@ def render_deselect_editor(
 
     # Rendered in the review step's "Review" tab, so no expander of its own.
     with st.container():
-        notice = state.pop(notice_key, None)
-        if notice:
-            st.success(notice)
+        # The set applied on the click, worded now: this run sees the
+        # rebuilt file's ``not_located`` count, the click's run did not.
+        applied = state.pop(notice_key, None)
+        if applied is not None:
+            box = st.warning if not_located else st.success
+            box(apply_notice(applied, not_located))
         # Filled at the end, once this run's ticks are known; drawn here so
         # the line sits at the top where the reviewer looks first. It carries
         # the term count, so there is no separate heading.
@@ -245,7 +254,7 @@ def render_deselect_editor(
 
     status_slot.caption(review_status(overview, excluded, pending))
     if clicked:
-        state[notice_key] = apply_notice(pending)
+        state[notice_key] = pending
 
     # Ticks reach the script on every toggle, so the returned set must stay
     # the *applied* one until Apply is clicked: callers rebuild the output
