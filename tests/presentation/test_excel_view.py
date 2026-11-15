@@ -198,6 +198,69 @@ def test_a_long_tab_says_what_the_preview_hides_and_pages_through_it() -> None:
     assert len(table.value) == 203
 
 
+def test_no_size_warning_for_an_ordinary_workbook() -> None:
+    import pandas as pd
+
+    from finance_redactor.presentation.excel_view import scan_size_warning
+
+    df = pd.DataFrame({"notes": [f"value {n}" for n in range(2_999)]})
+
+    assert scan_size_warning({"Jan": df}, {"Jan": ["notes"]}) is None
+
+
+def test_many_distinct_values_warn_with_a_time_range() -> None:
+    import pandas as pd
+
+    from finance_redactor.presentation.excel_view import scan_size_warning
+
+    df = pd.DataFrame(
+        {"notes": [f"value {n}" for n in range(30_000)], "other": ["x"] * 30_000}
+    )
+
+    message = scan_size_warning({"Jan": df}, {"Jan": ["notes"]})
+
+    assert message is not None
+    assert "30,000 distinct values" in message
+    assert "roughly 8 to 17 minutes" in message
+    assert "held in memory" not in message  # 60,000 cells is not big
+
+
+def test_distinct_values_count_only_chosen_columns_and_repeat_once() -> None:
+    import pandas as pd
+
+    from finance_redactor.presentation.excel_view import scan_size_warning
+
+    df = pd.DataFrame(
+        {
+            "notes": [f"value {n % 100}" for n in range(3_000)],
+            "unchosen": [f"other {n}" for n in range(3_000)],
+        }
+    )
+
+    assert scan_size_warning({"Jan": df}, {"Jan": ["notes"]}) is None
+
+
+def test_a_very_big_workbook_warns_about_memory_too() -> None:
+    import pandas as pd
+
+    from finance_redactor.presentation.excel_view import scan_size_warning
+
+    df = pd.DataFrame({"a": ["same"] * 250_000, "b": [1] * 250_000})
+
+    message = scan_size_warning({"Jan": df}, {"Jan": ["a"]})
+
+    assert message is not None
+    assert "500,000 cells" in message
+    assert "held in memory" in message
+    assert "minutes" not in message  # one distinct value scans quickly
+
+
+def test_the_size_warning_shows_on_the_options_step() -> None:
+    at = _start({"Payments": {"notes": [f"value {n}" for n in range(3_000)]}})
+
+    assert any("large job" in w.value for w in at.warning)
+
+
 def _downloads(at: AppTest) -> list[str]:
     return [element.proto.label for element in at.get("download_button")]
 

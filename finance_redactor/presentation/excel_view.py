@@ -44,6 +44,13 @@ from finance_redactor.presentation.session import (
 )
 from finance_redactor.presentation.steps import show_step
 
+# Scan-size warning (see scan_size_warning). About a minute of scanning, or a
+# workbook big enough that holding it twice in memory starts to drag.
+_SLOW_SCAN_VALUES = 3_000
+_BIG_WORKBOOK_CELLS = 500_000
+_FAST_VALUES_PER_SECOND = 60
+_SLOW_VALUES_PER_SECOND = 30
+
 
 def run_excel_flow(
     uploaded: Any,
@@ -93,6 +100,51 @@ def run_excel_flow(
         _review_step(excel_service, steps)
         return
     _download_step(sheets, excel_gateway, steps)
+
+
+def scan_size_warning(
+    sheets: dict[str, pd.DataFrame], columns_by_sheet: dict[str, list[str]]
+) -> str | None:
+    """Warn before a scan that will take minutes or a lot of memory, else None.
+
+    The scan analyzes each distinct value once, so its time follows the
+    distinct values in the chosen columns, not the row count. The rate range
+    is rough: the real engine checked about 48 values a second on a
+    development laptop, and the master list and longer cells slow it down.
+    lean-dev: a warning only, no chunking or abort.
+    """
+    n_cells = sum(df.size for df in sheets.values())
+    distinct = len(
+        {
+            value
+            for name, df in sheets.items()
+            for col in columns_by_sheet.get(name, [])
+            if col in df.columns
+            for value in df[col].dropna().unique()
+        }
+    )
+    slow = distinct >= _SLOW_SCAN_VALUES
+    big = n_cells >= _BIG_WORKBOOK_CELLS
+    if not (slow or big):
+        return None
+    parts = [
+        f"This is a large job: {n_cells:,} cells, with {distinct:,} distinct "
+        "values in the chosen columns."
+    ]
+    if slow:
+        low = max(1, round(distinct / _FAST_VALUES_PER_SECOND / 60))
+        high = max(low + 1, round(distinct / _SLOW_VALUES_PER_SECOND / 60))
+        parts.append(f"Expect the scan to take roughly {low:,} to {high:,} minutes.")
+    if big:
+        parts.append(
+            "The whole workbook is held in memory while you work, so the "
+            "app may be slow to respond."
+        )
+    parts.append(
+        "Keep this page open while it runs. To make it quicker, choose fewer "
+        "tabs or columns under Customize."
+    )
+    return " ".join(parts)
 
 
 def name_summary(names: list[str], shown: int = 2) -> str:
@@ -196,6 +248,11 @@ def _options_step(
     if not any(columns_by_sheet.values()):
         st.warning("Choose at least one column to scan, under Customize.")
         return
+    estimate = scan_size_warning(
+        {name: sheets[name] for name in selected_tabs}, columns_by_sheet
+    )
+    if estimate:
+        st.warning(estimate)
 
     if st.button("Redact my file", type="primary", width="stretch"):
         with st.status("Scanning for names...", expanded=True) as status:

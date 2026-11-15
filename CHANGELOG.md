@@ -82,6 +82,10 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **A warning before a large Excel scan.** When the chosen columns hold 3,000
+  or more distinct values, or the workbook has 500,000 or more cells, the
+  Options step says so before you start, with a rough time (about 30 to 60
+  values a second) and a note that fewer tabs or columns make it quicker.
 - **Long Excel tabs can be paged through in the preview.** The preview stopped
   at 500 rows with a small caption. A longer tab now gets a "Rows to preview"
   picker (500 rows at a time) and a clear note saying how many rows and
