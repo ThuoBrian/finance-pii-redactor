@@ -87,10 +87,12 @@ def _options_step(
     state.setdefault("docx_entities", list(settings.supported_entities))
 
     with st.expander("Customize: kinds of information, confidence"):
+        # The detection threshold. Capped at the score master-list matches
+        # get: anything higher drops every one (as in Excel).
         st.slider(
             "Confidence threshold",
             min_value=0.1,
-            max_value=1.0,
+            max_value=settings.custom_match_score,
             step=0.05,
             help=THRESHOLD_HELP,
             key="docx_threshold",

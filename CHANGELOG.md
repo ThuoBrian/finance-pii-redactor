@@ -260,6 +260,9 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **Word's confidence slider stops at 0.90**, like Excel's. Above that, every
+  master-list match is dropped, which the slider's own help text warns
+  against. (PDF has no confidence slider; it runs at fixed settings.)
 - **Going back to Options and redacting again keeps your review.** Changing
   one option used to wipe every untick from the Review step. Terms you
   unticked, and PDF table columns you added, now carry over to the new run
