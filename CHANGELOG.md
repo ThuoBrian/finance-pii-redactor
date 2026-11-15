@@ -224,6 +224,10 @@ the `version` field in `pyproject.toml`.
   so that name was never detected. Such rows are still not loaded, but the
   master-list card now lists them under "things to tidy" ("N row(s) skipped
   because their Category cell doesn't match").
+- **A damaged or password-protected master list no longer crashes the app.**
+  A truncated, encrypted or locked workbook used to stop the app with a raw
+  error. It now loads 0 names like a missing file does, offers the setup
+  dialog, and the master-list card says the list could not be opened and why.
 - **Review tick boxes respond to a single click.** Every other tick or
   untick in the "Hide in output?" column was ignored, so a box seemed to
   need a double click. Each click now registers.

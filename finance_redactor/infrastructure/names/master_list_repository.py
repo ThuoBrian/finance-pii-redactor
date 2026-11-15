@@ -10,7 +10,8 @@ pseudonymization. From one workbook this repository derives:
 Format: one sheet per category, with columns ``Category``, ``Internal ID``,
 ``Name``, ``Primary Subsidiary``, ``Country``. ``Internal ID`` may be blank
 (the name is still detected, but pseudonymizes to a flagged auto-id). A missing
-file yields empty results. Parsing is cached per instance and refreshed when the
+file yields empty results; so does a damaged, password-protected or locked one,
+with the reason surfaced through ``quality_report``. Parsing is cached per instance and refreshed when the
 file modification time changes.
 
 Staff names imported from legacy sources sometimes embed the ID inside the
@@ -21,6 +22,7 @@ Staff names imported from legacy sources sometimes embed the ID inside the
 from __future__ import annotations
 
 import re
+import zipfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -89,6 +91,9 @@ class MasterListRepository:
         # Filled by _parse alongside _rows: rows dropped because their
         # Category cell doesn't match their sheet, as (sheet, name) pairs.
         self._skipped: list[tuple[str, str]] = []
+        # Set by _parse when the file exists but can't be read; the list then
+        # loads 0 names, the same degraded state as a missing file.
+        self._load_error: str | None = None
 
     def rows(self) -> list[MasterRow]:
         """Return the parsed rows for known categories (cached by mtime)."""
@@ -235,6 +240,21 @@ class MasterListRepository:
         rows = self.rows()
         issues: list[QualityIssue] = []
         limit = self._EXAMPLE_LIMIT
+
+        if self._load_error:
+            issues.append(
+                QualityIssue(
+                    kind="unreadable_workbook",
+                    severity=SEVERITY_WARNING,
+                    title="The master list could not be opened",
+                    detail=(
+                        f"{self._load_error} No names are loaded, so only "
+                        "names the language model spots are redacted."
+                    ),
+                    examples=[f"`{self._path.name}`"],
+                    total=1,
+                )
+            )
 
         # Rows dropped at parse time. Listed first: these names are not
         # loaded at all, so nothing will detect them.
@@ -411,13 +431,32 @@ class MasterListRepository:
             return None
 
     def _parse(self) -> list[MasterRow]:
+        self._skipped = []
+        self._load_error = None
         try:
             workbook = pd.read_excel(self._path, sheet_name=None, engine="openpyxl")
         except FileNotFoundError:
             return []
+        except zipfile.BadZipFile:
+            # openpyxl raises this for a truncated or non-xlsx file, and for a
+            # password-protected one (Excel wraps those in an OLE container).
+            self._load_error = (
+                "It isn't a readable .xlsx file: it may be damaged, "
+                "password-protected, or another format renamed to .xlsx."
+            )
+            return []
+        except PermissionError:
+            self._load_error = (
+                "Access was denied. Close it in Excel (or wait for Box to "
+                "finish syncing) and Refresh."
+            )
+            return []
+        except (ValueError, OSError, KeyError):
+            # Never echo the exception text: it can quote workbook content.
+            self._load_error = "The workbook couldn't be read."
+            return []
 
         rows: list[MasterRow] = []
-        self._skipped = []
         for category, sheet_name in self._category_sheets.items():
             if category not in self._categories:
                 continue
