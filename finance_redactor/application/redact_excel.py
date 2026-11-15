@@ -295,18 +295,26 @@ class RedactExcelService:
         for col in {cell.column for cell in scan_result.findings} & set(columns):
             if redacted[col].dtype != object:
                 redacted[col] = redacted[col].astype(object)
+        # ``cell.row`` is a position (see ``_cells``), so read and write by
+        # position too; ``.at`` would look it up as an index label.
+        col_positions = {col: pos for pos, col in enumerate(df.columns)}
         for cell in scan_result.findings:
             if cell.column not in columns:
                 continue
-            text = _cell_text(df.at[cell.row, cell.column])
+            col_pos = col_positions[cell.column]
+            text = _cell_text(df.iat[cell.row, col_pos])
             replaced = self._replace(text, cell.detections, exclude, pseudonymizer)
             if replaced != text:
-                redacted.at[cell.row, cell.column] = replaced
+                redacted.iat[cell.row, col_pos] = replaced
         return redacted
 
 
 def _cells(df: pd.DataFrame, columns: list[str]) -> list[tuple[int, str, str]]:
-    """``(row, column, text)`` for every cell of the named columns."""
+    """``(row, column, text)`` for every cell of the named columns.
+
+    ``row`` is the row's position (0 for the first data row), not its index
+    label: the writer and the preview place cells by position.
+    """
     return [
         (row_idx, col, _cell_text(value))
         for col in columns

@@ -343,6 +343,20 @@ def test_two_headers_redacting_to_one_name_both_survive():
     assert list(data.iloc[0]) == [1, 2]
 
 
+def test_rows_are_found_and_replaced_by_position_not_index_label():
+    """A frame whose index is not 0..n-1 still has the right cell replaced."""
+    service = _service(CountingDetector())
+    df = pd.DataFrame({"notes": ["ok", "John paid"]}, index=[10, 11])
+    scan = service.scan(df, ["notes"], ["PERSON"], 0.35)
+
+    redacted, crosswalk = service.redact(df, scan, ["notes"])
+
+    assert scan.cell_keys() == {(1, "notes")}
+    assert redacted.iloc[0]["notes"] == "ok"
+    assert redacted.iloc[1]["notes"] == f"{crosswalk[0].pseudonym} paid"
+    assert list(redacted.index) == [10, 11]
+
+
 def test_an_excluded_header_keeps_its_name():
     service = _service(CountingDetector())
     sheets = {"Jan": pd.DataFrame({"John": ["ok"]})}
