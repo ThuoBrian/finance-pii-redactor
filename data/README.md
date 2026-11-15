@@ -121,8 +121,10 @@ Each sheet must have these columns:
     `Corp` = `Corporation`, `Co` = `Company` (with or without a trailing period);
     `LLC` and `PLC` match with or without a period.
   - `&` and `and` swapped between words (`Smith & Co` = `Smith and Co`).
+  - Accents and case: `José García` = `Jose Garcia` = `JOSE GARCIA`.
 
-  Spelling, word order, and middle initials are **not** matched automatically —
+  Spelling, word order, middle initials and surnames on their own are **not**
+  matched automatically —
   add a separate row for each genuinely distinct surface form. For `Staff`,
   legacy entries sometimes embed the ID inside the name (e.g. `Jane Doe - 10001`).
   The app strips a trailing `- <digits>` and uses the `Internal ID` column as

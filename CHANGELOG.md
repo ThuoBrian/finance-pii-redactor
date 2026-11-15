@@ -246,6 +246,15 @@ the `version` field in `pyproject.toml`.
   `~/.finance_pii_redactor/settings.json` next to the folder setting, and
   cleared as soon as a master list loads with names, so a list that later
   goes missing still prompts.
+- **Master-list names match with or without accents.** `Jose Garcia` in a
+  document was missed by the master-list matcher when the row said
+  `José García`, and the other way round. Both sides are now accent- and
+  case-folded one character at a time, so the redaction still covers exactly
+  the document's characters, and the match resolves to the row's curated ID
+  (unless two rows differ only by accents and have different IDs, in which
+  case it gets a flagged auto-code). This also fixes an offset bug: a
+  dotted capital `İ` anywhere before a name shifted that name's redaction one
+  character to the right. Surname-only matching stays off, as before.
 - **Review tick boxes respond to a single click.** Every other tick or
   untick in the "Hide in output?" column was ignored, so a box seemed to
   need a double click. Each click now registers.

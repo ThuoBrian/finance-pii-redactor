@@ -14,6 +14,7 @@ constants module, removing the duplicated ``0.9`` magic number.
 
 from __future__ import annotations
 
+import functools
 import re
 
 import ahocorasick
@@ -28,6 +29,7 @@ from finance_redactor.domain.entities import Span
 from finance_redactor.domain.pdf_text_normalizer import (
     normalize_pdf_text,
 )
+from finance_redactor.domain.pseudonyms import fold_diacritics
 
 # Matches Python regex \w (Unicode word character): used to replicate \b-style
 # boundary checks against automaton match positions instead of a regex engine.
@@ -38,13 +40,39 @@ def _is_word_char(ch: str) -> bool:
     return bool(_WORD_CHAR.match(ch))
 
 
+@functools.cache
+def _fold_char(ch: str) -> str:
+    """Accent-fold and case-fold one character into exactly one character.
+
+    ``str.lower()`` on a whole string is not length-preserving (``İ`` becomes
+    two characters), which would shift every match offset after it. Folding
+    per character, and keeping the character as-is when a fold would expand
+    it (``ß`` casefolds to ``ss``), keeps the haystack the same length as the
+    text, so automaton positions map straight back.
+    """
+    folded = fold_diacritics(ch)
+    for candidate in (folded.casefold(), folded.lower()):
+        if len(candidate) == 1:
+            return candidate
+    return folded
+
+
+def match_fold(text: str) -> str:
+    """Fold ``text`` for matching: no accents, no case, same length.
+
+    Applied to both the automaton keys and the haystack, so ``Jose Garcia``
+    in a document matches a ``José García`` list entry and vice versa.
+    """
+    return "".join(_fold_char(ch) for ch in text)
+
+
 class CustomNameRecognizer(EntityRecognizer):
     r"""Recognizes names supplied via the master list.
 
     Every alias variant of every loaded name (org-suffix equivalents, ``&``/
     ``and`` swaps — see :mod:`finance_redactor.domain.aliases`) is inserted as a
-    literal key into one Aho-Corasick automaton per entity type, lowercased for
-    case-insensitive matching. ``analyze`` then makes one pass over the
+    literal key into one Aho-Corasick automaton per entity type, folded with
+    :func:`match_fold` for case- and accent-insensitive matching. ``analyze`` then makes one pass over the
     (whitespace-normalized) input text: automaton matches are exact literal hits,
     so equivalents that a regex would express with ``\\s+`` or alternation are
     instead pre-expanded into separate literal keys before matching, and a
@@ -69,7 +97,7 @@ class CustomNameRecognizer(EntityRecognizer):
         automaton = ahocorasick.Automaton()
         for raw_name in self.names:
             for variant in aliases(raw_name):
-                key = variant.lower()
+                key = match_fold(variant)
                 if key:
                     # Later names win ties on an identical alias key; harmless,
                     # since this only affects the informational explanation
@@ -102,7 +130,7 @@ class CustomNameRecognizer(EntityRecognizer):
         # cells, or PDF text already normalized upstream — reapplying here is
         # a no-op in that case). `to_raw_span` maps matches back to `text`.
         normalized = normalize_pdf_text(text)
-        haystack = normalized.text.lower()
+        haystack = match_fold(normalized.text)
 
         results: list[RecognizerResult] = []
         for end_index, (raw_name, key_len) in self._automaton.iter(haystack):

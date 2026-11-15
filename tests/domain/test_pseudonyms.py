@@ -256,6 +256,40 @@ def test_typed_custom_word_resolves_across_accents():
     assert assignment.internal_id == "10020"
 
 
+def test_detected_person_resolves_across_accents_both_ways():
+    """The master-list recognizer folds accents, so resolution must too."""
+    master = {
+        ("PERSON", normalize("José García")): MasterEntry(
+            "STF-10020", "Staff", internal_id="10020"
+        ),
+        ("PERSON", normalize("Ana Testname")): MasterEntry(
+            "STF-10021", "Staff", internal_id="10021"
+        ),
+    }
+    p = Pseudonymizer(master, _AUTO_PREFIXES)
+
+    assert p.assign("PERSON", "Jose Garcia").internal_id == "10020"
+    assert p.assign("PERSON", "Ána Téstname").internal_id == "10021"
+
+
+def test_accent_variants_with_different_ids_refuse_rather_than_guess():
+    master = {
+        ("PERSON", normalize("José Testcase")): MasterEntry(
+            "STF-1", "Staff", internal_id="1"
+        ),
+        ("PERSON", normalize("Josè Testcase")): MasterEntry(
+            "STF-2", "Staff", internal_id="2"
+        ),
+    }
+    p = Pseudonymizer(master, _AUTO_PREFIXES)
+
+    # Exact spellings still win outright...
+    assert p.assign("PERSON", "José Testcase").internal_id == "1"
+    # ...but an unaccented form matching both gets no curated ID.
+    assignment = p.assign("PERSON", "Jose Testcase")
+    assert (assignment.auto, assignment.ambiguous) == (True, True)
+
+
 def test_person_never_widens_to_an_organization_row():
     """A typed entity type that misses is a genuine miss.
 

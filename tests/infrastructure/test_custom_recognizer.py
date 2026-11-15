@@ -10,6 +10,7 @@ import time
 
 from finance_redactor.infrastructure.detection.custom_recognizer import (
     CustomNameRecognizer,
+    match_fold,
 )
 
 
@@ -109,3 +110,44 @@ def test_master_list_name_does_not_fire_inside_a_longer_word() -> None:
     results = recognizer.analyze(text, ["ORGANIZATION"])
 
     assert [(r.start, r.end) for r in results] == [(0, 3)]
+
+
+def _person_spans(names: list[str], text: str) -> list[str]:
+    rec = CustomNameRecognizer("PERSON", names, score=0.9)
+    return [text[r.start : r.end] for r in rec.analyze(text, ["PERSON"])]
+
+
+def test_accented_list_entry_matches_unaccented_text():
+    text = "Advance to Jose Garcia for fuel"
+    assert _person_spans(["José García"], text) == ["Jose Garcia"]
+
+
+def test_unaccented_list_entry_matches_accented_text():
+    text = "Advance to JOSÉ GARCÍA for fuel"
+    assert _person_spans(["Jose Garcia"], text) == ["JOSÉ GARCÍA"]
+
+
+def test_dotted_capital_i_does_not_shift_offsets():
+    # "İ".lower() is two characters; a whole-string lower() pushed every
+    # match after it one place to the right.
+    text = "İSTANBUL office: paid Jane Testperson"
+    assert _person_spans(["Jane Testperson"], text) == ["Jane Testperson"]
+
+
+def test_dotted_capital_i_inside_a_name_matches():
+    text = "Paid İlkay Testname today"
+    assert _person_spans(["Ilkay Testname"], text) == ["İlkay Testname"]
+
+
+def test_sharp_s_matches_and_keeps_offsets():
+    # "ß".casefold() is "ss"; the fold must keep it one character.
+    text = "Straße Testvendor ß paid Jane Testperson"
+    assert _person_spans(["STRAẞE Testvendor", "Jane Testperson"], text) == [
+        "Straße Testvendor",
+        "Jane Testperson",
+    ]
+
+
+def test_match_fold_preserves_length():
+    sample = "İßẞﬁÉéÅǅ Jose"
+    assert len(match_fold(sample)) == len(sample)
