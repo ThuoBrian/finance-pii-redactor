@@ -87,6 +87,9 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **Start over asks first.** The sidebar's **Start over** used to drop the
+  file, findings, review choices and downloads on one click. It now asks for
+  confirmation, like **Close the app**, and says what will be lost.
 - **The launch window points to "Close the app".** When the app starts, the
   terminal window now says to stop it with the **Close the app** button in
   the sidebar, on Windows and macOS/Linux alike.

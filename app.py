@@ -162,10 +162,8 @@ def _main() -> None:
         )
         st.caption(f":green[●] Everything stays on this computer · [Help]({_HELP_URL})")
         # Nothing to start over from until a file is in.
-        if st.session_state.get(wizard.upload_key()) is not None and st.button(
-            "Start over", width="stretch", key="sidebar_start_over"
-        ):
-            wizard.start_over()
+        if st.session_state.get(wizard.upload_key()) is not None:
+            wizard.render_start_over()
     render_quit_control()
 
     steps = st.empty()

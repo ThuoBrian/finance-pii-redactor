@@ -89,7 +89,8 @@ what happened instead — then file it.
   separate CSV in the **Keep private** card.
 - [ ] The app opens one step at a time: Upload, Options, Review, Download.
   **Back** keeps your choices (open Customize, change something, go to
-  Review, come back). **Start over** empties the file and the results.
+  Review, come back). **Start over** asks first, then empties the file and
+  the results; **Cancel** leaves everything as it was.
 - [ ] Build a made-up formatted workbook (bold coloured header, a title row
   with merged cells, a currency column, a date column, a frozen header row,
   wide first column). The download looks the same in Excel, apart from yellow

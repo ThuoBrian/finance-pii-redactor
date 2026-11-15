@@ -176,8 +176,8 @@ you to the step before, and your choices are kept.
    and the like) are cleared.
 
 The sidebar shows your master list (how many names, when it last changed,
-anything to tidy), **Start over**, **Help and troubleshooting**, and **Close
-the app**. To change which names get which codes, edit the master list
+anything to tidy), **Start over** (it asks first, since it drops the
+findings and downloads), **Help and troubleshooting**, and **Close the app**. To change which names get which codes, edit the master list
 (`Names List - Organized.xlsx`) and click **Refresh** on that card.
 
 In Excel, every cell the tool changed is highlighted in yellow, so you can

@@ -22,6 +22,7 @@ import streamlit as st
 STEP_KEY = "wizard_step"
 UPLOAD, OPTIONS, REVIEW, DOWNLOAD = 1, 2, 3, 4
 _ROUND_KEY = "upload_round"
+_START_OVER_CONFIRM_KEY = "start_over_confirm_pending"
 
 # Option widgets whose values must survive steps where they are not drawn.
 _OPTION_KEYS = (
@@ -79,6 +80,34 @@ def start_over() -> None:
     st.session_state[_ROUND_KEY] = next_round
     st.session_state[STEP_KEY] = UPLOAD
     st.rerun()
+
+
+def render_start_over() -> None:
+    """Draw the sidebar's Start over button, with one confirm step.
+
+    Start over throws away the findings, every review choice and the files
+    built for download, so one misclick must not do it (the same two-step
+    pattern as ``shutdown.render_quit_control``).
+    """
+    state = st.session_state
+    if state.get(_START_OVER_CONFIRM_KEY):
+        st.warning(
+            "Start over? This file's findings, your review choices and the "
+            "downloads built from them will be lost. Download anything you "
+            "need first."
+        )
+        yes, cancel = st.columns(2)
+        if yes.button(
+            "Yes, start over", type="primary", width="stretch", key="start_over_yes"
+        ):
+            start_over()
+        if cancel.button("Cancel", width="stretch", key="start_over_cancel"):
+            state[_START_OVER_CONFIRM_KEY] = False
+            st.rerun()
+        return
+    if st.button("Start over", width="stretch", key="sidebar_start_over"):
+        state[_START_OVER_CONFIRM_KEY] = True
+        st.rerun()
 
 
 def nav(
