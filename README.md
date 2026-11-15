@@ -112,7 +112,8 @@ it saved, and starts it up.
 irm https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/install.ps1 | iex
 ```
 
-**macOS / Linux** (open Terminal):
+**macOS (Apple Silicon) / Linux** (open Terminal). Intel Macs aren't
+supported, because a library the tool needs has no Intel-Mac build:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/install.sh | bash
