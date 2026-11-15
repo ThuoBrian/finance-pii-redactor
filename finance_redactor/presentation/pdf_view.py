@@ -31,7 +31,6 @@ from finance_redactor.domain.errors import EncryptedPdfError, UnreadableFileErro
 from finance_redactor.domain.tables import suggested_columns
 from finance_redactor.presentation import wizard
 from finance_redactor.presentation.crosswalk_view import (
-    PDF_NAMES_TOGGLE_KEY,
     render_pdf_mapping_download,
     render_pdf_mapping_section,
     render_pdf_names_download,
@@ -52,6 +51,7 @@ from finance_redactor.presentation.presenters import (
     scanned_pages_warning,
 )
 from finance_redactor.presentation.session import (
+    PDF_COLUMNS_KEY,
     output_stem,
     reset_on_new_upload,
 )
@@ -62,8 +62,7 @@ from finance_redactor.presentation.words_view import (
     unapplied_words_note,
 )
 
-# The Review step's table-column picker (its live value).
-_COLUMNS_KEY = "pdf_columns_pending"
+_COLUMNS_KEY = PDF_COLUMNS_KEY
 
 
 def run_pdf_flow(
@@ -79,32 +78,7 @@ def run_pdf_flow(
     decodes against, and is stamped into the downloaded CSV. See
     ``presenters.pdf_mapping_dataframe``.
     """
-    reset_on_new_upload(
-        uploaded,
-        "pdf",
-        (
-            "df",
-            "findings",
-            "redacted_df",
-            "crosswalk",
-            "pdf_buffer",
-            "pdf_findings",
-            "pdf_pages",
-            "pdf_crosswalk",
-            PDF_NAMES_TOGGLE_KEY,
-            "pdf_bracketed",
-            "pdf_links",
-            "pdf_not_located",
-            "pdf_all_findings",
-            "pdf_excluded_applied",
-            "pdf_columns_applied",
-            _COLUMNS_KEY,
-            "pdf_scan_result",
-            "pdf_run",
-            "pdf_job_size",
-            "excel_bytes",
-        ),
-    )
+    reset_on_new_upload(uploaded, "pdf")
     if wizard.current() == wizard.OPTIONS or st.session_state.get("pdf_buffer") is None:
         _options_step(uploaded, pdf_service, steps)
         return

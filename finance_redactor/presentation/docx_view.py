@@ -54,26 +54,7 @@ def run_docx_flow(
     steps: Any,
 ) -> None:
     """Render the Word flow: Options, Review and Download (see ``wizard``)."""
-    reset_on_new_upload(
-        uploaded,
-        "docx",
-        (
-            "df",
-            "findings",
-            "redacted_df",
-            "crosswalk",
-            "docx_buffer",
-            "docx_findings",
-            "docx_blocks",
-            "docx_crosswalk",
-            "docx_links",
-            "docx_all_findings",
-            "docx_excluded_applied",
-            "docx_scan_result",
-            "docx_run_words",
-            "excel_bytes",
-        ),
-    )
+    reset_on_new_upload(uploaded, "docx")
     if (
         wizard.current() == wizard.OPTIONS
         or st.session_state.get("docx_buffer") is None

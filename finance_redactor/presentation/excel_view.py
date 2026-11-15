@@ -64,19 +64,6 @@ def run_excel_flow(
     is_new = reset_on_new_upload(
         uploaded,
         "excel",
-        (
-            "findings",
-            "redacted_sheets",
-            "scan_sheets",
-            "scan_columns",
-            "crosswalk",
-            "pdf_buffer",
-            "pdf_findings",
-            "pdf_pages",
-            "pdf_crosswalk",
-            "excel_excluded_applied",
-            "excel_bytes",
-        ),
         force="sheets" not in st.session_state,
     )
     if is_new:

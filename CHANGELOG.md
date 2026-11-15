@@ -253,6 +253,10 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **A Word file uploaded after a PDF no longer keeps the PDF's results in
+  memory.** Each format cleared a different list of earlier results on a new
+  upload, and Word's left out every PDF one. All three now clear the same
+  list, including half-finished review ticks.
 - **A file edited and uploaded again under the same name is scanned again.**
   The app used to treat an upload as new only when its name changed, so a
   corrected `report.pdf` uploaded over the old one showed the old scan,

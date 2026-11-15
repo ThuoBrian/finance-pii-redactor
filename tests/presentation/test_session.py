@@ -29,9 +29,9 @@ def _upload_script() -> None:
 
     buffer = BytesIO(st.session_state.get("payload", b"first version"))
     buffer.name = st.session_state.get("upload_name", "made_up.pdf")
-    if reset_on_new_upload(buffer, "pdf", ("cached_result",)):
+    if reset_on_new_upload(buffer, "pdf"):
         st.session_state["resets"] = st.session_state.get("resets", 0) + 1
-    st.session_state.setdefault("cached_result", "built")
+    st.session_state.setdefault("pdf_buffer", b"built")
 
 
 def _upload_app() -> AppTest:
@@ -47,13 +47,13 @@ def test_the_same_file_again_keeps_its_results() -> None:
 
 def test_same_name_with_different_bytes_starts_again() -> None:
     at = _upload_app()
-    at.session_state["cached_result"] = "built from the first version"
+    at.session_state["pdf_buffer"] = b"built from the first version"
 
     at.session_state["payload"] = b"edited version"
     at.run()
 
     assert at.session_state["resets"] == 2
-    assert at.session_state["cached_result"] == "built"
+    assert at.session_state["pdf_buffer"] == b"built"
 
 
 def test_same_size_and_name_but_different_bytes_starts_again() -> None:
@@ -75,3 +75,18 @@ def test_upload_identity_holds_no_file_content() -> None:
 
     assert (name, size) == ("made_up.pdf", 14)
     assert "Jane" not in digest and len(digest) == 64
+
+
+def test_a_new_upload_drops_every_format_s_results() -> None:
+    """A Word file after a PDF must not keep the PDF's buffers or names toggle."""
+    at = _upload_app()
+    for key in ("docx_buffer", "pdf_names_mapping_toggle", "pdf_review_pending"):
+        at.session_state[key] = "from the old file"
+    at.session_state["pdf_custom_words"] = "kept"
+
+    at.session_state["upload_name"] = "other_made_up.pdf"
+    at.run()
+
+    for key in ("docx_buffer", "pdf_names_mapping_toggle", "pdf_review_pending"):
+        assert key not in at.session_state
+    assert at.session_state["pdf_custom_words"] == "kept"
