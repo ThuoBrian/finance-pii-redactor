@@ -1,8 +1,9 @@
 [theme]
 # No forced base: with both [theme.light] and [theme.dark] defined below, the
 # app follows each person's system light or dark setting. (toolbarMode =
-# "minimal" hides Streamlit's settings menu, so there is no in-app switch.) The logo is white-on-transparent, so app.py
-# draws it on its own dark panel, which reads in either theme.
+# "minimal" hides Streamlit's settings menu, so there is no in-app switch.)
+# The logo is white-on-transparent, so app.py draws it on its own dark panel,
+# which reads in either theme.
 baseRadius = "0.75rem"
 buttonRadius = "0.5rem"
 # Fonts stay on Streamlit's bundled default: no web fonts, so the app makes
