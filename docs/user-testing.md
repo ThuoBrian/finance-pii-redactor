@@ -77,6 +77,8 @@ what happened instead — then file it.
   less.
 - [ ] Unchecking an entity type (e.g. `ORGANIZATION`) stops it from being
   redacted.
+- [ ] The Review step fills the window's width (the other steps stay in a
+  centered column), so a workbook with about ten columns shows them all.
 - [ ] The **Preview** tab shows one table you can scroll and sort: the
   redacted one, or the original under **Compare with original**. Changed
   cells are yellow and start with `»`. A tab over 500 rows shows 500 at a

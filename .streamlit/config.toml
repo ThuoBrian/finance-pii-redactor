@@ -1,7 +1,7 @@
 [theme]
-# No forced base: defining both [theme.light] and [theme.dark] below lets
-# each person keep their own light or dark preference (Streamlit's settings
-# menu switches between them). The logo is white-on-transparent, so app.py
+# No forced base: with both [theme.light] and [theme.dark] defined below, the
+# app follows each person's system light or dark setting. (toolbarMode =
+# "minimal" hides Streamlit's settings menu, so there is no in-app switch.) The logo is white-on-transparent, so app.py
 # draws it on its own dark panel, which reads in either theme.
 baseRadius = "0.75rem"
 buttonRadius = "0.5rem"

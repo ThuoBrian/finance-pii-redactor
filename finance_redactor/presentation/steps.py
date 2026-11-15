@@ -17,6 +17,7 @@ import streamlit as st
 from finance_redactor.presentation.presenters import plural
 
 STEPS = ("Upload", "Options", "Review", "Download")
+_REVIEW = 3
 
 
 def steps_markdown(current: int) -> str:
@@ -55,5 +56,13 @@ def progress_bar(unit: str) -> Callable[[int, int], None]:
 
 
 def show_step(placeholder: Any, current: int) -> None:
-    """Draw the tracker into ``placeholder`` (an ``st.empty()``)."""
+    """Draw the tracker into ``placeholder`` (an ``st.empty()``), and set the layout.
+
+    Review gets the wide layout: in the centered column a 10-column Excel
+    preview showed 4 columns, and the review table's details view hid 3 of
+    its 8. The prose steps stay centered. The pinned Streamlit lets
+    ``st.set_page_config`` be called again in a run, and the last call wins,
+    as the tracker's does.
+    """
+    st.set_page_config(layout="wide" if current == _REVIEW else "centered")
     placeholder.markdown(steps_markdown(current), text_alignment="center")

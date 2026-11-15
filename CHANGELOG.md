@@ -94,11 +94,14 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **The Review step uses the full width of the window.** Measured in the
+  centered column, a 10-column Excel preview showed 4 columns and the review
+  table's **Show details** view hid 3 of its 8. Review now switches to the
+  wide layout; Upload, Options and Download stay centered.
 - **The app follows your light or dark preference.** Dark mode was forced
   for the logo's sake. `.streamlit/config.toml` now defines a light and a
-  dark theme with the same blue accent, so each person gets their system
-  setting and can switch in Streamlit's settings menu. The logo sits on a
-  dark panel that works in both.
+  dark theme with the same blue accent, and the app follows each person's
+  system setting. The logo sits on a dark panel that works in both.
 - **Consistent, readable wording across the steps.** The step tracker says
   "Options", like the page. The Review tab counts every term as well as the
   guesses ("Review (57 terms, 2 to check)"), so it no longer reads as a
