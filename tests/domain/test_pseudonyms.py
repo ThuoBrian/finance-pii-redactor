@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+
 from finance_redactor.domain.entities import DetectionSource, PiiDetection, Span
 from finance_redactor.domain.pseudonyms import (
     MasterEntry,
@@ -43,6 +45,17 @@ def test_unknown_name_gets_stable_auto_id():
     assert a.pseudonym.startswith("PSN-AUTO-")
     # Deterministic across instances and insensitive to case/whitespace.
     assert a.pseudonym == b.pseudonym
+
+
+def test_auto_id_is_eight_hex_chars_of_sha1_of_the_normalized_name():
+    # 8 hex chars (32 bits), up from 5: a collision silently merges two
+    # identities in the crosswalk.
+    digest = hashlib.sha1(b"jane doe").hexdigest()[:8].upper()
+
+    pseudonym = Pseudonymizer({}, _AUTO_PREFIXES).assign("PERSON", "Jane Doe").pseudonym
+
+    assert pseudonym == f"PSN-AUTO-{digest}"
+    assert len(pseudonym.removeprefix("PSN-AUTO-")) == 8
 
 
 def test_auto_prefix_follows_entity_type():

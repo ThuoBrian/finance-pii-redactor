@@ -126,7 +126,7 @@ class MasterEntry:
     ``internal_id`` is the raw ``Internal ID`` cell (``"17728"``), carried
     separately from ``pseudonym`` (``"VND-17728"``) because the PDF mapping
     file needs the bare ID and splitting it back out of the pseudonym string
-    is unsafe - ``"VND-17728"`` and ``"ORG-AUTO-3F9A1"`` have the same shape.
+    is unsafe - ``"VND-17728"`` and ``"ORG-AUTO-3F9A1C07"`` have the same shape.
     Both fields describe the same row; change them together.
     """
 
@@ -190,7 +190,7 @@ class Pseudonymizer:
         self,
         master_map: Mapping[tuple[str, str], MasterEntry],
         auto_prefixes: Mapping[str, str],
-        auto_hash_length: int = 5,
+        auto_hash_length: int = 8,
         fuzzy_threshold: float = 0.84,
     ) -> None:
         """Wire the curated master map and the auto-id prefix table.

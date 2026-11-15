@@ -61,7 +61,7 @@ class MasterRow:
     rather than one derived from the other because the quality checks and the
     UI key off ``pseudonym`` while the PDF mapping file needs the bare id;
     recovering the id by splitting the pseudonym is unsafe, since
-    ``"VND-17728"`` and ``"ORG-AUTO-3F9A1"`` have the same shape. Change them
+    ``"VND-17728"`` and ``"ORG-AUTO-3F9A1C07"`` have the same shape. Change them
     together.
 
 

@@ -38,7 +38,9 @@ def test_redact_page_removes_name_split_across_a_line_break():
     document = PyMuPdfDocument.open(_wrapped_name_pdf_bytes())
     assert document.page_text(0).startswith("Acme Sup-\nplies")
 
-    document.redact_page(0, [(["Acme Supplies", "Acme Sup-\nplies"], "ORG-AUTO-D4D8B")])
+    document.redact_page(
+        0, [(["Acme Supplies", "Acme Sup-\nplies"], "ORG-AUTO-D4D8B6F0")]
+    )
     redacted_bytes = document.to_bytes()
     document.close()
 
@@ -48,7 +50,7 @@ def test_redact_page_removes_name_split_across_a_line_break():
 
     assert "Acme" not in text
     assert "Sup" not in text
-    assert text.count("ORG-AUTO-D4D8B") == 1
+    assert text.count("ORG-AUTO-D4D8B6F0") == 1
 
 
 def test_search_variants_collapses_whitespace():
@@ -181,7 +183,7 @@ def test_open_accepts_an_owner_password_only_pdf():
     assert document.page_count == 1
     assert "jane.test@example.org" in document.page_text(0)
 
-    document.redact_page(0, [("jane.test@example.org", "EML-AUTO-1A2B3")])
+    document.redact_page(0, [("jane.test@example.org", "EML-AUTO-1A2B3C4D")])
     redacted_bytes = document.to_bytes()
     document.close()
 
@@ -191,7 +193,7 @@ def test_open_accepts_an_owner_password_only_pdf():
 
     assert "jane.test" not in text
     assert "example.org" not in text
-    assert "EML-AUTO-1A2B3" in text
+    assert "EML-AUTO-1A2B3C4D" in text
     # The redacted copy is what gets downloaded, so the address must be gone
     # from the raw bytes too, not merely covered in the rendered page.
     assert b"jane.test@example.org" not in redacted_bytes

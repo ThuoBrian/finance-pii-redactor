@@ -82,6 +82,15 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **Behavior change: auto-generated codes are longer, so every one differs
+  from earlier runs.** A name not on the master list gets a flagged code made
+  from a hash of the name. That hash part is now 8 characters instead of 5
+  (`PSN-AUTO-3F9A1C07`, not `PSN-AUTO-3F9A1`), because with 5 two different
+  names in one file could share a code and be merged in the crosswalk.
+  Every `*-AUTO-*` code changes, including for names already processed, so
+  codes in older outputs or crosswalks won't match new runs: re-run a file
+  rather than comparing its codes with older ones. Curated `STF-`/`VND-`/
+  `FND-` codes and PDF labels (`[001]`) are unchanged.
 - **A calmer, narrower page.** The app now uses Streamlit's centered layout
   instead of stretching across the whole screen, so tables, captions and
   buttons stay in one readable column. The Excel preview shows the redacted

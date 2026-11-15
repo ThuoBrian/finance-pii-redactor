@@ -286,7 +286,7 @@ def test_internal_id_is_carried_separately_from_the_pseudonym(tmp_path):
     """The raw Internal ID must survive, not just the concatenated pseudonym.
 
     The PDF mapping file needs the bare ID, and recovering it by splitting
-    "STF-10010" is unsafe: an auto-id like "PSN-AUTO-1A2B3" has the same shape.
+    "STF-10010" is unsafe: an auto-id like "PSN-AUTO-1A2B3C4D" has the same shape.
     """
     rows = _repo(tmp_path, _CATEGORY_SHEETS).rows()
     by_name = {r.name: r for r in rows}

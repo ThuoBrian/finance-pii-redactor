@@ -310,7 +310,7 @@ def pdf_mapping_dataframe(
 
     Rows that resolved against the master list carry its raw ``Internal ID``.
     Rows that did not carry their deterministic auto-pseudonym instead (e.g.
-    ``CST-AUTO-3F9A1``) - a hash of the name, not the name, so the file stays
+    ``CST-AUTO-3F9A1C07``) - a hash of the name, not the name, so the file stays
     names-free, and content-addressed so the same unresolved entity still
     links across documents. It cannot be mistaken for a master-list ID, and
     the ``Flagged`` column says why it is there. Note the hash is a *linkage*
