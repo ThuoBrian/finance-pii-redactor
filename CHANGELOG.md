@@ -228,6 +228,14 @@ the `version` field in `pyproject.toml`.
   A truncated, encrypted or locked workbook used to stop the app with a raw
   error. It now loads 0 names like a missing file does, offers the setup
   dialog, and the master-list card says the list could not be opened and why.
+- **Master-list names with ` - ` are no longer cut short.** Everything after
+  a spaced dash used to be stripped, so `Acme - Kenya` became `Acme` and the
+  full form never matched. Only the legacy numeric-ID suffix
+  (`Jane Doe - 10001`) is stripped now. Other names are kept whole, and the
+  part before the dash is still matched too, so nothing that matched before
+  stops matching. The master-list card lists these names ("contain ' - '").
+  If two such rows share the short part but have different Internal IDs, a
+  bare short form gets a flagged auto-code instead of a guessed ID.
 - **Review tick boxes respond to a single click.** Every other tick or
   untick in the "Hide in output?" column was ignored, so a box seemed to
   need a double click. Each click now registers.

@@ -145,13 +145,18 @@ def test_all_three_sheets_loaded(tmp_path):
 
 
 @pytest.mark.parametrize(
-    ("raw_name", "expected"),
+    ("raw_name", "expected", "short"),
     [
-        ("Jean-Paul Sartre", "Jean-Paul Sartre"),  # no spaced dash, kept intact
-        ("Alice - Bob", "Alice"),  # spaced dash suffix stripped per user choice
+        ("Jean-Paul Testname", "Jean-Paul Testname", None),  # no spaced dash
+        ("Jane Doe - 10001", "Jane Doe", None),  # sanctioned legacy ID suffix
+        # Anything else after " - " is part of the name: kept whole, and the
+        # head is matched too (it used to be all that was kept).
+        ("Alice - Bob", "Alice - Bob", "Alice"),
+        ("Acme - Kenya", "Acme - Kenya", "Acme"),
+        ("Acme - Unit 2", "Acme - Unit 2", "Acme"),  # digits, but not only digits
     ],
 )
-def test_name_cleaning_edge_cases(tmp_path, raw_name, expected):
+def test_name_cleaning_edge_cases(tmp_path, raw_name, expected, short):
     sheets = {
         "Staff": pd.DataFrame(
             {
@@ -164,4 +169,45 @@ def test_name_cleaning_edge_cases(tmp_path, raw_name, expected):
         )
     }
     repo = _repo_with_sheets(tmp_path, sheets)
-    assert repo.rows()[0].name == expected
+    row = repo.rows()[0]
+    assert (row.name, row.short_name) == (expected, short)
+
+
+def _vendors(tmp_path, names: list[str], ids: list[int]):
+    sheets = {
+        "Vendors": pd.DataFrame(
+            {"Category": ["Vendor"] * len(names), "Internal ID": ids, "Name": names}
+        )
+    }
+    return _repo_with_sheets(tmp_path, sheets)
+
+
+def test_dashed_name_matches_full_and_short_form(tmp_path):
+    repo = _vendors(tmp_path, ["Acme - Kenya"], [7])
+
+    assert repo.names_by_entity()["ORGANIZATION"] == ["Acme - Kenya", "Acme"]
+    mapping = repo.master_map()
+    assert mapping[("ORGANIZATION", "acme - kenya")].pseudonym == "VND-7"
+    assert mapping[("ORGANIZATION", "acme")].pseudonym == "VND-7"
+    issue = {i.kind: i for i in repo.quality_report()}["dash_in_name"]
+    assert issue.total == 1
+    assert issue.examples == ["`Acme - Kenya` also matches `Acme` (Vendor)"]
+
+
+def test_shared_short_form_with_different_ids_is_not_resolved(tmp_path):
+    repo = _vendors(tmp_path, ["Acme - Kenya", "Acme - Uganda"], [7, 8])
+
+    mapping = repo.master_map()
+    assert mapping[("ORGANIZATION", "acme - kenya")].pseudonym == "VND-7"
+    assert mapping[("ORGANIZATION", "acme - uganda")].pseudonym == "VND-8"
+    # Still detected, but left to a flagged auto-id rather than a guess.
+    assert "Acme" in repo.names_by_entity()["ORGANIZATION"]
+    assert ("ORGANIZATION", "acme") not in mapping
+    # Kept whole, the two rows no longer collapse into a false ID conflict.
+    assert "conflicting_ids" not in {i.kind for i in repo.quality_report()}
+
+
+def test_short_form_never_shadows_a_row_of_that_name(tmp_path):
+    repo = _vendors(tmp_path, ["Acme - Kenya", "Acme"], [7, 9])
+
+    assert repo.master_map()[("ORGANIZATION", "acme")].pseudonym == "VND-9"

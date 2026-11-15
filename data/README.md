@@ -125,8 +125,10 @@ Each sheet must have these columns:
   Spelling, word order, and middle initials are **not** matched automatically —
   add a separate row for each genuinely distinct surface form. For `Staff`,
   legacy entries sometimes embed the ID inside the name (e.g. `Jane Doe - 10001`).
-  The app strips the trailing `- <anything>` and uses the `Internal ID` column as
-  the curated ID.
+  The app strips a trailing `- <digits>` and uses the `Internal ID` column as
+  the curated ID. Other text after ` - ` is part of the name: `Acme - Kenya`
+  is kept whole, and `Acme` on its own is matched as well (the card lists
+  these so you can check the short part isn't an ordinary word).
 - **Primary Subsidiary** and **Country** — ignored by the app; kept for reference.
 
 ## Data-quality checks (shown on load)
@@ -140,6 +142,9 @@ settings** panel so the IDs it emits stay trustworthy:
   different word (`Employee`) means the row is skipped and that name is
   **never detected**. The warning lists the skipped names; fix the cell and
   Refresh.
+- **Name contains ' - '** (info) — a name like `Acme - Kenya` is matched in
+  full and by the part before the dash (`Acme`). If that part is an ordinary
+  word it will be redacted everywhere; rename the row if that's wrong.
 - **Cross-category duplicate** (warning) — a name appears under more than one
   category. Keep each name in a single category to avoid conflicting IDs.
 - **Conflicting IDs** (warning) — the same name in the same category has two

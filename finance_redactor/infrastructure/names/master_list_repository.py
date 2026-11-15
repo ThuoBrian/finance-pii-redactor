@@ -15,8 +15,10 @@ with the reason surfaced through ``quality_report``. Parsing is cached per insta
 file modification time changes.
 
 Staff names imported from legacy sources sometimes embed the ID inside the
-``Name`` column (``Jane Doe - 10001``). Those suffixes are stripped and the
-``Internal ID`` column is always used as the curated ID.
+``Name`` column (``Jane Doe - 10001``). Those numeric suffixes are stripped and
+the ``Internal ID`` column is always used as the curated ID. Any other
+`` - ...`` suffix (``Acme - Kenya``) is kept as part of the name, and the part
+before the dash is matched as well (see ``MasterRow.short_name``).
 """
 
 from __future__ import annotations
@@ -41,8 +43,12 @@ from finance_redactor.domain.quality import (
 )
 
 _WHITESPACE = re.compile(r"\s+")
-# Strip a trailing legacy ID suffix such as "Jane Doe - 10001".
-_LEGACY_SUFFIX = re.compile(r"\s+-\s+.*$")
+# The one sanctioned legacy format: a trailing numeric ID, "Jane Doe - 10001"
+# (what scripts/migrate_to_master_list.py parsed out of person.txt). Stripped
+# silently. Anything else after a spaced dash ("Acme - Kenya") is part of the
+# name and is kept; see MasterRow.short_name.
+_LEGACY_ID_SUFFIX = re.compile(r"\s+-\s+\d+\s*$")
+_SPACED_DASH = re.compile(r"\s+-\s+")
 
 
 @dataclass(frozen=True)
@@ -57,6 +63,14 @@ class MasterRow:
     recovering the id by splitting the pseudonym is unsafe, since
     ``"VND-17728"`` and ``"ORG-AUTO-3F9A1"`` have the same shape. Change them
     together.
+
+
+    ``short_name`` is the part before a spaced dash when the name has one
+    that isn't a legacy numeric ID (``"Acme"`` for ``"Acme - Kenya"``). It is
+    detected and resolved alongside ``name`` rather than replacing it: these
+    names used to be cut to the short form, so a document that writes only
+    ``Acme`` must keep matching (dropping it would loosen detection), while
+    the full form must now match too. Over-redaction is the cheaper mistake.
     """
 
     category: str
@@ -64,6 +78,7 @@ class MasterRow:
     entity_type: str
     pseudonym: str | None  # None when the row has no curated id
     internal_id: str | None = None  # the raw Internal ID cell behind it
+    short_name: str | None = None  # part before " - ", matched as well
 
 
 class MasterListRepository:
@@ -136,7 +151,10 @@ class MasterListRepository:
         """
         grouped: dict[str, list[str]] = {}
         for row in self.rows():
-            grouped.setdefault(row.entity_type, []).append(row.name)
+            names = grouped.setdefault(row.entity_type, [])
+            names.append(row.name)
+            if row.short_name:
+                names.append(row.short_name)
         return grouped
 
     def master_map(self) -> dict[tuple[str, str], MasterEntry]:
@@ -173,6 +191,16 @@ class MasterListRepository:
             if existing is None or existing.pseudonym == entry.pseudonym:
                 mapping[key] = entry
 
+        # A short form ("Acme" from "Acme - Kenya") is only resolved when every
+        # row sharing it agrees on the ID; "Acme - Kenya" and "Acme - Uganda"
+        # with different IDs leave a bare "Acme" to a flagged auto-id rather
+        # than a coin-flip curated one. It is still detected either way.
+        short_ids: dict[tuple[str, str], set[str]] = {}
+        for row in curated:
+            if row.short_name:
+                key = (row.entity_type, normalize(row.short_name))
+                short_ids.setdefault(key, set()).add(row.pseudonym or "")
+
         for row in curated:
             assert row.pseudonym is not None
             entry = MasterEntry(
@@ -181,7 +209,12 @@ class MasterListRepository:
                 display_name=row.name,
                 internal_id=row.internal_id,
             )
-            for alias in aliases(row.name):
+            variants = list(aliases(row.name))
+            if row.short_name:
+                short_key = (row.entity_type, normalize(row.short_name))
+                if len(short_ids[short_key]) == 1:
+                    variants.extend(aliases(row.short_name))
+            for alias in variants:
                 key = (row.entity_type, normalize(alias))
                 if key not in mapping:
                     mapping[key] = entry
@@ -275,6 +308,30 @@ class MasterListRepository:
                         "Set each row's Category to its sheet's category "
                         f"(sheets: {', '.join(sheets)}), or add a Category "
                         "column if the sheet has none."
+                    ),
+                    examples=examples,
+                    total=total,
+                )
+            )
+
+        # Names with a non-ID " - " suffix: kept whole, short form matched too.
+        dashed = [row for row in rows if row.short_name]
+        if dashed:
+            items = [
+                f"`{row.name}` also matches `{row.short_name}` ({row.category})"
+                for row in dashed
+            ]
+            examples, total = cap_examples(items, limit)
+            issues.append(
+                QualityIssue(
+                    kind="dash_in_name",
+                    severity=SEVERITY_INFO,
+                    title=f"{len(dashed)} name(s) contain ' - '",
+                    detail=(
+                        "The full name is matched, and so is the part before "
+                        "' - ' on its own. If that short part is an ordinary "
+                        "word, it will be redacted wherever it appears; if the "
+                        "dash marks an old ID, put the ID in Internal ID instead."
                     ),
                     examples=examples,
                     total=total,
@@ -393,10 +450,11 @@ class MasterListRepository:
         # (e) Single-token name that is also an ordinary English word (advisory).
         ambiguous: dict[str, list[str]] = {}
         for row in rows:
-            if " " in row.name.strip():
-                continue
-            if row.name.strip().lower() in COMMON_ENGLISH_WORDS:
-                ambiguous.setdefault(row.category, []).append(row.name)
+            for name in (row.name, row.short_name):
+                if not name or " " in name.strip():
+                    continue
+                if name.strip().lower() in COMMON_ENGLISH_WORDS:
+                    ambiguous.setdefault(row.category, []).append(name)
         ambiguous_total = sum(len(v) for v in ambiguous.values())
         if ambiguous_total:
             items = [
@@ -488,8 +546,16 @@ class MasterListRepository:
                 self._skipped.append((sheet_name, name))
                 continue
             pseudonym = f"{prefix}-{id_value}" if id_value else None
+            head = _SPACED_DASH.split(name, maxsplit=1)[0].strip()
             rows.append(
-                MasterRow(category, name, entity_type, pseudonym, internal_id=id_value)
+                MasterRow(
+                    category,
+                    name,
+                    entity_type,
+                    pseudonym,
+                    internal_id=id_value,
+                    short_name=head if head and head != name else None,
+                )
             )
         return rows
 
@@ -504,7 +570,7 @@ class MasterListRepository:
         if value is None or (isinstance(value, float) and pd.isna(value)):
             return ""
         name = str(value).strip()
-        name = _LEGACY_SUFFIX.sub("", name)
+        name = _LEGACY_ID_SUFFIX.sub("", name)
         name = _WHITESPACE.sub(" ", name).strip()
         return name
 

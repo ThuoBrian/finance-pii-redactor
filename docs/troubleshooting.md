@@ -24,7 +24,7 @@ This file records known errors, edge cases, and their solutions when developing 
   - [A name followed by a bare hyphen resolves to a flagged auto-id](#a-name-followed-by-a-bare-hyphen-resolves-to-a-flagged-auto-id)
   - [The master-list card says there are things to tidy](#the-master-list-card-says-there-are-things-to-tidy)
   - [Editing the master list (or fixing its location) doesn't show up until I do *something*](#editing-the-master-list-or-fixing-its-location-doesnt-show-up-until-i-do-something)
-  - [A legacy name in the old `person.txt` had an ID appended (`Name - 90863`)](#a-legacy-name-in-the-old-persontxt-had-an-id-appended-name---90863)
+  - [A legacy name in the old `person.txt` had an ID appended (`Name - 10001`)](#a-legacy-name-in-the-old-persontxt-had-an-id-appended-name---10001)
   - [Mixed-language text causes spaCy NER to miss names](#mixed-language-text-causes-spacy-ner-to-miss-names)
   - [Can't type an accented name (`José`, `Muñoz`, `André`) into the "words to redact" box](#cant-type-an-accented-name-josé-muñoz-andré-into-the-words-to-redact-box)
   - [ALL-CAPS names and acronym false positives](#all-caps-names-and-acronym-false-positives)
@@ -194,11 +194,12 @@ This file records known errors, edge cases, and their solutions when developing 
 - **If edits never show up even after a reload or a restart of the page:** check that the key arguments of `_get_master_list_bundle` in `app.py` do not start with an underscore. Streamlit leaves such arguments out of the cache key, so the cache would never rebuild (this was a real bug, fixed in the Unreleased changes).
 - **Worth knowing if two people test against the same running server:** this cache is shared across every browser session hitting that one `streamlit run` process, not per-tab - one person's refresh benefits everyone connected to it, but it also means there's no per-user "my view is different" isolation for this particular cache.
 
-### A legacy name in the old `person.txt` had an ID appended (`Name - 90863`)
+### A legacy name in the old `person.txt` had an ID appended (`Name - 10001`)
 
 - **Symptom:** After migrating, a name that previously "never matched" now does.
-- **Cause:** The old plain-text lists sometimes embedded an ID in the name itself (`Aaron Elijah Mutungi - 90863`). The recognizer searched for the *whole string* including ` - 90863`, so it almost never matched real document text — a latent bug.
-- **Solution:** The app now reads `data/Names List - Organized.xlsx` directly and strips trailing ` - <anything>` from names on every sheet (Staff, Vendors, Funders), using the `Internal ID` column as the curated ID. If you still have legacy `.txt` lists, update `scripts/migrate_to_master_list.py` to write to the Excel workbook, or migrate manually.
+- **Cause:** The old plain-text lists sometimes embedded an ID in the name itself (`Jane Doe - 10001`). The recognizer searched for the *whole string* including ` - 10001`, so it almost never matched real document text — a latent bug.
+- **Solution:** The app now reads `data/Names List - Organized.xlsx` directly and strips a trailing ` - <digits>` from names on every sheet (Staff, Vendors, Funders), using the `Internal ID` column as the curated ID. If you still have legacy `.txt` lists, update `scripts/migrate_to_master_list.py` to write to the Excel workbook, or migrate manually.
+- **Other text after ` - ` is kept.** Only a numeric suffix is the legacy format. A name like `Acme - Kenya` used to be cut to `Acme`, so the full form never matched. It is now kept whole, and `Acme` on its own is matched too, so a document that writes either form is caught. The master-list card lists every such name under "things to tidy" ("name(s) contain ' - '"), because the short part is redacted wherever it appears: if it is an ordinary word, rename the row. If several rows share the short part with different Internal IDs (`Acme - Kenya`, `Acme - Uganda`), a bare `Acme` is still redacted but gets a flagged auto-code instead of a guessed ID.
 
 ### Mixed-language text causes spaCy NER to miss names
 
