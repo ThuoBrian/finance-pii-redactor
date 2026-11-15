@@ -170,6 +170,8 @@ def preview_styler(
 
 # Shown in the Column field of a finding that sits in a tab's name, not a cell.
 TAB_NAME_LABEL = "(tab name)"
+# Follows the header text in the Column field of a finding in a column header.
+HEADER_LABEL = "(header)"
 
 
 def excel_findings_dataframe(scan_result: WorkbookScanResult) -> pd.DataFrame:
@@ -201,6 +203,20 @@ def excel_findings_dataframe(scan_result: WorkbookScanResult) -> pd.DataFrame:
         for sheet, detections in scan_result.tab_names.items()
         for detection in detections
     ]
+    rows += [
+        {
+            "Sheet": sheet,
+            "Row": None,
+            "Column": f"{header} {HEADER_LABEL}",
+            "Detected text": detection.text,
+            "Entity type": detection.entity_type,
+            "Confidence": round(detection.score, 2),
+            "Source": detection.source.value,
+        }
+        for sheet, by_header in scan_result.headers.items()
+        for header, detections in by_header.items()
+        for detection in detections
+    ]
     return pd.DataFrame(rows, columns=_EXCEL_COLUMNS)
 
 
@@ -210,7 +226,8 @@ def scan_result_findings(scan_result: WorkbookScanResult) -> list[Finding]:
     Only so Excel can share :func:`detection_editor_dataframe` with the PDF
     and Word flows, which already work in ``Finding``. ``page`` carries the
     row index here, the same way it carries a paragraph ordinal in the Word
-    flow - see :func:`findings_dataframe` - and ``-1`` for a tab name.
+    flow - see :func:`findings_dataframe` - and ``-1`` for a tab name or a
+    column header.
     """
     cell_detections = [
         (cell.row, detection)
@@ -221,6 +238,11 @@ def scan_result_findings(scan_result: WorkbookScanResult) -> list[Finding]:
     name_detections = [
         (-1, detection)
         for detections in scan_result.tab_names.values()
+        for detection in detections
+    ] + [
+        (-1, detection)
+        for by_header in scan_result.headers.values()
+        for detections in by_header.values()
         for detection in detections
     ]
     return [

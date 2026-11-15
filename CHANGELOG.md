@@ -101,10 +101,26 @@ the `version` field in `pyproject.toml`.
   codes in older outputs or crosswalks won't match new runs: re-run a file
   rather than comparing its codes with older ones. Curated `STF-`/`VND-`/
   `FND-` codes and PDF labels (`[001]`) are unchanged.
+- **A warning before a large Excel scan.** When the chosen columns hold 3,000
+  or more distinct values, or the workbook has 500,000 or more cells, the
+  Options step says so before you start, with a rough time (about 30 to 60
+  values a second) and a note that fewer tabs or columns make it quicker.
+- **Long Excel tabs can be paged through in the preview.** The preview stopped
+  at 500 rows with a small caption. A longer tab now gets a "Rows to preview"
+  picker (500 rows at a time) and a clear note saying how many rows and
+  highlighted cells are off screen, and that the download has every row.
+- **One column picker for every Excel tab.** The Options step drew a
+  "Columns to scan" box for each tab, so a 10-tab workbook stacked ten of
+  them. Now "Which tab's columns?" picks the tab and one box shows its
+  columns; each tab keeps its own choice. The tab list above it shows the
+  first two names and "+ N more" instead of every name, and a note names any
+  tab left with no columns chosen.
 - **A calmer, narrower page.** The app now uses Streamlit's centered layout
   instead of stretching across the whole screen, so tables, captions and
-  buttons stay in one readable column. The Excel preview shows the redacted
-  table above the original instead of squeezing them side by side.
+  buttons stay in one readable column. The Excel preview shows one full-width
+  table at a time: "Redacted" first, and a "Compare with original" tab next
+  to it switches to the original, instead of squeezing the two side by side
+  or stacking them.
 - **A tidier sidebar.** The logo is shown full width, where it can be seen.
   The master-list card fits on one line, with the file location and Refresh
   folded under "Location and refresh". Help is a link next to the privacy
@@ -319,6 +335,21 @@ the `version` field in `pyproject.toml`.
   two-word name split over a line break was covered on both lines but had its
   `[001]` label stamped on each part. Only the first part is labelled now;
   both are still covered.
+- **The Excel confidence slider stops at 0.90.** Its own help text said not
+  to go above 0.90, because master-list matches score exactly 0.90 and a
+  higher threshold drops every one of them, yet the slider went to 1.0.
+- **An Excel file with nothing found can still be downloaded.** The Download
+  step used to say "Nothing was detected" and offer no file, so a workbook
+  trimmed to some tabs could not be saved. The rebuilt workbook is now
+  always offered, with the note kept above it.
+- **Excel column headers are redacted.** A name used as a column header went
+  into the download unchanged, because only cells and tab names were
+  scanned. Every header of a scanned tab is now checked, chosen column or
+  not, shows in the Review table, and is replaced and highlighted yellow.
+- **Excel IDs keep their leading zeros.** A text cell such as `0041` used to
+  come out of the redacted workbook as the number `41`. Cells are now kept as
+  written: text stays text, and numbers and dates stay numbers and dates.
+  Columns that mix text with numbers are now picked for scanning by default.
 - **Review tick boxes respond to a single click.** Every other tick or
   untick in the "Hide in output?" column was ignored, so a box seemed to
   need a double click. Each click now registers.

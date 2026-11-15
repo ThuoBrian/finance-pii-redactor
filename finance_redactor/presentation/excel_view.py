@@ -34,7 +34,6 @@ from finance_redactor.presentation.presenters import (
     excel_findings_dataframe,
     formatting_note,
     plural,
-    preview_hidden_count,
     preview_styler,
     review_tab_labels,
     scan_result_findings,
@@ -44,6 +43,13 @@ from finance_redactor.presentation.session import (
     reset_on_new_upload,
 )
 from finance_redactor.presentation.steps import show_step
+
+# Scan-size warning (see scan_size_warning). About a minute of scanning, or a
+# workbook big enough that holding it twice in memory starts to drag.
+_SLOW_SCAN_VALUES = 3_000
+_BIG_WORKBOOK_CELLS = 500_000
+_FAST_VALUES_PER_SECOND = 60
+_SLOW_VALUES_PER_SECOND = 30
 
 
 def run_excel_flow(
@@ -96,6 +102,58 @@ def run_excel_flow(
     _download_step(sheets, excel_gateway, steps)
 
 
+def scan_size_warning(
+    sheets: dict[str, pd.DataFrame], columns_by_sheet: dict[str, list[str]]
+) -> str | None:
+    """Warn before a scan that will take minutes or a lot of memory, else None.
+
+    The scan analyzes each distinct value once, so its time follows the
+    distinct values in the chosen columns, not the row count. The rate range
+    is rough: the real engine checked about 48 values a second on a
+    development laptop, and the master list and longer cells slow it down.
+    lean-dev: a warning only, no chunking or abort.
+    """
+    n_cells = sum(df.size for df in sheets.values())
+    distinct = len(
+        {
+            value
+            for name, df in sheets.items()
+            for col in columns_by_sheet.get(name, [])
+            if col in df.columns
+            for value in df[col].dropna().unique()
+        }
+    )
+    slow = distinct >= _SLOW_SCAN_VALUES
+    big = n_cells >= _BIG_WORKBOOK_CELLS
+    if not (slow or big):
+        return None
+    parts = [
+        f"This is a large job: {n_cells:,} cells, with {distinct:,} distinct "
+        "values in the chosen columns."
+    ]
+    if slow:
+        low = max(1, round(distinct / _FAST_VALUES_PER_SECOND / 60))
+        high = max(low + 1, round(distinct / _SLOW_VALUES_PER_SECOND / 60))
+        parts.append(f"Expect the scan to take roughly {low:,} to {high:,} minutes.")
+    if big:
+        parts.append(
+            "The whole workbook is held in memory while you work, so the "
+            "app may be slow to respond."
+        )
+    parts.append(
+        "Keep this page open while it runs. To make it quicker, choose fewer "
+        "tabs or columns under Customize."
+    )
+    return " ".join(parts)
+
+
+def name_summary(names: list[str], shown: int = 2) -> str:
+    """``"Jan, Feb + 8 more"``: the first few names, then a count of the rest."""
+    head = ", ".join(names[:shown])
+    rest = len(names) - shown
+    return f"{head} + {rest:,} more" if rest > 0 else head
+
+
 def _options_step(
     sheets: dict[str, pd.DataFrame],
     excel_service: RedactExcelService,
@@ -108,7 +166,7 @@ def _options_step(
     tab_names = list(sheets)
     n_rows = sum(len(df) for df in sheets.values())
     st.caption(
-        f"{plural(len(tab_names), 'tab')} ({', '.join(tab_names)}) · "
+        f"{plural(len(tab_names), 'tab')} ({name_summary(tab_names)}) · "
         f"{plural(n_rows, 'row')} · text columns are picked for you"
     )
 
@@ -137,22 +195,38 @@ def _options_step(
             if len(tab_names) > 1
             else tab_names
         )
-        for name in selected_tabs:
+        # One column picker, pointed at one tab at a time. Each tab's choice
+        # stays in its own excel_cols_{name} key (kept by keep_option_choices
+        # while its picker is not drawn), which the scan below reads.
+        tab = (
+            st.selectbox("Which tab's columns?", options=selected_tabs)
+            if len(selected_tabs) > 1
+            else next(iter(selected_tabs), None)
+        )
+        if tab is not None:
             st.multiselect(
-                "Columns to scan"
-                if len(tab_names) == 1
-                else f"Columns to scan: {name}",
-                options=list(sheets[name].columns),
-                key=f"excel_cols_{name}",
+                "Columns to scan",
+                options=list(sheets[tab].columns),
+                key=f"excel_cols_{tab}",
                 help=(
                     "Numeric and date columns are left out by default. Add a "
-                    "numeric column if it holds account or M-Pesa numbers."
+                    "numeric column if it holds account or M-Pesa numbers. "
+                    "Column headers are always checked."
                 ),
             )
+        no_columns = [t for t in selected_tabs if not state[f"excel_cols_{t}"]]
+        if no_columns and len(no_columns) < len(selected_tabs):
+            st.caption(
+                f"No columns chosen in {name_summary(no_columns)}: only the "
+                "headers and tab name are checked there, and its cells go "
+                "into the download as they are."
+            )
+        # The detection threshold, not the fuzzy-match one. Capped at the
+        # score master-list matches get: anything higher drops every one.
         st.slider(
             "Confidence threshold",
             min_value=0.1,
-            max_value=1.0,
+            max_value=settings.custom_match_score,
             step=0.05,
             help=THRESHOLD_HELP,
             key="excel_threshold",
@@ -174,6 +248,11 @@ def _options_step(
     if not any(columns_by_sheet.values()):
         st.warning("Choose at least one column to scan, under Customize.")
         return
+    estimate = scan_size_warning(
+        {name: sheets[name] for name in selected_tabs}, columns_by_sheet
+    )
+    if estimate:
+        st.warning(estimate)
 
     if st.button("Redact my file", type="primary", width="stretch"):
         with st.status("Scanning for names...", expanded=True) as status:
@@ -240,20 +319,37 @@ def _review_step(excel_service: RedactExcelService, steps: Any) -> None:
         df = list(scan_sheets.values())[shown]
         redacted_df = redacted_sheets[shown].data
         cell_keys = redacted_sheets[shown].highlighted
-        # Stacked, not side by side: in the centered layout two half-width
-        # tables would hide most columns. The rows line up in both.
-        st.markdown("**Redacted**")
-        st.dataframe(
-            preview_styler(redacted_df, cell_keys), width="stretch", hide_index=True
-        )
-        st.markdown("**Original**")
-        st.dataframe(preview_styler(df, cell_keys), width="stretch", hide_index=True)
-        if len(df) > PREVIEW_MAX_ROWS:
-            n_hidden = preview_hidden_count(df, cell_keys)
-            st.caption(
-                f"Showing the first {plural(PREVIEW_MAX_ROWS, 'row')} of "
-                f"{len(df):,}. Highlighted cells below that: {n_hidden:,} "
-                "(listed under Where found). The download has every row."
+        # A big tab is shown a block of rows at a time; a page of the whole
+        # sheet would only slow the browser. Keys are row positions, and
+        # read_excel gives a 0..n-1 index, so a slice keeps them lined up.
+        start = _preview_rows(len(df), cell_keys)
+        rows = slice(start, start + PREVIEW_MAX_ROWS)
+        # One table on screen at a time, the redacted one first; the second
+        # tab switches to the original. Rows and columns line up 1:1, so
+        # switching loses nothing, and the page is half as long as two
+        # stacked tables. Tabs rather than a toggle: a toggle here is a
+        # widget past the end of the shorter Download tree, which AppTest
+        # keeps and then fails on (see tests/presentation/test_wizard_flows).
+        redacted_view, original_view = st.tabs(["Redacted", "Compare with original"])
+        with redacted_view:
+            st.dataframe(
+                preview_styler(redacted_df.iloc[rows], cell_keys),
+                width="stretch",
+                hide_index=True,
+            )
+        with original_view:
+            # A redacted header renames its column; columns keep their order,
+            # so map each highlighted key back to the original by position.
+            original_keys = {
+                (row, df.columns[redacted_df.columns.get_loc(col)])
+                for row, col in cell_keys
+                if col in redacted_df.columns
+            }
+            st.caption("The original, not redacted. Check it against the redacted tab.")
+            st.dataframe(
+                preview_styler(df.iloc[rows], original_keys),
+                width="stretch",
+                hide_index=True,
             )
     with tab_mapping:
         render_crosswalk_section(state.crosswalk)
@@ -298,6 +394,30 @@ def _review_step(excel_service: RedactExcelService, steps: Any) -> None:
     )
 
 
+def _preview_rows(n_rows: int, cell_keys: set[tuple[int, str]]) -> int:
+    """Pick which block of rows to preview, and say plainly what is not shown.
+
+    Returns the first row of the block. A tab that fits on one page needs no
+    choice and gets 0.
+    """
+    if n_rows <= PREVIEW_MAX_ROWS:
+        return 0
+    start: int = st.selectbox(
+        "Rows to preview",
+        options=range(0, n_rows, PREVIEW_MAX_ROWS),
+        format_func=lambda s: f"Rows {s + 1:,} to {min(s + PREVIEW_MAX_ROWS, n_rows):,}",
+    )
+    end = min(start + PREVIEW_MAX_ROWS, n_rows)
+    elsewhere = sum(1 for row, _ in cell_keys if row >= 0 and not start <= row < end)
+    st.info(
+        f"This tab has {n_rows:,} rows. Showing rows {start + 1:,} to {end:,}, "
+        f"so {n_rows - (end - start):,} rows are not on screen, with "
+        f"{plural(elsewhere, 'highlighted cell')} among them. Pick other rows "
+        "above to check them. The download has every row."
+    )
+    return start
+
+
 def _download_step(
     sheets: dict[str, pd.DataFrame], excel_gateway: ExcelGateway, steps: Any
 ) -> None:
@@ -318,37 +438,44 @@ def _download_step(
             "not in the download."
         )
     if state.findings.entity_count == 0:
-        st.info("Nothing was detected, so the file is already clean.")
-    else:
-        # Built once per result and kept in session_state: every widget click
-        # reruns this script, and re-serializing the workbook each time is
-        # wasted work. Cleared wherever the redacted sheets change.
-        if state.get("excel_bytes") is None:
-            formats = state.get("formats", {})
-            state.excel_bytes = excel_gateway.write(
-                [(s.name, s.data, s.highlighted) for s in redacted_sheets],
-                None,  # the crosswalk leaves as its own Confidential file
-                [formats.get(name) for name in scan_sheets],
-            )
-        safe, private = wizard.download_cards()
-        with safe:
-            st.download_button(
-                label="Download redacted workbook",
-                data=state.excel_bytes,
-                file_name=f"{base_name}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary",
-                width="stretch",
-            )
-            st.caption(
-                "Names are replaced with codes such as STF-10010, and changed "
-                "cells are yellow. Bank and payment details show as a mask "
-                "such as [ACCOUNT]. Tab names are checked too."
-            )
-            note = formatting_note(state.get("formats", {}), len(sheets))
-            if note:
-                st.caption(note)
-        with private:
-            render_crosswalk_download(crosswalk, base_name, key_prefix="excel")
+        # Not "the file is clean": only the chosen columns were scanned.
+        st.info(
+            "Nothing was detected in the columns you chose, so no cell was "
+            "changed. The workbook is still rebuilt from cell values, so you "
+            "can download it below."
+        )
+    # Built once per result and kept in session_state: every widget click
+    # reruns this script, and re-serializing the workbook each time is
+    # wasted work. Cleared wherever the redacted sheets change. Always built,
+    # even with nothing found: the user may want the trimmed tabs, and the
+    # rebuilt file leaves comments, formulas and properties behind.
+    if state.get("excel_bytes") is None:
+        formats = state.get("formats", {})
+        state.excel_bytes = excel_gateway.write(
+            [(s.name, s.data, s.highlighted) for s in redacted_sheets],
+            None,  # the crosswalk leaves as its own Confidential file
+            [formats.get(name) for name in scan_sheets],
+        )
+    safe, private = wizard.download_cards()
+    with safe:
+        st.download_button(
+            label="Download redacted workbook",
+            data=state.excel_bytes,
+            file_name=f"{base_name}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+            width="stretch",
+        )
+        st.caption(
+            "Names are replaced with codes such as STF-10010, and changed "
+            "cells are yellow. Bank and payment details show as a mask "
+            "such as [ACCOUNT]. Tab names and column headers are checked "
+            "too."
+        )
+        note = formatting_note(state.get("formats", {}), len(sheets))
+        if note:
+            st.caption(note)
+    with private:
+        render_crosswalk_download(crosswalk, base_name, key_prefix="excel")
 
     wizard.nav(back=("Back to review", wizard.REVIEW), finish=True)

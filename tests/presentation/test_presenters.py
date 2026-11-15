@@ -355,25 +355,31 @@ def _workbook_scan() -> WorkbookScanResult:
             "Feb": ExcelScanResult(findings=[]),
         },
         tab_names={"Feb": [_detection("Acme Ltd")]},
+        headers={"Jan": {"Pat Example": [_detection("Pat Example")]}},
     )
 
 
-def test_scan_result_findings_flattens_excel_cells_and_tab_names() -> None:
-    """Excel shares the editor, so cell and tab-name findings become Findings."""
+def test_scan_result_findings_flattens_excel_cells_tab_names_and_headers() -> None:
+    """Excel shares the editor, so every Excel finding becomes a Finding."""
     flattened = scan_result_findings(_workbook_scan())
 
-    assert [f.detected_text for f in flattened] == ["Jane Doe", "Acme Ltd"]
-    assert flattened[0].page == 4
-    assert flattened[1].page == -1
+    assert [f.detected_text for f in flattened] == [
+        "Jane Doe",
+        "Acme Ltd",
+        "Pat Example",
+    ]
+    assert [f.page for f in flattened] == [4, -1, -1]
 
 
 def test_excel_findings_dataframe_names_the_sheet_for_every_finding() -> None:
     table = excel_findings_dataframe(_workbook_scan())
 
-    assert list(table["Sheet"]) == ["Jan", "Feb"]
+    assert list(table["Sheet"]) == ["Jan", "Feb", "Jan"]
     assert table.loc[0, "Row"] == 5
     assert table.loc[1, "Column"] == "(tab name)"
     assert pd.isna(table.loc[1, "Row"])
+    assert table.loc[2, "Column"] == "Pat Example (header)"
+    assert pd.isna(table.loc[2, "Row"])
 
 
 def test_the_default_pdf_mapping_header_is_pinned_without_any_name_column() -> None:

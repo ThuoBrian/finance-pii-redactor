@@ -7,7 +7,7 @@ The presentation layer renders these; nothing here depends on a UI framework.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pandas as pd
 
@@ -51,11 +51,13 @@ class WorkbookScanResult:
 
     ``sheets`` is keyed by the original tab name. ``tab_names`` holds the
     detections found in the tab names themselves (a tab called after a vendor
-    or a person is PII too), keyed by the original tab name.
+    or a person is PII too), keyed by the original tab name. ``headers`` holds
+    the detections in column headers, by tab name and then header.
     """
 
     sheets: dict[str, ExcelScanResult]
     tab_names: dict[str, list[PiiDetection]]
+    headers: dict[str, dict[str, list[PiiDetection]]] = field(default_factory=dict)
 
     @property
     def cell_count(self) -> int:
@@ -64,9 +66,15 @@ class WorkbookScanResult:
 
     @property
     def entity_count(self) -> int:
-        """Total detections across all tabs, including those in tab names."""
-        return sum(result.entity_count for result in self.sheets.values()) + sum(
-            len(found) for found in self.tab_names.values()
+        """Total detections across all tabs, including tab names and headers."""
+        return (
+            sum(result.entity_count for result in self.sheets.values())
+            + sum(len(found) for found in self.tab_names.values())
+            + sum(
+                len(found)
+                for by_header in self.headers.values()
+                for found in by_header.values()
+            )
         )
 
 
