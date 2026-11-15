@@ -37,6 +37,7 @@ from finance_redactor.presentation.docx_view import run_docx_flow
 from finance_redactor.presentation.excel_view import run_excel_flow
 from finance_redactor.presentation.master_list_setup import (
     render_master_list_setup_dialog,
+    should_offer_setup,
 )
 from finance_redactor.presentation.master_list_view import render_master_list_card
 from finance_redactor.presentation.pdf_view import run_pdf_flow
@@ -140,12 +141,9 @@ def _main() -> None:
     # A brand-new install (or one whose FPR_MASTER_LIST_DIR/persisted setting
     # is missing, wrong, or not yet synced) loads 0 names - offer the in-app
     # setup dialog right away instead of leaving the user to discover
-    # data/README.md's manual env-var steps on their own. Dismissible per
-    # session (via the dialog's own buttons) so it doesn't reappear on every
-    # rerun for someone who intentionally isn't using a shared list.
-    if sum(name_counts.values()) == 0 and not st.session_state.get(
-        "master_list_setup_dismissed", False
-    ):
+    # data/README.md's manual env-var steps on their own. "Skip for now" is
+    # remembered across launches until a list loads (see should_offer_setup).
+    if should_offer_setup(has_names=sum(name_counts.values()) > 0):
         render_master_list_setup_dialog(settings.names_dir)
 
     with st.sidebar:

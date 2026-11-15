@@ -10,17 +10,21 @@ pseudonymization. From one workbook this repository derives:
 Format: one sheet per category, with columns ``Category``, ``Internal ID``,
 ``Name``, ``Primary Subsidiary``, ``Country``. ``Internal ID`` may be blank
 (the name is still detected, but pseudonymizes to a flagged auto-id). A missing
-file yields empty results. Parsing is cached per instance and refreshed when the
+file yields empty results; so does a damaged, password-protected or locked one,
+with the reason surfaced through ``quality_report``. Parsing is cached per instance and refreshed when the
 file modification time changes.
 
 Staff names imported from legacy sources sometimes embed the ID inside the
-``Name`` column (``Jane Doe - 10001``). Those suffixes are stripped and the
-``Internal ID`` column is always used as the curated ID.
+``Name`` column (``Jane Doe - 10001``). Those numeric suffixes are stripped and
+the ``Internal ID`` column is always used as the curated ID. Any other
+`` - ...`` suffix (``Acme - Kenya``) is kept as part of the name, and the part
+before the dash is matched as well (see ``MasterRow.short_name``).
 """
 
 from __future__ import annotations
 
 import re
+import zipfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -39,8 +43,12 @@ from finance_redactor.domain.quality import (
 )
 
 _WHITESPACE = re.compile(r"\s+")
-# Strip a trailing legacy ID suffix such as "Jane Doe - 10001".
-_LEGACY_SUFFIX = re.compile(r"\s+-\s+.*$")
+# The one sanctioned legacy format: a trailing numeric ID, "Jane Doe - 10001"
+# (what scripts/migrate_to_master_list.py parsed out of person.txt). Stripped
+# silently. Anything else after a spaced dash ("Acme - Kenya") is part of the
+# name and is kept; see MasterRow.short_name.
+_LEGACY_ID_SUFFIX = re.compile(r"\s+-\s+\d+\s*$")
+_SPACED_DASH = re.compile(r"\s+-\s+")
 
 
 @dataclass(frozen=True)
@@ -53,8 +61,16 @@ class MasterRow:
     rather than one derived from the other because the quality checks and the
     UI key off ``pseudonym`` while the PDF mapping file needs the bare id;
     recovering the id by splitting the pseudonym is unsafe, since
-    ``"VND-17728"`` and ``"ORG-AUTO-3F9A1"`` have the same shape. Change them
+    ``"VND-17728"`` and ``"ORG-AUTO-3F9A1C07"`` have the same shape. Change them
     together.
+
+
+    ``short_name`` is the part before a spaced dash when the name has one
+    that isn't a legacy numeric ID (``"Acme"`` for ``"Acme - Kenya"``). It is
+    detected and resolved alongside ``name`` rather than replacing it: these
+    names used to be cut to the short form, so a document that writes only
+    ``Acme`` must keep matching (dropping it would loosen detection), while
+    the full form must now match too. Over-redaction is the cheaper mistake.
     """
 
     category: str
@@ -62,6 +78,7 @@ class MasterRow:
     entity_type: str
     pseudonym: str | None  # None when the row has no curated id
     internal_id: str | None = None  # the raw Internal ID cell behind it
+    short_name: str | None = None  # part before " - ", matched as well
 
 
 class MasterListRepository:
@@ -86,6 +103,12 @@ class MasterListRepository:
         }
         self._rows: list[MasterRow] | None = None
         self._cached_mtime: float | None = None
+        # Filled by _parse alongside _rows: rows dropped because their
+        # Category cell doesn't match their sheet, as (sheet, name) pairs.
+        self._skipped: list[tuple[str, str]] = []
+        # Set by _parse when the file exists but can't be read; the list then
+        # loads 0 names, the same degraded state as a missing file.
+        self._load_error: str | None = None
 
     def rows(self) -> list[MasterRow]:
         """Return the parsed rows for known categories (cached by mtime)."""
@@ -128,7 +151,10 @@ class MasterListRepository:
         """
         grouped: dict[str, list[str]] = {}
         for row in self.rows():
-            grouped.setdefault(row.entity_type, []).append(row.name)
+            names = grouped.setdefault(row.entity_type, [])
+            names.append(row.name)
+            if row.short_name:
+                names.append(row.short_name)
         return grouped
 
     def master_map(self) -> dict[tuple[str, str], MasterEntry]:
@@ -165,6 +191,16 @@ class MasterListRepository:
             if existing is None or existing.pseudonym == entry.pseudonym:
                 mapping[key] = entry
 
+        # A short form ("Acme" from "Acme - Kenya") is only resolved when every
+        # row sharing it agrees on the ID; "Acme - Kenya" and "Acme - Uganda"
+        # with different IDs leave a bare "Acme" to a flagged auto-id rather
+        # than a coin-flip curated one. It is still detected either way.
+        short_ids: dict[tuple[str, str], set[str]] = {}
+        for row in curated:
+            if row.short_name:
+                key = (row.entity_type, normalize(row.short_name))
+                short_ids.setdefault(key, set()).add(row.pseudonym or "")
+
         for row in curated:
             assert row.pseudonym is not None
             entry = MasterEntry(
@@ -173,7 +209,12 @@ class MasterListRepository:
                 display_name=row.name,
                 internal_id=row.internal_id,
             )
-            for alias in aliases(row.name):
+            variants = list(aliases(row.name))
+            if row.short_name:
+                short_key = (row.entity_type, normalize(row.short_name))
+                if len(short_ids[short_key]) == 1:
+                    variants.extend(aliases(row.short_name))
+            for alias in variants:
                 key = (row.entity_type, normalize(alias))
                 if key not in mapping:
                     mapping[key] = entry
@@ -208,8 +249,12 @@ class MasterListRepository:
     def quality_report(self) -> list[QualityIssue]:
         """Detect and return actionable data-quality findings in the master list.
 
-        Four checks, each emitted only when it has occurrences:
+        Each check is emitted only when it has occurrences:
 
+        - **skipped rows** — a row whose Category cell doesn't match its sheet
+          (blank, missing column, different wording) is not loaded, so the
+          name is never detected. Rows are never loaded on a guess; this only
+          makes the drop visible.
         - **cross-category duplicate names** — the same name under multiple
           categories maps to inconsistent prefixes (and, for categories sharing an
           entity type like Vendor/Funder, one silently clobbers the other).
@@ -228,6 +273,70 @@ class MasterListRepository:
         rows = self.rows()
         issues: list[QualityIssue] = []
         limit = self._EXAMPLE_LIMIT
+
+        if self._load_error:
+            issues.append(
+                QualityIssue(
+                    kind="unreadable_workbook",
+                    severity=SEVERITY_WARNING,
+                    title="The master list could not be opened",
+                    detail=(
+                        f"{self._load_error} No names are loaded, so only "
+                        "names the language model spots are redacted."
+                    ),
+                    examples=[f"`{self._path.name}`"],
+                    total=1,
+                )
+            )
+
+        # Rows dropped at parse time. Listed first: these names are not
+        # loaded at all, so nothing will detect them.
+        if self._skipped:
+            sheets = sorted({sheet for sheet, _ in self._skipped})
+            items = [f"`{name}` (sheet {sheet})" for sheet, name in self._skipped]
+            examples, total = cap_examples(items, limit)
+            issues.append(
+                QualityIssue(
+                    kind="category_mismatch",
+                    severity=SEVERITY_WARNING,
+                    title=(
+                        f"{len(self._skipped)} row(s) skipped because their "
+                        "Category cell doesn't match"
+                    ),
+                    detail=(
+                        "These names are not loaded and will not be detected. "
+                        "Set each row's Category to its sheet's category "
+                        f"(sheets: {', '.join(sheets)}), or add a Category "
+                        "column if the sheet has none."
+                    ),
+                    examples=examples,
+                    total=total,
+                )
+            )
+
+        # Names with a non-ID " - " suffix: kept whole, short form matched too.
+        dashed = [row for row in rows if row.short_name]
+        if dashed:
+            items = [
+                f"`{row.name}` also matches `{row.short_name}` ({row.category})"
+                for row in dashed
+            ]
+            examples, total = cap_examples(items, limit)
+            issues.append(
+                QualityIssue(
+                    kind="dash_in_name",
+                    severity=SEVERITY_INFO,
+                    title=f"{len(dashed)} name(s) contain ' - '",
+                    detail=(
+                        "The full name is matched, and so is the part before "
+                        "' - ' on its own. If that short part is an ordinary "
+                        "word, it will be redacted wherever it appears; if the "
+                        "dash marks an old ID, put the ID in Internal ID instead."
+                    ),
+                    examples=examples,
+                    total=total,
+                )
+            )
 
         # (a) Cross-category duplicate names.
         cross = self.duplicate_names()
@@ -341,10 +450,11 @@ class MasterListRepository:
         # (e) Single-token name that is also an ordinary English word (advisory).
         ambiguous: dict[str, list[str]] = {}
         for row in rows:
-            if " " in row.name.strip():
-                continue
-            if row.name.strip().lower() in COMMON_ENGLISH_WORDS:
-                ambiguous.setdefault(row.category, []).append(row.name)
+            for name in (row.name, row.short_name):
+                if not name or " " in name.strip():
+                    continue
+                if name.strip().lower() in COMMON_ENGLISH_WORDS:
+                    ambiguous.setdefault(row.category, []).append(name)
         ambiguous_total = sum(len(v) for v in ambiguous.values())
         if ambiguous_total:
             items = [
@@ -379,9 +489,29 @@ class MasterListRepository:
             return None
 
     def _parse(self) -> list[MasterRow]:
+        self._skipped = []
+        self._load_error = None
         try:
             workbook = pd.read_excel(self._path, sheet_name=None, engine="openpyxl")
         except FileNotFoundError:
+            return []
+        except zipfile.BadZipFile:
+            # openpyxl raises this for a truncated or non-xlsx file, and for a
+            # password-protected one (Excel wraps those in an OLE container).
+            self._load_error = (
+                "It isn't a readable .xlsx file: it may be damaged, "
+                "password-protected, or another format renamed to .xlsx."
+            )
+            return []
+        except PermissionError:
+            self._load_error = (
+                "Access was denied. Close it in Excel (or wait for Box to "
+                "finish syncing) and Refresh."
+            )
+            return []
+        except (ValueError, OSError, KeyError):
+            # Never echo the exception text: it can quote workbook content.
+            self._load_error = "The workbook couldn't be read."
             return []
 
         rows: list[MasterRow] = []
@@ -391,11 +521,11 @@ class MasterListRepository:
             sheet_df = workbook.get(sheet_name)
             if sheet_df is None or sheet_df.empty:
                 continue
-            rows.extend(self._parse_sheet(category, sheet_df))
+            rows.extend(self._parse_sheet(category, sheet_name, sheet_df))
         return rows
 
     def _parse_sheet(
-        self, expected_category: str, sheet_df: pd.DataFrame
+        self, expected_category: str, sheet_name: str, sheet_df: pd.DataFrame
     ) -> list[MasterRow]:
         if "Name" not in sheet_df.columns:
             return []
@@ -409,11 +539,23 @@ class MasterListRepository:
             if not name:
                 continue
             if category != expected_category:
-                # Allow the row only if its Category cell matches the sheet.
+                # Load the row only if its Category cell matches the sheet; a
+                # blank cell, a missing column or a wording difference lands
+                # here. Never silently: quality_report() lists every one,
+                # since a name that isn't loaded is never detected.
+                self._skipped.append((sheet_name, name))
                 continue
             pseudonym = f"{prefix}-{id_value}" if id_value else None
+            head = _SPACED_DASH.split(name, maxsplit=1)[0].strip()
             rows.append(
-                MasterRow(category, name, entity_type, pseudonym, internal_id=id_value)
+                MasterRow(
+                    category,
+                    name,
+                    entity_type,
+                    pseudonym,
+                    internal_id=id_value,
+                    short_name=head if head and head != name else None,
+                )
             )
         return rows
 
@@ -428,7 +570,7 @@ class MasterListRepository:
         if value is None or (isinstance(value, float) and pd.isna(value)):
             return ""
         name = str(value).strip()
-        name = _LEGACY_SUFFIX.sub("", name)
+        name = _LEGACY_ID_SUFFIX.sub("", name)
         name = _WHITESPACE.sub(" ", name).strip()
         return name
 

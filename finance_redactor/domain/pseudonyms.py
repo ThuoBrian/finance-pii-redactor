@@ -16,7 +16,7 @@ import hashlib
 import re
 import unicodedata
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 
 from finance_redactor.domain.entities import CUSTOM_ENTITY_TYPE, PiiDetection
@@ -89,6 +89,21 @@ def fold(name: str) -> str:
     return fold_diacritics(normalize(name))
 
 
+def _agreed(
+    candidates: Sequence[MasterEntry],
+) -> tuple[MasterEntry | None, bool]:
+    """Return ``(entry, ambiguous)``: the entry if all candidates agree on it.
+
+    Two or more candidates with different IDs return ``(None, True)`` rather
+    than a guess (see ``Pseudonymizer._resolve_by_name``).
+    """
+    if not candidates:
+        return None, False
+    if len({(c.internal_id, c.category) for c in candidates}) == 1:
+        return candidates[0], False
+    return None, True
+
+
 def _with_display_name(entry: MasterEntry, fallback: str) -> MasterEntry:
     """Return ``entry`` with a non-empty ``display_name``.
 
@@ -111,7 +126,7 @@ class MasterEntry:
     ``internal_id`` is the raw ``Internal ID`` cell (``"17728"``), carried
     separately from ``pseudonym`` (``"VND-17728"``) because the PDF mapping
     file needs the bare ID and splitting it back out of the pseudonym string
-    is unsafe - ``"VND-17728"`` and ``"ORG-AUTO-3F9A1"`` have the same shape.
+    is unsafe - ``"VND-17728"`` and ``"ORG-AUTO-3F9A1C07"`` have the same shape.
     Both fields describe the same row; change them together.
     """
 
@@ -175,7 +190,7 @@ class Pseudonymizer:
         self,
         master_map: Mapping[tuple[str, str], MasterEntry],
         auto_prefixes: Mapping[str, str],
-        auto_hash_length: int = 5,
+        auto_hash_length: int = 8,
         fuzzy_threshold: float = 0.84,
     ) -> None:
         """Wire the curated master map and the auto-id prefix table.
@@ -190,14 +205,22 @@ class Pseudonymizer:
         self._fuzzy_threshold = fuzzy_threshold
         self._assignments: dict[tuple[str, str], Assignment] = {}
         self._candidates_by_type: dict[str, list[str]] = defaultdict(list)
-        # Name-only index, consulted *only* for CUSTOM detections. Keyed on the
-        # accent-folded name so it agrees with how domain/custom_words.py
-        # matched in the first place.
+        # Accent-folded secondary indexes, consulted only after the exact
+        # (unfolded) key misses, and only when every candidate agrees on the
+        # ID. Name-only for CUSTOM detections (typed words carry no entity
+        # type); per entity type for PERSON/ORGANIZATION, since the master-list
+        # recognizer matches accent-insensitively too.
         self._by_folded_name: dict[str, list[MasterEntry]] = defaultdict(list)
+        self._by_type_folded: dict[tuple[str, str], list[MasterEntry]] = defaultdict(
+            list
+        )
         for candidate_entity_type, normalized_name in master_map:
             self._candidates_by_type[candidate_entity_type].append(normalized_name)
             entry = master_map[(candidate_entity_type, normalized_name)]
             self._by_folded_name[fold(normalized_name)].append(entry)
+            self._by_type_folded[(candidate_entity_type, fold(normalized_name))].append(
+                entry
+            )
 
     def assign(self, entity_type: str, text: str) -> Assignment:
         """Return the pseudonym for ``text``, generating one if not curated."""
@@ -211,6 +234,10 @@ class Pseudonymizer:
         ambiguous = False
         if entry is None and entity_type == CUSTOM_ENTITY_TYPE:
             entry, ambiguous = self._resolve_by_name(key[1])
+        elif entry is None:
+            entry, ambiguous = _agreed(
+                self._by_type_folded.get((entity_type, fold(key[1])), ())
+            )
 
         if entry is not None:
             assignment = Assignment(
@@ -265,13 +292,7 @@ class Pseudonymizer:
         no name to cross-check it against, and a wrong ID is undetectable
         downstream where an orphan is merely inconvenient.
         """
-        candidates = self._by_folded_name.get(fold(normalized), ())
-        if not candidates:
-            return None, False
-        distinct = {(c.internal_id, c.category) for c in candidates}
-        if len(distinct) == 1:
-            return candidates[0], False
-        return None, True
+        return _agreed(self._by_folded_name.get(fold(normalized), ()))
 
     def _closest(
         self, entity_type: str, normalized: str

@@ -19,7 +19,11 @@ from pathlib import Path
 
 import streamlit as st
 
-from finance_redactor.config import save_master_list_dir
+from finance_redactor.config import (
+    master_list_setup_skipped,
+    save_master_list_dir,
+    set_master_list_setup_skipped,
+)
 
 MASTER_LIST_FILENAME = "Names List - Organized.xlsx"
 
@@ -35,6 +39,22 @@ def master_list_exists_at(folder: str) -> bool:
     if not folder:
         return False
     return (Path(folder) / MASTER_LIST_FILENAME).is_file()
+
+
+def should_offer_setup(*, has_names: bool) -> bool:
+    """Return True if the 0-names setup dialog should open on this run.
+
+    Either button dismisses it for the session. "Skip for now" is also
+    remembered across launches, for someone who isn't using a shared list,
+    and forgotten as soon as a list loads with names, so a list that later
+    goes missing (moved, renamed, unsynced) prompts again.
+    """
+    skipped = master_list_setup_skipped()
+    if has_names:
+        if skipped:
+            set_master_list_setup_skipped(False)
+        return False
+    return not (skipped or st.session_state.get("master_list_setup_dismissed"))
 
 
 @st.dialog("Set up your shared master list")
@@ -53,27 +73,41 @@ def render_master_list_setup_dialog(current_names_dir: Path) -> None:
         key="master_list_setup_folder_input",
     )
 
-    if folder_input.strip():
-        if master_list_exists_at(folder_input):
+    folder = folder_input.strip()
+    found = master_list_exists_at(folder)
+    confirmed = found
+    if folder:
+        if found:
             st.success(f"Found `{MASTER_LIST_FILENAME}` at this path.")
         else:
             st.warning(
                 f"`{MASTER_LIST_FILENAME}` was not found at this exact path "
-                "yet. Double-check it (or save anyway if the folder is "
-                "still syncing in Box)."
+                "yet. Double-check it. If the folder is still syncing in Box, "
+                "you can save it anyway."
+            )
+            # Saving a wrong path quietly leaves the app on 0 names, so ask
+            # for an explicit yes instead of letting one click do it.
+            confirmed = st.checkbox(
+                "Save anyway: the folder is still syncing",
+                key="master_list_setup_save_anyway",
             )
 
     col_save, col_skip = st.columns(2)
     with col_save:
-        if st.button("Save and use this folder", type="primary", width="stretch"):
-            if not folder_input.strip():
-                st.error("Enter a folder path first.")
-            else:
-                save_master_list_dir(Path(folder_input.strip()))
-                st.session_state.master_list_setup_dismissed = True
-                st.rerun()
+        if st.button(
+            "Save and use this folder",
+            type="primary",
+            width="stretch",
+            disabled=not confirmed,
+            help=None if folder else "Enter a folder path first.",
+        ):
+            save_master_list_dir(Path(folder))
+            st.session_state.master_list_setup_dismissed = True
+            st.rerun()
     with col_skip:
         if st.button("Skip for now", width="stretch"):
+            # Remembered across launches; see should_offer_setup.
+            set_master_list_setup_skipped(True)
             st.session_state.master_list_setup_dismissed = True
             st.rerun()
 

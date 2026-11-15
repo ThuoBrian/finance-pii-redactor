@@ -4,7 +4,7 @@ Converts the legacy plain-text name lists into the structured Excel master list,
 merging them with any existing workbook.
 
 - person.txt -> sheet ``Staff``. A trailing `` - <digits>`` suffix (e.g.
-  ``Aaron Elijah Mutungi - 90863``) is parsed into the ``Internal ID`` column and
+  ``Jane Doe - 10001``) is parsed into the ``Internal ID`` column and
   stripped from the name, fixing the latent bug where the recognizer searched for
   the whole string including the ID.
 - organization.txt -> sheet ``Vendors`` with a blank ``Internal ID`` (review and
@@ -33,7 +33,7 @@ _PERSON = _DATA_DIR / "person.txt"
 _ORGANIZATION = _DATA_DIR / "organization.txt"
 _OUTPUT = _DATA_DIR / "Names List - Organized.xlsx"
 
-# Trailing " - 90863" style staff id.
+# Trailing " - 10001" style staff id.
 _ID_SUFFIX = re.compile(r"^(.*?)\s+-\s+(\d+)\s*$")
 
 # Expected columns in the Excel master list.

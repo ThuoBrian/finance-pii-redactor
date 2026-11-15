@@ -94,7 +94,7 @@ def test_crosswalk_sheet_matches_the_passed_dataframe():
                 "Original name": "Micheal Sample",
                 "Entity type": "PERSON",
                 "Category": "",
-                "Pseudonym": "PSN-AUTO-0BA3D",
+                "Pseudonym": "PSN-AUTO-0BA3D5E2",
                 "Flagged": "yes",
                 "Possible match": "Michael Sample (STF-12345, 92% match)",
             },

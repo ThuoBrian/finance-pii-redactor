@@ -184,12 +184,12 @@ def test_unresolved_row_gets_the_auto_token_not_a_blank() -> None:
     df = pdf_mapping_dataframe(
         [
             _assignment(
-                pseudonym="CST-AUTO-3F9A1", auto=True, internal_id=None, category=""
+                pseudonym="CST-AUTO-3F9A1C07", auto=True, internal_id=None, category=""
             )
         ]
     )
 
-    assert df.loc[0, "Internal ID"] == "CST-AUTO-3F9A1"
+    assert df.loc[0, "Internal ID"] == "CST-AUTO-3F9A1C07"
     assert df.loc[0, "Flagged"] == "not in master list"
     assert _DISTINCTIVE not in df.to_csv(index=False)
 
@@ -199,7 +199,7 @@ def test_ambiguous_row_is_flagged_distinctly_from_a_plain_orphan() -> None:
     df = pdf_mapping_dataframe(
         [
             _assignment(
-                pseudonym="CST-AUTO-3F9A1",
+                pseudonym="CST-AUTO-3F9A1C07",
                 auto=True,
                 internal_id=None,
                 ambiguous=True,
@@ -411,7 +411,7 @@ def test_the_opt_in_mapping_adds_the_name_and_keeps_the_same_rows() -> None:
 
 def test_the_opt_in_mapping_shows_unresolved_rows_and_the_possible_match() -> None:
     assignment = _assignment(
-        pseudonym="CST-AUTO-3F9A1",
+        pseudonym="CST-AUTO-3F9A1C07",
         auto=True,
         internal_id=None,
         category="",
@@ -422,7 +422,7 @@ def test_the_opt_in_mapping_shows_unresolved_rows_and_the_possible_match() -> No
 
     named = pdf_mapping_with_names_dataframe([assignment])
 
-    assert named.loc[0, "Internal ID"] == "CST-AUTO-3F9A1"
+    assert named.loc[0, "Internal ID"] == "CST-AUTO-3F9A1C07"
     assert named.loc[0, "Flagged"] == "not in master list"
     assert named.loc[0, "Possible match"] == "Michael Sample (STF-12345, 92% match)"
 
@@ -741,7 +741,7 @@ def test_pdf_mapping_notes_cover_missing_and_ambiguous_items() -> None:
             original_name="Zzyzx Qwertyson",
             entity_type="PERSON",
             category="",
-            pseudonym="PSN-AUTO-1A2B3",
+            pseudonym="PSN-AUTO-1A2B3C4D",
             auto=True,
             ordinal=1,
             internal_id=internal_id,

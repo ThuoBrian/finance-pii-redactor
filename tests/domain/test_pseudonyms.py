@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+
 from finance_redactor.domain.entities import DetectionSource, PiiDetection, Span
 from finance_redactor.domain.pseudonyms import (
     MasterEntry,
@@ -43,6 +45,17 @@ def test_unknown_name_gets_stable_auto_id():
     assert a.pseudonym.startswith("PSN-AUTO-")
     # Deterministic across instances and insensitive to case/whitespace.
     assert a.pseudonym == b.pseudonym
+
+
+def test_auto_id_is_eight_hex_chars_of_sha1_of_the_normalized_name():
+    # 8 hex chars (32 bits), up from 5: a collision silently merges two
+    # identities in the crosswalk.
+    digest = hashlib.sha1(b"jane doe").hexdigest()[:8].upper()
+
+    pseudonym = Pseudonymizer({}, _AUTO_PREFIXES).assign("PERSON", "Jane Doe").pseudonym
+
+    assert pseudonym == f"PSN-AUTO-{digest}"
+    assert len(pseudonym.removeprefix("PSN-AUTO-")) == 8
 
 
 def test_auto_prefix_follows_entity_type():
@@ -254,6 +267,40 @@ def test_typed_custom_word_resolves_across_accents():
     assignment = p.assign("CUSTOM", "José García")
 
     assert assignment.internal_id == "10020"
+
+
+def test_detected_person_resolves_across_accents_both_ways():
+    """The master-list recognizer folds accents, so resolution must too."""
+    master = {
+        ("PERSON", normalize("José García")): MasterEntry(
+            "STF-10020", "Staff", internal_id="10020"
+        ),
+        ("PERSON", normalize("Ana Testname")): MasterEntry(
+            "STF-10021", "Staff", internal_id="10021"
+        ),
+    }
+    p = Pseudonymizer(master, _AUTO_PREFIXES)
+
+    assert p.assign("PERSON", "Jose Garcia").internal_id == "10020"
+    assert p.assign("PERSON", "Ána Téstname").internal_id == "10021"
+
+
+def test_accent_variants_with_different_ids_refuse_rather_than_guess():
+    master = {
+        ("PERSON", normalize("José Testcase")): MasterEntry(
+            "STF-1", "Staff", internal_id="1"
+        ),
+        ("PERSON", normalize("Josè Testcase")): MasterEntry(
+            "STF-2", "Staff", internal_id="2"
+        ),
+    }
+    p = Pseudonymizer(master, _AUTO_PREFIXES)
+
+    # Exact spellings still win outright...
+    assert p.assign("PERSON", "José Testcase").internal_id == "1"
+    # ...but an unaccented form matching both gets no curated ID.
+    assignment = p.assign("PERSON", "Jose Testcase")
+    assert (assignment.auto, assignment.ambiguous) == (True, True)
 
 
 def test_person_never_widens_to_an_organization_row():

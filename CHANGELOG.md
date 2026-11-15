@@ -87,6 +87,15 @@ the `version` field in `pyproject.toml`.
   the sidebar, on Windows and macOS/Linux alike.
 - **CI also runs on macOS**, so a dependency that ships no macOS build fails
   there rather than on a user's Mac.
+- **Behavior change: auto-generated codes are longer, so every one differs
+  from earlier runs.** A name not on the master list gets a flagged code made
+  from a hash of the name. That hash part is now 8 characters instead of 5
+  (`PSN-AUTO-3F9A1C07`, not `PSN-AUTO-3F9A1`), because with 5 two different
+  names in one file could share a code and be merged in the crosswalk.
+  Every `*-AUTO-*` code changes, including for names already processed, so
+  codes in older outputs or crosswalks won't match new runs: re-run a file
+  rather than comparing its codes with older ones. Curated `STF-`/`VND-`/
+  `FND-` codes and PDF labels (`[001]`) are unchanged.
 - **A calmer, narrower page.** The app now uses Streamlit's centered layout
   instead of stretching across the whole screen, so tables, captions and
   buttons stay in one readable column. The Excel preview shows the redacted
@@ -243,6 +252,43 @@ the `version` field in `pyproject.toml`.
   comments and the reviewer list are removed, and footnotes and endnotes are
   checked like the body. The redacted file has no comments or change history;
   see the troubleshooting guide.
+- **Master-list rows with the wrong Category are reported, not dropped
+  silently.** A row whose `Category` cell doesn't match its sheet (blank, a
+  different word, or no `Category` column at all) was skipped with no sign,
+  so that name was never detected. Such rows are still not loaded, but the
+  master-list card now lists them under "things to tidy" ("N row(s) skipped
+  because their Category cell doesn't match").
+- **A damaged or password-protected master list no longer crashes the app.**
+  A truncated, encrypted or locked workbook used to stop the app with a raw
+  error. It now loads 0 names like a missing file does, offers the setup
+  dialog, and the master-list card says the list could not be opened and why.
+- **Master-list names with ` - ` are no longer cut short.** Everything after
+  a spaced dash used to be stripped, so `Acme - Kenya` became `Acme` and the
+  full form never matched. Only the legacy numeric-ID suffix
+  (`Jane Doe - 10001`) is stripped now. Other names are kept whole, and the
+  part before the dash is still matched too, so nothing that matched before
+  stops matching. The master-list card lists these names ("contain ' - '").
+  If two such rows share the short part but have different Internal IDs, a
+  bare short form gets a flagged auto-code instead of a guessed ID.
+- **The master-list setup dialog no longer saves a wrong folder on one
+  click.** "Save and use this folder" was clickable even while the dialog
+  warned that the workbook wasn't there. It is now greyed out until a folder
+  is entered, and when the workbook isn't found you must tick "Save anyway:
+  the folder is still syncing" first.
+- **"Skip for now" on the master-list setup dialog is remembered.** It used
+  to ask again on every launch. The choice is now saved in
+  `~/.finance_pii_redactor/settings.json` next to the folder setting, and
+  cleared as soon as a master list loads with names, so a list that later
+  goes missing still prompts.
+- **Master-list names match with or without accents.** `Jose Garcia` in a
+  document was missed by the master-list matcher when the row said
+  `José García`, and the other way round. Both sides are now accent- and
+  case-folded one character at a time, so the redaction still covers exactly
+  the document's characters, and the match resolves to the row's curated ID
+  (unless two rows differ only by accents and have different IDs, in which
+  case it gets a flagged auto-code). This also fixes an offset bug: a
+  dotted capital `İ` anywhere before a name shifted that name's redaction one
+  character to the right. Surname-only matching stays off, as before.
 - **Review tick boxes respond to a single click.** Every other tick or
   untick in the "Hide in output?" column was ignored, so a box seemed to
   need a double click. Each click now registers.
