@@ -86,6 +86,9 @@ class MasterListRepository:
         }
         self._rows: list[MasterRow] | None = None
         self._cached_mtime: float | None = None
+        # Filled by _parse alongside _rows: rows dropped because their
+        # Category cell doesn't match their sheet, as (sheet, name) pairs.
+        self._skipped: list[tuple[str, str]] = []
 
     def rows(self) -> list[MasterRow]:
         """Return the parsed rows for known categories (cached by mtime)."""
@@ -208,8 +211,12 @@ class MasterListRepository:
     def quality_report(self) -> list[QualityIssue]:
         """Detect and return actionable data-quality findings in the master list.
 
-        Four checks, each emitted only when it has occurrences:
+        Each check is emitted only when it has occurrences:
 
+        - **skipped rows** — a row whose Category cell doesn't match its sheet
+          (blank, missing column, different wording) is not loaded, so the
+          name is never detected. Rows are never loaded on a guess; this only
+          makes the drop visible.
         - **cross-category duplicate names** — the same name under multiple
           categories maps to inconsistent prefixes (and, for categories sharing an
           entity type like Vendor/Funder, one silently clobbers the other).
@@ -228,6 +235,31 @@ class MasterListRepository:
         rows = self.rows()
         issues: list[QualityIssue] = []
         limit = self._EXAMPLE_LIMIT
+
+        # Rows dropped at parse time. Listed first: these names are not
+        # loaded at all, so nothing will detect them.
+        if self._skipped:
+            sheets = sorted({sheet for sheet, _ in self._skipped})
+            items = [f"`{name}` (sheet {sheet})" for sheet, name in self._skipped]
+            examples, total = cap_examples(items, limit)
+            issues.append(
+                QualityIssue(
+                    kind="category_mismatch",
+                    severity=SEVERITY_WARNING,
+                    title=(
+                        f"{len(self._skipped)} row(s) skipped because their "
+                        "Category cell doesn't match"
+                    ),
+                    detail=(
+                        "These names are not loaded and will not be detected. "
+                        "Set each row's Category to its sheet's category "
+                        f"(sheets: {', '.join(sheets)}), or add a Category "
+                        "column if the sheet has none."
+                    ),
+                    examples=examples,
+                    total=total,
+                )
+            )
 
         # (a) Cross-category duplicate names.
         cross = self.duplicate_names()
@@ -385,17 +417,18 @@ class MasterListRepository:
             return []
 
         rows: list[MasterRow] = []
+        self._skipped = []
         for category, sheet_name in self._category_sheets.items():
             if category not in self._categories:
                 continue
             sheet_df = workbook.get(sheet_name)
             if sheet_df is None or sheet_df.empty:
                 continue
-            rows.extend(self._parse_sheet(category, sheet_df))
+            rows.extend(self._parse_sheet(category, sheet_name, sheet_df))
         return rows
 
     def _parse_sheet(
-        self, expected_category: str, sheet_df: pd.DataFrame
+        self, expected_category: str, sheet_name: str, sheet_df: pd.DataFrame
     ) -> list[MasterRow]:
         if "Name" not in sheet_df.columns:
             return []
@@ -409,7 +442,11 @@ class MasterListRepository:
             if not name:
                 continue
             if category != expected_category:
-                # Allow the row only if its Category cell matches the sheet.
+                # Load the row only if its Category cell matches the sheet; a
+                # blank cell, a missing column or a wording difference lands
+                # here. Never silently: quality_report() lists every one,
+                # since a name that isn't loaded is never detected.
+                self._skipped.append((sheet_name, name))
                 continue
             pseudonym = f"{prefix}-{id_value}" if id_value else None
             rows.append(

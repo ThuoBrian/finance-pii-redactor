@@ -323,3 +323,37 @@ def test_fingerprint_is_empty_when_the_file_is_missing(tmp_path):
     repo = MasterListRepository(tmp_path / "absent.xlsx", _CATEGORIES)
 
     assert repo.fingerprint() == ""
+
+
+def _one_sheet_repo(tmp_path, staff: dict[str, list]) -> MasterListRepository:
+    path = tmp_path / "master_list.xlsx"
+    _make_excel(path, {"Staff": pd.DataFrame(staff)})
+    return MasterListRepository(path, _CATEGORIES, category_sheets=_CATEGORY_SHEETS)
+
+
+def test_category_mismatch_is_reported_not_loaded(tmp_path):
+    repo = _one_sheet_repo(
+        tmp_path,
+        {
+            "Category": ["Staff", "Employee"],
+            "Internal ID": [1, 2],
+            "Name": ["Jane Testvalid", "Omar Testmismatch"],
+        },
+    )
+
+    assert [r.name for r in repo.rows()] == ["Jane Testvalid"]
+    issue = {i.kind: i for i in repo.quality_report()}["category_mismatch"]
+    assert issue.total == 1
+    assert issue.title.startswith("1 row(s) skipped")
+    assert issue.examples == ["`Omar Testmismatch` (sheet Staff)"]
+
+
+def test_missing_category_column_reports_every_row(tmp_path):
+    repo = _one_sheet_repo(
+        tmp_path,
+        {"Internal ID": [1, 2], "Name": ["Jane Testone", "Omar Testtwo"]},
+    )
+
+    assert repo.rows() == []
+    issue = {i.kind: i for i in repo.quality_report()}["category_mismatch"]
+    assert issue.total == 2

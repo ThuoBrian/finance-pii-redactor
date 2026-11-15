@@ -134,6 +134,12 @@ Each sheet must have these columns:
 When the workbook loads, the app surfaces any of these in the **Advanced
 settings** panel so the IDs it emits stay trustworthy:
 
+- **Rows skipped because their Category cell doesn't match** (warning) — a
+  row is loaded only when its `Category` cell matches its sheet (`Staff` on
+  the Staff sheet, and so on). A blank cell, a missing `Category` column or a
+  different word (`Employee`) means the row is skipped and that name is
+  **never detected**. The warning lists the skipped names; fix the cell and
+  Refresh.
 - **Cross-category duplicate** (warning) — a name appears under more than one
   category. Keep each name in a single category to avoid conflicting IDs.
 - **Conflicting IDs** (warning) — the same name in the same category has two

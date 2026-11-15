@@ -218,6 +218,12 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **Master-list rows with the wrong Category are reported, not dropped
+  silently.** A row whose `Category` cell doesn't match its sheet (blank, a
+  different word, or no `Category` column at all) was skipped with no sign,
+  so that name was never detected. Such rows are still not loaded, but the
+  master-list card now lists them under "things to tidy" ("N row(s) skipped
+  because their Category cell doesn't match").
 - **Review tick boxes respond to a single click.** Every other tick or
   untick in the "Hide in output?" column was ignored, so a box seemed to
   need a double click. Each click now registers.
