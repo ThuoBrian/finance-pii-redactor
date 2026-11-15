@@ -149,10 +149,12 @@ def _options_step(
                     "numeric column if it holds account or M-Pesa numbers."
                 ),
             )
+        # The detection threshold, not the fuzzy-match one. Capped at the
+        # score master-list matches get: anything higher drops every one.
         st.slider(
             "Confidence threshold",
             min_value=0.1,
-            max_value=1.0,
+            max_value=settings.custom_match_score,
             step=0.05,
             help=THRESHOLD_HELP,
             key="excel_threshold",

@@ -218,6 +218,9 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **The Excel confidence slider stops at 0.90.** Its own help text said not
+  to go above 0.90, because master-list matches score exactly 0.90 and a
+  higher threshold drops every one of them, yet the slider went to 1.0.
 - **An Excel file with nothing found can still be downloaded.** The Download
   step used to say "Nothing was detected" and offer no file, so a workbook
   trimmed to some tabs could not be saved. The rebuilt workbook is now

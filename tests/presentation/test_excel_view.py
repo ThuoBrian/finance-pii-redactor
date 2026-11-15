@@ -94,6 +94,17 @@ def test_a_name_in_a_column_header_does_not_reach_the_download() -> None:
     assert b"Jane Doe" not in _xml(at.session_state["excel_bytes"])
 
 
+def test_the_threshold_slider_stops_at_the_master_list_score() -> None:
+    """Above 0.90 every master-list match is dropped; the slider can't go there."""
+    from finance_redactor.config import DEFAULT_SETTINGS
+
+    at = _start({"Payments": {"notes": ["ok"]}})
+    slider = at.slider(key="excel_threshold")
+
+    assert slider.max == DEFAULT_SETTINGS.custom_match_score == 0.9
+    assert slider.value == DEFAULT_SETTINGS.default_threshold
+
+
 def _downloads(at: AppTest) -> list[str]:
     return [element.proto.label for element in at.get("download_button")]
 
