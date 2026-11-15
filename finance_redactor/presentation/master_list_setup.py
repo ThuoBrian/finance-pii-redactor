@@ -19,7 +19,11 @@ from pathlib import Path
 
 import streamlit as st
 
-from finance_redactor.config import save_master_list_dir
+from finance_redactor.config import (
+    master_list_setup_skipped,
+    save_master_list_dir,
+    set_master_list_setup_skipped,
+)
 
 MASTER_LIST_FILENAME = "Names List - Organized.xlsx"
 
@@ -35,6 +39,22 @@ def master_list_exists_at(folder: str) -> bool:
     if not folder:
         return False
     return (Path(folder) / MASTER_LIST_FILENAME).is_file()
+
+
+def should_offer_setup(*, has_names: bool) -> bool:
+    """Return True if the 0-names setup dialog should open on this run.
+
+    Either button dismisses it for the session. "Skip for now" is also
+    remembered across launches, for someone who isn't using a shared list,
+    and forgotten as soon as a list loads with names, so a list that later
+    goes missing (moved, renamed, unsynced) prompts again.
+    """
+    skipped = master_list_setup_skipped()
+    if has_names:
+        if skipped:
+            set_master_list_setup_skipped(False)
+        return False
+    return not (skipped or st.session_state.get("master_list_setup_dismissed"))
 
 
 @st.dialog("Set up your shared master list")
@@ -86,6 +106,8 @@ def render_master_list_setup_dialog(current_names_dir: Path) -> None:
             st.rerun()
     with col_skip:
         if st.button("Skip for now", width="stretch"):
+            # Remembered across launches; see should_offer_setup.
+            set_master_list_setup_skipped(True)
             st.session_state.master_list_setup_dismissed = True
             st.rerun()
 

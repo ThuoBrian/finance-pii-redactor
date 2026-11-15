@@ -241,6 +241,11 @@ the `version` field in `pyproject.toml`.
   warned that the workbook wasn't there. It is now greyed out until a folder
   is entered, and when the workbook isn't found you must tick "Save anyway:
   the folder is still syncing" first.
+- **"Skip for now" on the master-list setup dialog is remembered.** It used
+  to ask again on every launch. The choice is now saved in
+  `~/.finance_pii_redactor/settings.json` next to the folder setting, and
+  cleared as soon as a master list loads with names, so a list that later
+  goes missing still prompts.
 - **Review tick boxes respond to a single click.** Every other tick or
   untick in the "Hide in output?" column was ignored, so a box seemed to
   need a double click. Each click now registers.
