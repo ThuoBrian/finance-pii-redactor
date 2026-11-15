@@ -10,6 +10,7 @@ from finance_redactor.domain.errors import EncryptedPdfError, UnreadableFileErro
 from finance_redactor.infrastructure.documents.pdf_gateway import (
     PyMuPdfDocument,
     _drop_embedded_hits,
+    _first_rect_of_each_match,
     _search_variants,
     _tighten_to_line,
 )
@@ -551,3 +552,42 @@ def test_page_tables_is_empty_on_a_page_without_a_table():
     document = PyMuPdfDocument.open(_wrapped_name_pdf_bytes())
 
     assert document.page_tables(0) == []
+
+
+def test_a_name_wrapping_a_line_is_labelled_once_per_occurrence():
+    """A two-word name split over two lines is one occurrence: search_for
+    returns a rect per line, and only the first gets the label. A second,
+    unwrapped occurrence still gets its own label.
+    """
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "Signed by Jane")
+    page.insert_text((72, 130), "Doe on Monday.")
+    page.insert_text((72, 160), "Witness: Jane Doe.")
+    document = PyMuPdfDocument(doc)
+
+    assert document.redact_page(0, [(["Jane Doe"], "[001]")]) == []
+    redacted = PyMuPdfDocument.open(document.to_bytes())
+    document.close()
+    text = redacted.page_text(0)
+    redacted.close()
+
+    assert "Jane" not in text
+    assert "Doe" not in text
+    assert text.count("[001]") == 2
+
+
+@pytest.mark.parametrize(
+    ("n_rects", "page_text", "candidate", "expected"),
+    [
+        (2, "by Jane\nDoe on", "Jane Doe", [True, False]),
+        (3, "Jane\nDoe and Jane Doe", "jane doe", [True, False, True]),
+        (2, "Jane Doe, Jane Doe", "Jane Doe", [True, True]),
+        # Counts don't line up: label every rect, the old behaviour...
+        (3, "Jane Doe", "Jane Doe", [True, True, True]),
+        # ...except a candidate that is one wrapped occurrence by construction.
+        (2, "unrelated", "Acme Sup-\nplies", [True, False]),
+    ],
+)
+def test_first_rect_of_each_match(n_rects, page_text, candidate, expected):
+    assert _first_rect_of_each_match(n_rects, page_text, candidate) == expected

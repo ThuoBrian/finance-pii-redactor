@@ -112,6 +112,32 @@ def _drop_embedded_hits(
     ]
 
 
+def _first_rect_of_each_match(
+    n_rects: int, page_text: str, candidate: str
+) -> list[bool]:
+    """Say which of ``n_rects`` search hits should carry the label.
+
+    ``page.search_for`` matches a multi-word candidate across a line break
+    and returns one rect per line of that one occurrence. Each occurrence of
+    ``candidate`` in ``page_text`` (any run of whitespace, line breaks
+    included, between its words) is counted with the lines it spans; only
+    the first rect of each gets the label. If the counts don't line up with
+    the hits, a candidate holding a line break keeps its label on the first
+    rect only (it is one occurrence by construction) and any other candidate
+    is labelled on every rect, as before. Only labels depend on this: every
+    rect is covered either way.
+    """
+    pattern = r"\s+".join(re.escape(word) for word in candidate.split())
+    flags: list[bool] = []
+    for match in re.finditer(pattern, page_text, re.IGNORECASE):
+        flags += [True] + [False] * match.group().count("\n")
+    if len(flags) == n_rects:
+        return flags
+    if "\n" in candidate:
+        return [index == 0 for index in range(n_rects)]
+    return [True] * n_rects
+
+
 def _is_word_char(char: str) -> bool:
     return bool(char) and (char.isalnum() or char == "_")
 
@@ -367,13 +393,14 @@ class PyMuPdfDocument:
             if not rects:
                 not_located.append(redaction_index)
                 continue
-            # A candidate containing a line break (e.g. the dehyphenated raw-text
-            # fallback) matches one logical occurrence that PyMuPDF reports as one
-            # rect per line it spans. Label only the first rect so the pseudonym
-            # isn't stamped once per line fragment; every rect still gets covered.
-            spans_multiple_lines = "\n" in matched_candidate
-            for index, rect in enumerate(rects):
-                show_label = not blackout and (index == 0 or not spans_multiple_lines)
+            # One occurrence that wraps a line comes back as one rect per line.
+            # Label only its first rect so the pseudonym isn't stamped once per
+            # line fragment; every rect still gets covered.
+            first_rects = _first_rect_of_each_match(
+                len(rects), textpage.extractText(), matched_candidate
+            )
+            for rect, is_first in zip(rects, first_rects, strict=True):
+                show_label = is_first and not blackout
                 page.add_redact_annot(
                     _tighten_to_line(rect),
                     text=label if show_label else None,
