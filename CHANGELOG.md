@@ -90,8 +90,10 @@ the `version` field in `pyproject.toml`.
   tab left with no columns chosen.
 - **A calmer, narrower page.** The app now uses Streamlit's centered layout
   instead of stretching across the whole screen, so tables, captions and
-  buttons stay in one readable column. The Excel preview shows the redacted
-  table above the original instead of squeezing them side by side.
+  buttons stay in one readable column. The Excel preview shows one full-width
+  table, the redacted one, and a "Compare with original" toggle switches it
+  to the original, instead of squeezing the two side by side or stacking
+  them.
 - **A tidier sidebar.** The logo is shown full width, where it can be seen.
   The master-list card fits on one line, with the file location and Refresh
   folded under "Location and refresh". Help is a link next to the privacy

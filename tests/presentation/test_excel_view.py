@@ -149,6 +149,31 @@ def test_column_choices_stay_with_their_tab_and_reach_the_scan() -> None:
     assert at.session_state["findings"].cell_count == 1
 
 
+def _shown_text(at: AppTest) -> str:
+    """Every cell of the one preview table, as text.
+
+    Preview tables are the ones whose changed cells carry the » marker; the
+    other tabs hold tables too. Exactly one must be on the page.
+    """
+    texts = [
+        " ".join(str(v) for v in table.value.to_numpy().ravel())
+        for table in at.dataframe
+    ]
+    (preview,) = [t for t in texts if "»" in t]
+    return preview
+
+
+def test_preview_shows_one_table_and_the_toggle_switches_it() -> None:
+    at = _start({"Payments": {"notes": ["Paid Jane Doe", "ok"]}})
+    _click(at, "Redact my file")
+
+    assert "Jane Doe" not in _shown_text(at)  # redacted by default
+
+    at.toggle(key="excel_preview_original").set_value(True).run()
+    assert not at.exception, at.exception
+    assert "Jane Doe" in _shown_text(at)  # switched, not stacked
+
+
 def _downloads(at: AppTest) -> list[str]:
     return [element.proto.label for element in at.get("download_button")]
 
