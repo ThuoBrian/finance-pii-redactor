@@ -105,6 +105,50 @@ def test_the_threshold_slider_stops_at_the_master_list_score() -> None:
     assert slider.value == DEFAULT_SETTINGS.default_threshold
 
 
+def test_name_summary_lists_the_first_names_then_a_count() -> None:
+    from finance_redactor.presentation.excel_view import name_summary
+
+    assert name_summary(["Jan"]) == "Jan"
+    assert name_summary(["Jan", "Feb"]) == "Jan, Feb"
+    assert name_summary(["Jan", "Feb", "Mar"]) == "Jan, Feb + 1 more"
+    assert name_summary([f"T{n}" for n in range(12)]) == "T0, T1 + 10 more"
+
+
+_THREE_TABS: dict[str, dict[str, list[object]]] = {
+    "Jan": {"notes": ["Paid Jane Doe"], "memo": ["ok"]},
+    "Feb": {"notes": ["Paid Jane Doe"], "memo": ["ok"]},
+    "Mar": {"notes": ["ok"], "memo": ["ok"]},
+}
+
+
+def test_one_column_picker_serves_every_tab() -> None:
+    at = _start(_THREE_TABS)
+
+    assert [s.label for s in at.selectbox] == ["Which tab's columns?"]
+    assert [m.label for m in at.multiselect].count("Columns to scan") == 1
+    caption = next(c.value for c in at.caption if "3 tabs" in c.value)
+    assert "(Jan, Feb + 1 more)" in caption
+
+
+def test_column_choices_stay_with_their_tab_and_reach_the_scan() -> None:
+    at = _start(_THREE_TABS)
+    at.multiselect(key="excel_cols_Jan").set_value(["memo"]).run()
+    at.selectbox[0].set_value("Feb").run()
+    assert at.multiselect(key="excel_cols_Feb").value == ["notes", "memo"]
+    at.selectbox[0].set_value("Jan").run()
+    assert at.multiselect(key="excel_cols_Jan").value == ["memo"]
+
+    _click(at, "Redact my file")
+
+    assert at.session_state["scan_columns"] == {
+        "Jan": ["memo"],
+        "Feb": ["notes", "memo"],
+        "Mar": ["notes", "memo"],
+    }
+    # Jan's "notes" was left out, so only Feb's cell is a finding.
+    assert at.session_state["findings"].cell_count == 1
+
+
 def _downloads(at: AppTest) -> list[str]:
     return [element.proto.label for element in at.get("download_button")]
 

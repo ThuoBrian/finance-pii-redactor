@@ -96,6 +96,13 @@ def run_excel_flow(
     _download_step(sheets, excel_gateway, steps)
 
 
+def name_summary(names: list[str], shown: int = 2) -> str:
+    """``"Jan, Feb + 8 more"``: the first few names, then a count of the rest."""
+    head = ", ".join(names[:shown])
+    rest = len(names) - shown
+    return f"{head} + {rest:,} more" if rest > 0 else head
+
+
 def _options_step(
     sheets: dict[str, pd.DataFrame],
     excel_service: RedactExcelService,
@@ -108,7 +115,7 @@ def _options_step(
     tab_names = list(sheets)
     n_rows = sum(len(df) for df in sheets.values())
     st.caption(
-        f"{plural(len(tab_names), 'tab')} ({', '.join(tab_names)}) · "
+        f"{plural(len(tab_names), 'tab')} ({name_summary(tab_names)}) · "
         f"{plural(n_rows, 'row')} · text columns are picked for you"
     )
 
@@ -137,17 +144,31 @@ def _options_step(
             if len(tab_names) > 1
             else tab_names
         )
-        for name in selected_tabs:
+        # One column picker, pointed at one tab at a time. Each tab's choice
+        # stays in its own excel_cols_{name} key (kept by keep_option_choices
+        # while its picker is not drawn), which the scan below reads.
+        tab = (
+            st.selectbox("Which tab's columns?", options=selected_tabs)
+            if len(selected_tabs) > 1
+            else next(iter(selected_tabs), None)
+        )
+        if tab is not None:
             st.multiselect(
-                "Columns to scan"
-                if len(tab_names) == 1
-                else f"Columns to scan: {name}",
-                options=list(sheets[name].columns),
-                key=f"excel_cols_{name}",
+                "Columns to scan",
+                options=list(sheets[tab].columns),
+                key=f"excel_cols_{tab}",
                 help=(
                     "Numeric and date columns are left out by default. Add a "
-                    "numeric column if it holds account or M-Pesa numbers."
+                    "numeric column if it holds account or M-Pesa numbers. "
+                    "Column headers are always checked."
                 ),
+            )
+        no_columns = [t for t in selected_tabs if not state[f"excel_cols_{t}"]]
+        if no_columns and len(no_columns) < len(selected_tabs):
+            st.caption(
+                f"No columns chosen in {name_summary(no_columns)}: only the "
+                "headers and tab name are checked there, and its cells go "
+                "into the download as they are."
             )
         # The detection threshold, not the fuzzy-match one. Capped at the
         # score master-list matches get: anything higher drops every one.

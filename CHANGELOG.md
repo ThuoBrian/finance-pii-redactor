@@ -82,6 +82,12 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **One column picker for every Excel tab.** The Options step drew a
+  "Columns to scan" box for each tab, so a 10-tab workbook stacked ten of
+  them. Now "Which tab's columns?" picks the tab and one box shows its
+  columns; each tab keeps its own choice. The tab list above it shows the
+  first two names and "+ N more" instead of every name, and a note names any
+  tab left with no columns chosen.
 - **A calmer, narrower page.** The app now uses Streamlit's centered layout
   instead of stretching across the whole screen, so tables, captions and
   buttons stay in one readable column. The Excel preview shows the redacted
