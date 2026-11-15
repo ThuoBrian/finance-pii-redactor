@@ -230,6 +230,19 @@ the `version` field in `pyproject.toml`.
 - **The upload box no longer offers `.xls`.** Old-format workbooks were always
   rejected as unreadable. The box now lists only `.xlsx`, `.pdf` and `.docx`,
   and the error for other files says to re-save a `.xls` as `.xlsx`.
+- **Word first-page and even-page headers and footers are redacted.** Only the
+  default header and footer of each section were scanned, so a name in a
+  "Different first page" or "Different odd and even pages" header or footer
+  came through unchanged. All six are scanned now. A Word file with no header
+  or footer no longer gets an empty one added.
+- **Word tracked changes, comments, footnotes and endnotes no longer leak.**
+  Text added with Track Changes on was never checked, and deleted text stayed
+  in the file, along with the reviewer's name. Comments, and who wrote them,
+  were never touched, and nor were footnotes or endnotes. Now tracked changes
+  are accepted before the scan (added text is checked, deleted text dropped),
+  comments and the reviewer list are removed, and footnotes and endnotes are
+  checked like the body. The redacted file has no comments or change history;
+  see the troubleshooting guide.
 - **Review tick boxes respond to a single click.** Every other tick or
   untick in the "Hide in output?" column was ignored, so a box seemed to
   need a double click. Each click now registers.

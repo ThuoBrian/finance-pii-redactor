@@ -35,6 +35,7 @@ This file records known errors, edge cases, and their solutions when developing 
   - [A blacked-out image or signature could be pulled back out of a PDF](#a-blacked-out-image-or-signature-could-be-pulled-back-out-of-a-pdf)
   - [Redacting a name in a PDF also blacks out/deletes part of the line above it](#redacting-a-name-in-a-pdf-also-blacks-outdeletes-part-of-the-line-above-it)
   - [A name inside a Word text box, SmartArt, or embedded object is not detected](#a-name-inside-a-word-text-box-smartart-or-embedded-object-is-not-detected)
+  - [Comments and tracked changes are gone from the redacted Word file](#comments-and-tracked-changes-are-gone-from-the-redacted-word-file)
   - [Why doesn't the tool touch dates/times?](#why-doesnt-the-tool-touch-datestimes)
   - [A town or country name is not redacted](#a-town-or-country-name-is-not-redacted)
   - [A link no longer works in the redacted file](#a-link-no-longer-works-in-the-redacted-file)
@@ -276,8 +277,14 @@ This file records known errors, edge cases, and their solutions when developing 
 ### A name inside a Word text box, SmartArt, or embedded object is not detected
 
 - **Symptom:** A name typed into a Word text box, SmartArt diagram, or embedded object is left untouched, even though the same name elsewhere in the body/table/header is pseudonymized correctly.
-- **Cause:** `PythonDocxDocument` (`finance_redactor/infrastructure/documents/docx_gateway.py`) enumerates paragraphs from the document body, table cells (including nested tables), and headers/footers - the same "only the selectable text layer is processed" limitation as scanned PDFs, just for a different Word-specific reason: text boxes/SmartArt/embedded objects store their text outside `paragraph.runs`, so python-docx's normal paragraph walk never sees it.
+- **Cause:** `PythonDocxDocument` (`finance_redactor/infrastructure/documents/docx_gateway.py`) enumerates paragraphs from the document body, table cells (including nested tables), every header and footer (default, first-page and even-page), and footnotes and endnotes - the same "only the selectable text layer is processed" limitation as scanned PDFs, just for a different Word-specific reason: text boxes/SmartArt/embedded objects store their text outside `paragraph.runs`, so python-docx's normal paragraph walk never sees it.
 - **Solution:** Retype that text as normal paragraph text, or manually redact it. Widening the gateway to also reach into text-box/SmartArt XML would be a larger follow-up if this becomes common.
+
+### Comments and tracked changes are gone from the redacted Word file
+
+- **Symptom:** The original Word file had comments or tracked changes ("Track Changes" on); the redacted file has neither. Inserted text is plain text, deleted text is gone, and there are no comment balloons.
+- **Cause:** This is deliberate. A comment's text and its author's name are both PII, and Word keeps deleted text and every reviewer's name in the file even when they don't show on screen. So on open, `PythonDocxDocument` (`finance_redactor/infrastructure/documents/docx_gateway.py`) accepts every tracked change (insertions and moves become normal text, which is then checked like the rest; deletions, moved-away text and formatting-change records are dropped; a deleted table row is removed), removes every comment with its anchors, and drops the reviewer list (`people.xml`). This happens in the body, headers, footers, footnotes and endnotes.
+- **Solution:** None needed. If you need the comments or the change history, keep them in the original file, which is Confidential and stays on your machine. The redacted file is the accepted, final version.
 
 ### Why doesn't the tool touch dates/times?
 
