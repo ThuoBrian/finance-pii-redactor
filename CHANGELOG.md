@@ -71,9 +71,9 @@ the `version` field in `pyproject.toml`.
   machines let shortcut creation report success without writing anything),
   and `run.bat` re-creates the Desktop shortcut on launch if it's missing,
   for anyone who skipped the installer or deleted it.
-- **The app defaults to Streamlit's dark theme** (`.streamlit/config.toml`),
-  since the logo (`assets/data-privacy-ai-dark-nobg.svg`) is a white-on-
-  transparent SVG and was invisible on the default light background.
+- **The logo reads in both themes.** It is a white-on-transparent SVG
+  (`assets/data-privacy-ai-dark-nobg.svg`) and was invisible on a light
+  background, so the sidebar draws it on its own dark panel.
 - **A "Close the app" button in the sidebar** (`presentation/shutdown.py`)
   fully quits the tool from the browser, with one confirm step. Closing only
   the browser tab, or only the console window, used to leave the other one
@@ -94,6 +94,11 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **The app follows your light or dark preference.** Dark mode was forced
+  for the logo's sake. `.streamlit/config.toml` now defines a light and a
+  dark theme with the same blue accent, so each person gets their system
+  setting and can switch in Streamlit's settings menu. The logo sits on a
+  dark panel that works in both.
 - **Consistent, readable wording across the steps.** The step tracker says
   "Options", like the page. The Review tab counts every term as well as the
   guesses ("Review (57 terms, 2 to check)"), so it no longer reads as a

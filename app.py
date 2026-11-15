@@ -47,6 +47,12 @@ from finance_redactor.presentation.steps import show_step
 
 # Resolved from this file, not the CWD - run.bat launches from anywhere.
 _LOGO = Path(__file__).parent / "assets" / "data-privacy-ai-dark-nobg.svg"
+# Streamlit gives a keyed container the class st-key-<key>. #0E1117 is the
+# dark theme's background; white on it is 18.9:1.
+_LOGO_PANEL_CSS = (
+    "<style>.st-key-sidebar_logo {background: #0E1117; "
+    "border-radius: 0.75rem; padding: 0.75rem;}</style>"
+)
 _HELP_URL = "https://github.com/ThuoBrian/finance-pii-redactor/blob/main/docs/troubleshooting.md"
 
 
@@ -149,8 +155,12 @@ def _main() -> None:
 
     with st.sidebar:
         # A full-width image, not st.logo: the logo is a wide illustration,
-        # and st.logo's 24px-high slot shrinks it past recognition.
-        st.image(str(_LOGO), width="stretch")
+        # and st.logo's 24px-high slot shrinks it past recognition. It is
+        # white-on-transparent and there is no light version, so it sits on
+        # its own dark panel, which reads in the light and the dark theme.
+        st.html(_LOGO_PANEL_CSS)
+        with st.container(key="sidebar_logo"):
+            st.image(str(_LOGO), width="stretch")
         st.markdown("### Finance PII Redactor")
         render_master_list_card(
             name_counts,
