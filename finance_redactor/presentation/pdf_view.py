@@ -39,6 +39,7 @@ from finance_redactor.presentation.exclusion_view import (
     carried_key,
     render_deselect_editor,
     render_exclusion_warning,
+    render_where_found,
     unapplied_changes_note,
 )
 from finance_redactor.presentation.presenters import (
@@ -307,9 +308,7 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
         st.warning(not_located_warning(not_located))
 
     review_findings = state.get("pdf_all_findings", [])
-    tab_review, tab_mapping, tab_occurrences = st.tabs(
-        review_tab_labels(review_findings)
-    )
+    tab_review, tab_mapping = st.tabs(review_tab_labels(review_findings))
     with tab_mapping:
         if blackout:
             st.caption("Black out leaves nothing to decode, so there is no mapping.")
@@ -322,19 +321,13 @@ def _review_step(uploaded: Any, pdf_service: RedactPdfService, steps: Any) -> No
             excluded=state.get("pdf_excluded_applied", frozenset()),
             not_located=len(not_located),
         )
-    with tab_occurrences:
-        st.markdown(f"**All detections ({plural(n_entities, 'finding')})**")
-        st.dataframe(
-            findings_dataframe(pdf_findings, "Page"),
-            width="stretch",
-            hide_index=True,
-        )
 
     columns_applied = state.get("pdf_columns_applied", frozenset())
     words_applied: list[str] = run["custom_words"]
     with additions_expander("pdf", words_applied):
         columns = _column_picker(state.pdf_scan_result.table_columns, columns_applied)
         words = render_words_box("pdf", words_applied, warn_label_shaped=True)
+    render_where_found(findings_dataframe(pdf_findings, "Page"))
 
     if (
         excluded != state.get("pdf_excluded_applied", frozenset())

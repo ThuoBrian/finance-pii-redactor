@@ -507,3 +507,12 @@ def test_the_word_threshold_slider_stops_at_the_master_list_score() -> None:
 
     assert slider.max == DEFAULT_SETTINGS.custom_match_score == 0.9
     assert slider.value == DEFAULT_SETTINGS.default_threshold
+
+
+@pytest.mark.parametrize("fmt", ["excel", "pdf", "word"])
+def test_where_found_is_an_expander_at_the_bottom_not_a_tab(fmt: str) -> None:
+    at = _start(fmt)
+    _click(at, "Redact my file")
+
+    assert "Where found" not in [t.label for t in at.tabs]
+    assert "Where each term was found (1 occurrence)" in [e.label for e in at.expander]

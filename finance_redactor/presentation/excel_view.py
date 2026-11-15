@@ -25,6 +25,7 @@ from finance_redactor.presentation.exclusion_view import (
     carried_key,
     render_deselect_editor,
     render_exclusion_warning,
+    render_where_found,
     unapplied_changes_note,
 )
 from finance_redactor.presentation.presenters import (
@@ -298,7 +299,7 @@ def _review_step(excel_service: RedactExcelService, steps: Any) -> None:
         f"{plural(scan_result.cell_count, 'cell')}"
     )
     review_findings = scan_result_findings(scan_result)
-    tab_review, tab_preview, tab_mapping, tab_occurrences = st.tabs(
+    tab_review, tab_preview, tab_mapping = st.tabs(
         review_tab_labels(review_findings, preview=True)
     )
     with tab_preview:
@@ -356,16 +357,7 @@ def _review_step(excel_service: RedactExcelService, steps: Any) -> None:
             key_prefix="excel",
             excluded=state.get("excel_excluded_applied", frozenset()),
         )
-    with tab_occurrences:
-        st.markdown(f"**All detections ({plural(n_entities, 'finding')})**")
-        if n_entities == 0:
-            st.write("Nothing was detected.")
-        else:
-            st.dataframe(
-                excel_findings_dataframe(scan_result),
-                width="stretch",
-                hide_index=True,
-            )
+    render_where_found(excel_findings_dataframe(scan_result))
 
     if excluded != state.get("excel_excluded_applied", frozenset()):
         # Cheap by construction: scan and redact are separate, so

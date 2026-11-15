@@ -24,6 +24,7 @@ from finance_redactor.presentation.exclusion_view import (
     carried_key,
     render_deselect_editor,
     render_exclusion_warning,
+    render_where_found,
     unapplied_changes_note,
 )
 from finance_redactor.presentation.presenters import (
@@ -183,9 +184,7 @@ def _review_step(uploaded: Any, docx_service: RedactDocxService, steps: Any) -> 
         )
 
     review_findings = state.get("docx_all_findings", [])
-    tab_review, tab_mapping, tab_occurrences = st.tabs(
-        review_tab_labels(review_findings)
-    )
+    tab_review, tab_mapping = st.tabs(review_tab_labels(review_findings))
     with tab_mapping:
         render_crosswalk_section(state.docx_crosswalk)
     with tab_review:
@@ -194,17 +193,11 @@ def _review_step(uploaded: Any, docx_service: RedactDocxService, steps: Any) -> 
             key_prefix="docx",
             excluded=state.get("docx_excluded_applied", frozenset()),
         )
-    with tab_occurrences:
-        st.markdown(f"**All detections ({plural(n_entities, 'finding')})**")
-        st.dataframe(
-            findings_dataframe(docx_findings, "Paragraph"),
-            width="stretch",
-            hide_index=True,
-        )
 
     words_applied: list[str] = state.docx_run_words
     with additions_expander("docx", words_applied):
         words = render_words_box("docx", words_applied)
+    render_where_found(findings_dataframe(docx_findings, "Paragraph"))
 
     if (
         excluded != state.get("docx_excluded_applied", frozenset())

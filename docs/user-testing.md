@@ -214,8 +214,8 @@ what happened instead — then file it.
   curated name), the likeliest false positives are at the top and the curated
   name is last. The status line above the table matches what you see.
 - [ ] The review step opens on the **Review** tab, labelled with how many model
-  guesses there are to check. The per-occurrence table is in its own
-  **Where found** tab.
+  guesses there are to check. The per-occurrence table is folded under
+  **Where each term was found** at the bottom of the step, not in a tab.
 - [ ] With a dozen terms or fewer, there is no filter, search or "Untick all"
   row above the table, just the list. With more, they appear.
 - [ ] A scanned PDF warns about its scanned pages on Review. The **Before you

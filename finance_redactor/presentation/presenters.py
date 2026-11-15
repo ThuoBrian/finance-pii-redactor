@@ -664,7 +664,6 @@ def review_tab_labels(
         review,
         *(["Preview"] if preview else []),
         "Code list",
-        "Where found",
     ]
 
 

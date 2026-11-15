@@ -559,7 +559,6 @@ def test_review_comes_first_and_counts_the_model_guesses() -> None:
     assert review_tab_labels(findings) == [
         "Review (4 to check)",
         "Code list",
-        "Where found",
     ]
     assert review_tab_labels(findings, preview=True)[1] == "Preview"
 

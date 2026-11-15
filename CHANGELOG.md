@@ -91,6 +91,10 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **The "Where found" tab is gone from Review.** The per-occurrence table
+  (page, cell or paragraph of every match) is folded under **Where each term
+  was found** at the bottom of the Review step, in all three formats. Review
+  now has two tabs (three in Excel, with Preview).
 - **The sidebar's master-list card is flatter.** **Refresh** sits on the card
   instead of inside a "Location and refresh" expander; the workbook's path
   and how to edit it fold into one **Where it is** expander. The summary line

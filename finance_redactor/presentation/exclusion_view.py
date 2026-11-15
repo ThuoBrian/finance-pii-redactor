@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import pandas as pd
 import streamlit as st
 
 from finance_redactor.domain.entities import Finding
@@ -265,6 +266,19 @@ def render_deselect_editor(
     # the *applied* one until Apply is clicked: callers rebuild the output
     # whenever it changes. Only the click's own rerun returns the pending set.
     return pending if clicked else excluded
+
+
+def render_where_found(table: pd.DataFrame) -> None:
+    """Fold every single occurrence (page, cell or paragraph) under one expander.
+
+    The review table has one row per term; this is the per-occurrence record
+    behind it, for the rare check of where exactly a term sits. Drawn at the
+    bottom of Review, and not at all when nothing was found.
+    """
+    if table.empty:
+        return
+    with st.expander(f"Where each term was found ({plural(len(table), 'occurrence')})"):
+        st.dataframe(table, width="stretch", hide_index=True)
 
 
 def carried_key(key_prefix: str) -> str:
