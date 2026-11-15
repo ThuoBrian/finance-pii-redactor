@@ -218,6 +218,10 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **Excel IDs keep their leading zeros.** A text cell such as `0041` used to
+  come out of the redacted workbook as the number `41`. Cells are now kept as
+  written: text stays text, and numbers and dates stay numbers and dates.
+  Columns that mix text with numbers are now picked for scanning by default.
 - **Review tick boxes respond to a single click.** Every other tick or
   untick in the "Hide in output?" column was ignored, so a box seemed to
   need a double click. Each click now registers.

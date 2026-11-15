@@ -302,3 +302,57 @@ def test_source_workbook_properties_never_reach_the_output():
         everything = b"".join(archive.read(n) for n in archive.namelist())
     for leaked in (b"Pat Example", b"Sam Example", b"Payroll Review"):
         assert leaked not in everything
+
+
+def test_a_text_id_with_leading_zeros_round_trips_as_written():
+    """A text cell ``0041`` comes back as ``0041``, not the number ``41``.
+
+    Checked twice: through openpyxl, and in the raw XML parts of the output,
+    so the check does not rely only on the library that wrote it.
+    """
+    import zipfile
+    from datetime import datetime
+
+    from openpyxl import Workbook
+
+    source = Workbook()
+    sheet = source.active
+    sheet.append(["ID", "Amount", "Paid on", "Payee"])
+    sheet.append(["0041", 1250.5, datetime(2024, 1, 2), "Alex Sample"])
+    sheet.append(["0042", 300, None, None])
+    buffer = BytesIO()
+    source.save(buffer)
+    buffer.seek(0)
+
+    gateway = OpenpyxlExcelGateway()
+    ((name, df),) = gateway.read_sheets(buffer).items()
+    output = gateway.write([(name, df, set())], None)
+
+    out_sheet = load_workbook(BytesIO(output))[name]
+    assert out_sheet["A2"].value == "0041"
+    assert out_sheet["A3"].value == "0042"
+    # Real numbers and dates stay numbers and dates, not text.
+    assert out_sheet["B2"].value == 1250.5
+    assert out_sheet["B3"].value == 300
+    assert out_sheet["C2"].is_date
+    assert out_sheet["C3"].value is None
+
+    with zipfile.ZipFile(BytesIO(output)) as archive:
+        xml = b"".join(archive.read(n) for n in archive.namelist())
+    assert b">0041<" in xml
+
+
+def test_text_columns_picks_a_text_id_column_and_a_mixed_one():
+    """Text IDs and columns mixing text with numbers are scanned by default."""
+    gateway = OpenpyxlExcelGateway()
+    df = pd.DataFrame(
+        {
+            "ID": ["0041", "0042"],
+            "Mixed": [5, "Alex Sample"],
+            "Amount": [1.5, None],
+            "Empty": [None, None],
+        },
+        dtype=object,
+    )
+
+    assert gateway.text_columns(df) == ["ID", "Mixed"]

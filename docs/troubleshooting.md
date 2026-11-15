@@ -307,7 +307,8 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Changed cells are yellow** and replace the source fill on those cells, so reviewers can find what was touched.
 - **A number format shows as General:** a custom format with readable text in it (more than 4 characters in quotes, or several escaped letters) is not copied, because the text could be a name.
 - **"The formatting could not be read":** the workbook loaded for scanning but openpyxl could not read its styles. The download is plain, with values only. Open it in Excel and save a fresh copy, then upload that.
-- **Not fixed by this:** a sheet with a title row above the table still shows `Unnamed: N` in the column picker, and IDs like `0041` still come out as `41`. Both come from how the sheet is first read.
+- **Not fixed by this:** a sheet with a title row above the table still shows `Unnamed: N` in the column picker. That comes from how the sheet is first read: row 1 is always taken as the header.
+- **IDs like `0041` keep their zeros.** Cells are read as written (`dtype=object` in `excel_gateway.read_sheets`), so a text `0041` stays `0041`. A number stored as `41` with a `0000` number format also still shows `0041`, because the number format is carried over.
 
 ## Testing and linting
 
