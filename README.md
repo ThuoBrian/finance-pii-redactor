@@ -90,6 +90,13 @@ A town or country name on its own is left alone.
 or `mailto:` behind "click here") is removed. The visible text stays and is
 checked like any other text. Excel output never keeps links.
 
+**Comments and tracked changes, in Word:** comments are removed, along with
+who wrote them. Tracked changes are accepted: inserted text becomes normal
+text and is checked, and deleted text is dropped, so neither the old wording
+nor the reviewer's name stays in the file. Footnotes, endnotes, and every
+header and footer (including first-page and even-page ones) are checked like
+the body.
+
 **Bank and payment details, in all three formats:** card numbers, IBANs,
 Kenyan bank account numbers, M-Pesa till/paybill numbers, and SWIFT/BIC
 codes. They're replaced with a fixed mask such as `[ACCOUNT]` or `[CARD]`,

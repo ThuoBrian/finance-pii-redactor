@@ -6,10 +6,17 @@ exposes only the operations the use case needs: enumerating paragraph
 text, and splicing pseudonyms back into the underlying runs so unaffected
 text keeps its original formatting.
 
-Hyperlinks are stripped on open, before any text is read (see
-``_strip_hyperlinks``): the target could be ``mailto:`` a person, and
-python-docx's ``paragraph.runs`` skips the runs inside ``<w:hyperlink>``, so
-without this a link's *visible* text was never scanned either.
+Three clean-ups run on open, before any text is read, in every XML part:
+
+- Tracked changes are accepted (``_accept_revisions``): runs inside
+  ``<w:ins>`` are invisible to ``paragraph.runs``, and ``<w:del>`` keeps the
+  deleted text and the reviewer's name in the saved file.
+- Comments are removed (``_remove_comment_anchors``, ``_drop_comment_parts``):
+  the comment text and its author are both PII, and neither is a paragraph
+  the use case could scan.
+- Hyperlinks are stripped (``_strip_hyperlinks``): the target could be
+  ``mailto:`` a person, and ``paragraph.runs`` skips the runs inside
+  ``<w:hyperlink>``, so without this a link's visible text was never scanned.
 """
 
 from __future__ import annotations
@@ -20,10 +27,13 @@ from io import BytesIO
 from typing import cast
 
 from docx import Document as open_docx
+from docx import types as t
 from docx.document import Document
+from docx.opc.constants import CONTENT_TYPE as CT
 from docx.opc.constants import RELATIONSHIP_TYPE as RT
-from docx.opc.part import XmlPart
+from docx.opc.part import PartFactory, XmlPart
 from docx.oxml.ns import qn
+from docx.oxml.text.paragraph import CT_P
 from docx.oxml.xmlchemy import BaseOxmlElement
 from docx.table import Table
 from docx.text.paragraph import Paragraph
@@ -52,6 +62,22 @@ _CORE_TEXT_FIELDS = (
     "version",
 )
 _NEUTRAL_DATE = datetime(1970, 1, 1)
+
+# python-docx has no class for footnote/endnote parts and keeps them as opaque
+# bytes, so nothing here could read or change them. Registering them as plain
+# XML parts (python-docx's own extension point) parses them on open and
+# serializes them back on save, like a header.
+_NOTE_RELATIONSHIPS = (RT.FOOTNOTES, RT.ENDNOTES)
+PartFactory.part_type_for.setdefault(CT.WML_FOOTNOTES, XmlPart)
+PartFactory.part_type_for.setdefault(CT.WML_ENDNOTES, XmlPart)
+
+# Comment text, extra comment data, and the reviewer list (people.xml, which
+# names everyone who commented or tracked a change) all hang off the main
+# document part. Matched on the last path segment because the newer ones live
+# under Microsoft's namespaces, not the ISO ones python-docx names.
+_COMMENT_RELATIONSHIPS = frozenset(
+    {"comments", "commentsExtended", "commentsIds", "commentsExtensible", "people"}
+)
 
 
 def _table_paragraphs(table: Table) -> list[Paragraph]:
@@ -167,22 +193,140 @@ def _strip_part_hyperlinks(part: XmlPart) -> int:
     return removed
 
 
+def _xml_parts(document: Document) -> list[XmlPart]:
+    """Every parsed XML part: body, headers, footers, notes, comments, styles."""
+    return [p for p in document.part.package.iter_parts() if isinstance(p, XmlPart)]
+
+
 def _strip_hyperlinks(document: Document) -> int:
     """Strip hyperlinks from every XML part (body, headers, footers, notes)."""
-    return sum(
-        _strip_part_hyperlinks(part)
-        for part in document.part.package.iter_parts()
-        if isinstance(part, XmlPart)
+    return sum(_strip_part_hyperlinks(part) for part in _xml_parts(document))
+
+
+# Accepting a tracked change: an insertion's (or a move's new location's)
+# content stays as ordinary content.
+_REVISION_UNWRAP = tuple(qn(tag) for tag in ("w:ins", "w:moveTo"))
+# Everything else that records a revision goes: deleted and moved-away text,
+# move range markers, and formatting-change records (they keep the old
+# formatting). Every one of these carries a ``w:author``. Stray ``delText``
+# outside a ``w:del`` is dropped too: ``run.text`` never reads it.
+_REVISION_REMOVE = tuple(
+    qn(tag)
+    for tag in (
+        "w:del",
+        "w:delText",
+        "w:delInstrText",
+        "w:moveFrom",
+        "w:moveFromRangeStart",
+        "w:moveFromRangeEnd",
+        "w:moveToRangeStart",
+        "w:moveToRangeEnd",
+        "w:rPrChange",
+        "w:pPrChange",
+        "w:sectPrChange",
+        "w:tblPrChange",
+        "w:tblPrExChange",
+        "w:tblGridChange",
+        "w:trPrChange",
+        "w:tcPrChange",
+        "w:numberingChange",
+        "w:cellIns",
+        "w:cellDel",
+        "w:cellMerge",
+        "w:customXmlInsRangeStart",
+        "w:customXmlInsRangeEnd",
+        "w:customXmlDelRangeStart",
+        "w:customXmlDelRangeEnd",
+        "w:customXmlMoveFromRangeStart",
+        "w:customXmlMoveFromRangeEnd",
+        "w:customXmlMoveToRangeStart",
+        "w:customXmlMoveToRangeEnd",
     )
+)
+_DEL = qn("w:del")
+_TR_PR = qn("w:trPr")
+
+
+def _accept_revisions(part: XmlPart) -> None:
+    """Accept every tracked change in one part, leaving no revision markup.
+
+    Done before anything is read, so detection and replacement both see the
+    final text, and neither deleted text nor a reviewer's name is saved.
+    """
+    for element in list(part.element.iter(*_REVISION_UNWRAP, *_REVISION_REMOVE)):
+        if element.tag in _REVISION_UNWRAP:
+            _unwrap(element)
+            continue
+        parent = element.getparent()
+        if parent is None:
+            continue
+        row = parent.getparent() if parent.tag == _TR_PR else None
+        if element.tag == _DEL and row is not None and row.getparent() is not None:
+            row.getparent().remove(row)  # a deleted table row
+        else:
+            parent.remove(element)
+
+
+_COMMENT_ANCHORS = tuple(
+    qn(tag)
+    for tag in ("w:commentRangeStart", "w:commentRangeEnd", "w:commentReference")
+)
+
+
+def _remove_comment_anchors(part: XmlPart) -> None:
+    """Drop the markers tying text to a comment; the text itself stays."""
+    for element in list(part.element.iter(*_COMMENT_ANCHORS)):
+        parent = element.getparent()
+        if parent is not None:
+            parent.remove(element)
+
+
+def _drop_comment_parts(document: Document) -> None:
+    """Unlink the comment and reviewer parts; unlinked parts are not saved."""
+    rels = document.part.rels
+    for r_id in [
+        r_id
+        for r_id, rel in rels.items()
+        if rel.reltype.rsplit("/", 1)[-1] in _COMMENT_RELATIONSHIPS
+    ]:
+        rels.pop(r_id)
+
+
+_P = qn("w:p")
+
+
+def _note_paragraphs(document: Document) -> list[Paragraph]:
+    """Every paragraph in the footnotes and endnotes parts, at any depth.
+
+    Iterating ``w:p`` descendants reaches note tables and nested tables too.
+    """
+    paragraphs: list[Paragraph] = []
+    for rel in document.part.rels.values():
+        if rel.reltype not in _NOTE_RELATIONSHIPS:
+            continue
+        part = rel.target_part
+        if not isinstance(part, XmlPart):
+            # Registration above should make this impossible; refuse rather
+            # than hand back a file whose notes were never read.
+            raise UnreadableFileError
+        paragraphs.extend(
+            Paragraph(cast(CT_P, p), cast(t.ProvidesStoryPart, part))
+            for p in part.element.iter(_P)
+        )
+    return paragraphs
 
 
 def _collect_paragraphs(document: Document) -> list[Paragraph]:
-    """Enumerate every paragraph in the document: body, tables, headers/footers.
+    """Enumerate every paragraph: body, tables, headers/footers, foot/endnotes.
 
     Every section's default, first-page and even-page header and footer is
     visited. Headers/footers linked across sections (``is_linked_to_previous``)
     share the same underlying part, so each distinct part is only visited once
     (tracked by ``id(part)``) to avoid scanning/replacing the same text twice.
+    Footnote and endnote paragraphs are read at any depth (including tables).
+
+    Tracked changes and comments never reach here: both are dealt with on open
+    (see the module docstring), so there is nothing of theirs left to scan.
 
     Known limitation: text inside text boxes, SmartArt, and embedded objects
     is not part of ``paragraph.runs`` and is not scanned - mirrors the PDF
@@ -214,6 +358,7 @@ def _collect_paragraphs(document: Document) -> list[Paragraph]:
             paragraphs.extend(header_or_footer.paragraphs)
             for table in header_or_footer.tables:
                 paragraphs.extend(_table_paragraphs(table))
+    paragraphs.extend(_note_paragraphs(document))
     return paragraphs
 
 
@@ -223,9 +368,14 @@ class PythonDocxDocument:
     def __init__(self, document: Document) -> None:
         """Wrap an already-open python-docx ``Document`` and index its blocks.
 
-        Hyperlinks are stripped first, so link text is part of the blocks.
+        Tracked changes are accepted, comments removed and hyperlinks stripped
+        first, so the blocks hold the document's final, visible text.
         """
         self._document = document
+        for part in _xml_parts(document):
+            _accept_revisions(part)
+            _remove_comment_anchors(part)
+        _drop_comment_parts(document)
         self._removed_links = _strip_hyperlinks(document)
         self._paragraphs = _collect_paragraphs(document)
 
