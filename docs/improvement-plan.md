@@ -46,6 +46,10 @@ survive redaction with no signal to the user.
 
 ### 3. DOCX: footnotes, endnotes, comments, and track-changes survive
 
+> **Needs team sign-off before scheduling.** Word tracked changes and comments
+> are on the open-gaps list that the capabilities meeting was meant to scope.
+> Don't start this until that decision is made.
+
 - **Where:** `finance_redactor/infrastructure/documents/docx_gateway.py:57-65,
   179-204, 243-245`, and the docstring at `:178` which claims "notes" are
   covered.
@@ -68,7 +72,9 @@ survive redaction with no signal to the user.
 - **Where:** `finance_redactor/infrastructure/names/master_list_repository.py:411-413`
   (`if category != expected_category: continue`).
 - **Failure:** a blank Category cell, a missing "Category" column, or a
-  wording difference ("Employee" vs "STAFF") drops the row. The name is then
+  wording difference ("Employee" vs "STAFF") drops the row. A missing column
+  drops *every* row on that sheet (`raw.get("Category")` returns None, which
+  cleans to ""). The name is then
   never detected — under-redaction with no signal. The quality report at
   `:208-373` checks duplicates/blank IDs/common words but not this.
 - **Fix:** collect dropped rows during `_parse` and emit them as quality
@@ -90,6 +96,15 @@ survive redaction with no signal to the user.
   missing-file case uses.
 - **Verify:** a truncated xlsx fixture; assert the 0-names dialog appears and
   the app stays usable.
+
+### 5a. Known gaps still pending a team decision
+
+Already confirmed and tracked elsewhere; listed here so this doc is the single
+list. None should be scheduled until the team decides scope.
+
+- PDF: annotations (other than link targets), bookmarks, embedded
+  attachments and form fields survive redaction.
+- Excel: IDs like `0041` are coerced to `41`; column headers are not scanned.
 
 ## P1 — Data loss and dead ends in the flow
 
@@ -147,25 +162,32 @@ survive redaction with no signal to the user.
 
 - **Where:** `uv.lock` pins `onnxruntime` 1.31.0, which ships **no macOS
   x86_64 wheel**. `run.sh:108` and `run.bat:52` run `uv sync`, which fails on
-  an Intel Mac with "no wheel for the current platform" (verified locally on
-  this machine). CI (`.github/workflows/ci.yml:14`) runs only on
+  an Intel Mac with "no wheel for the current platform" (confirmed from
+  `uv.lock`: no `macosx` x86_64 onnxruntime wheel; not reproduced on a Mac). CI (`.github/workflows/ci.yml:14`) runs only on
   `ubuntu-latest`, so nothing catches it.
-- **Fix options (pick one):**
-  - Pin `onnxruntime<1.21` (recent versions with Intel-Mac wheels), or
-  - Add uv's suggested `tool.uv.required-environments` guard
-    (`sys_platform == 'darwin' and platform_machine == 'x86_64'` excluded) and
-    make `install.sh`/`run.sh` detect Intel Macs and print a plain-English
-    "not supported on this Mac" instead of a uv traceback.
+- **Fix (recommended):** add a guard that excludes
+  `sys_platform == 'darwin' and platform_machine == 'x86_64'`, and make
+  `install.sh`/`run.sh` detect Intel Macs and print a plain-English
+  "not supported on this Mac" instead of a uv traceback.
+- **Not recommended:** pinning `onnxruntime<1.21` (the last versions with
+  Intel-Mac wheels) conflicts with the `>=1.31` floor in `pyproject.toml:26`
+  and may conflict with RapidOCR's own requirement.
 - **Also:** add a CI job on a macOS runner (or at minimum `uv lock --check`
   under a macOS platform matrix) so a future dep pin can't silently break
   macOS again. The README and install.sh both advertise macOS support.
 
-### 12. .xls files pass the upload filter but crash
+### 12. .xls files pass the upload filter but are always rejected
 
 - **Where:** `app.py:193` accepts `"xls"`; `finance_redactor/infrastructure/documents/excel_gateway.py:44-47`
   forces `engine="openpyxl"`, which cannot open `.xls`.
-- **Fix:** either read `.xls` honestly or refuse it at upload with the
-  "unsupported" message (`app.py:259` already has the shape).
+- **Severity:** lower than it looks. A real `.xls` makes openpyxl raise
+  `BadZipFile`, which `excel_gateway.py:46` turns into `UnreadableFileError`,
+  and `excel_view.py:80` catches it. The user gets a "can't read" message, not
+  a traceback. The problem is that the upload box advertises a format the tool
+  never accepts. Treat as P3.
+- **Fix:** drop `"xls"` from the uploader (`app.py:192-193`) and the
+  `{"xlsx", "xls"}` branch at `app.py:210`, or tell the user to re-save as
+  `.xlsx`.
 
 ### 13. Phone numbers are not covered at all
 
@@ -184,6 +206,10 @@ survive redaction with no signal to the user.
   custom-words path does fold (`domain/custom_words.py:41-47`) — so "Jose
   Garcia" (document typo) finds nothing but "José García" on the list would
   resolve if it got there.
+- **Status:** the accent half is already built on the unmerged branch
+  `fix/accent-insensitive-master-list-matching` (cc59267). Review and merge
+  that rather than starting over, and update `docs/troubleshooting.md:213`,
+  which still says master-list matching doesn't fold accents.
 - **Fix:** at minimum, make master-list matching accent-insensitive so both
   paths behave the same. Surname-only matching is a design decision — the docs
   currently argue against initials/suffixes; if it stays off, say so in the
@@ -352,19 +378,23 @@ U1 + U2 together (one Review redesign touching `pdf_view.py`, `excel_view.py`,
   fold like `recasing.py` would be safer. Also `.lower()` vs `.casefold()` for
   'ß' can make a name match in detection yet fail to resolve. Both are edge
   cases; worth folding into #14 if that one is taken on.
-- `pdf_gateway.py:368-372`: a multi-word candidate that wraps lines can get
-  its label stamped on every line rect instead of only the first.
+- `pdf_gateway.py:368-372`: a candidate *with* a `\n` already gets one label
+  (on the first rect only). The remaining case is a candidate with no newline
+  that `search_for` still matches across a line wrap: it returns one rect per
+  line, and each one gets the label.
 - `redact_excel.py:252-256` mixes positional `enumerate` with label-based
   `df.at` — safe today (RangeIndex) but fragile.
 - `domain/aliases.py:127-153` `name_pattern` is dead in production (automaton
-  replaced it) and the module docstring still claims otherwise.
+  replaced it) and the module docstring still claims otherwise. **Deferred:**
+  this was found in the 2026-10-06 lean audit and held back for the
+  end-of-project dead-code cleanup. Don't cut it piecemeal.
 - The Word flow's new-upload reset list omits all `pdf_*` keys
   (`docx_view.py:57-76`), so a prior PDF's buffers linger in session state
   until Start over.
 - `master_list_setup.py:60-73` allows "Save and use this folder" even when the
   warning says the workbook isn't there.
 
-## Suggested order for tomorrow
+## Suggested order
 
 1. **P0 #2** (docx header parts) — the smallest fix with the biggest silent
    leak behind it.
@@ -372,9 +402,13 @@ U1 + U2 together (one Review redesign touching `pdf_view.py`, `excel_view.py`,
 3. **P1 #6** (stale same-name re-upload) — small, prevents the worst user
    outcome.
 4. **P0 #4, #5** (master-list quality findings + crash guard).
-5. **P0 #3** (docx comments/footnotes/revisions) — largest; budget the rest of
-   the session.
-6. Batch P1 #8, #9, #10 in one UI pass.
+5. Batch P1 #8, #9, #10 in one UI pass. #10 and U1/U2 all edit the Review and
+   Options rendering in the three `*_view.py` files; do them together to
+   avoid conflicting changes.
+6. **P0 #3** (docx comments/footnotes/revisions) and the **5a** gaps — only
+   once the team has signed off on scope.
 
-Ship each as its own commit with the test named in the item; the existing
-CI (`justfile`, coverage floor 80%) will carry the rest.
+Ship each as its own commit with the test named in the item, and add an
+entry under `[Unreleased]` in `CHANGELOG.md` for anything users will see
+(AGENTS.md). The existing CI (`justfile`, coverage floor 80%) will carry the
+rest.
