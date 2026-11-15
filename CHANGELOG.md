@@ -104,7 +104,10 @@ the `version` field in `pyproject.toml`.
   guesses ("Review (57 terms, 2 to check)"), so it no longer reads as a
   smaller job than it is. The mapping is called "mapping" everywhere: the
   "Code list" tab is now **Mapping**. Tables on screen show "Email address"
-  and "Model guess" rather than `EMAIL_ADDRESS` and `model`; the downloaded
+  and "Model guess" rather than `EMAIL_ADDRESS` and `model`, and codes that
+  read badly when capitalized get proper names ("Website", "IBAN", "M-Pesa
+  number", "Added term" instead of "Url", "Iban code", "Mpesa number",
+  "Custom"), here and in the kinds-of-information picker; the downloaded
   CSVs keep the raw codes. An empty Review tab says nothing was found, and
   the "Nothing here is a guess" note now also lists table columns you chose.
   The **Hide in output?** column keeps its name: it was renamed from

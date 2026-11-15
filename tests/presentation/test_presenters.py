@@ -25,6 +25,7 @@ from finance_redactor.presentation.presenters import (
     carry_over_exclusions,
     crosswalk_dataframe,
     detection_editor_dataframe,
+    entity_label,
     excel_findings_dataframe,
     excluded_terms,
     filter_editor_rows,
@@ -873,3 +874,28 @@ def test_every_source_has_a_readable_label() -> None:
 
     assert len(labels) == len(DetectionSource)
     assert all(label[0].isupper() and "_" not in label for label in labels)
+
+
+@pytest.mark.parametrize(
+    ("entity_type", "label", "why"),
+    [
+        ("URL", "Website", "Shaped like a website"),
+        ("IBAN_CODE", "IBAN", "Shaped like an IBAN"),
+        ("MPESA_NUMBER", "M-Pesa number", "Shaped like an M-Pesa number"),
+        ("KE_BANK_ACCOUNT", "Kenyan bank account", "Shaped like a Kenyan bank account"),
+        ("EMAIL_ADDRESS", "Email address", "Shaped like an email address"),
+    ],
+)
+def test_entity_codes_read_as_plain_words(
+    entity_type: str, label: str, why: str
+) -> None:
+    finding = Finding(
+        page=0,
+        detected_text="made-up value",
+        entity_type=entity_type,
+        score=1.0,
+        source=DetectionSource.PATTERN,
+    )
+
+    assert entity_label(entity_type) == label
+    assert why_found(finding) == why

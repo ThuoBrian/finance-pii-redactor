@@ -106,9 +106,23 @@ ENTITY_HELP = (
 )
 
 
+# Codes whose plain capitalized form reads wrongly ("Url", "Iban code").
+_ENTITY_LABELS = {
+    "URL": "Website",
+    "IBAN_CODE": "IBAN",
+    "SWIFT_CODE": "SWIFT code",
+    "KE_BANK_ACCOUNT": "Kenyan bank account",
+    "MPESA_NUMBER": "M-Pesa number",
+    "CUSTOM": "Added term",
+    "DATE_TIME": "Date or time",
+}
+# First words that keep their capitals mid-sentence.
+_PROPER_WORDS = ("IBAN", "SWIFT", "Kenyan", "M-Pesa")
+
+
 def entity_label(entity_type: str) -> str:
     """Readable form of an entity code, e.g. ``EMAIL_ADDRESS`` -> ``Email address``."""
-    return entity_type.replace("_", " ").capitalize()
+    return _ENTITY_LABELS.get(entity_type, entity_type.replace("_", " ").capitalize())
 
 
 # How each detection source reads on screen. Keyed on the value, not the
@@ -513,7 +527,9 @@ def why_found(finding: Finding, hint: str = "") -> str:
         return "You typed it"
     if source == DetectionSource.TABLE_COLUMN:
         return "In a table column you chose"
-    kind = entity_label(finding.entity_type).lower()
+    kind = entity_label(finding.entity_type)
+    if not kind.startswith(_PROPER_WORDS):
+        kind = kind.lower()
     if source == DetectionSource.PATTERN:
         return f"Shaped like {_with_article(kind)}"
     # A model guess, or a source this build does not know: treat as a guess.
@@ -524,7 +540,9 @@ def why_found(finding: Finding, hint: str = "") -> str:
 
 
 def _with_article(noun: str) -> str:
-    return f"{'an' if noun[:1] in 'aeiou' else 'a'} {noun}"
+    # "an M-Pesa number": the letter M is said "em", so it takes "an".
+    vowel = noun[:1].lower() in "aeiou" or noun.startswith("M-")
+    return f"{'an' if vowel else 'a'} {noun}"
 
 
 def detection_editor_dataframe(
