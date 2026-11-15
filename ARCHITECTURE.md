@@ -57,6 +57,13 @@ built with; and the uploaded file lives in the uploader, so the uploader is
 drawn on every step. The master-list card sits in the sidebar on every step
 (`presentation/master_list_view.py`).
 
+The sidebar is drawn before the uploader, so its buttons (Refresh, Start
+over, Close the app) act through `on_click` callbacks and never call
+`st.rerun()`: a rerun from there ends the run before the uploader is drawn,
+and Streamlit drops the uploaded file. Review is the one step drawn in the
+wide layout; `steps.show_step` sets it, since `st.set_page_config` may be
+called again within a run.
+
 ## Caching
 
 Streamlit reruns the whole script on every interaction, so expensive objects
