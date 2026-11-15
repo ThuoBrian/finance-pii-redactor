@@ -1,17 +1,21 @@
 """Shared per-upload session-state helpers for the Excel/PDF/Word flows.
 
-Each flow keys its cached results on the uploaded file's name and a
-``file_type`` tag, and gets a neutral download name per upload. Collected here
+Each flow keys its cached results on the uploaded file's identity (name, size
+and a hash of its bytes) and a ``file_type`` tag, and gets a neutral download name per upload. Collected here
 so the three flows don't each hand-roll their own copy of this bookkeeping.
 """
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
 
 import streamlit as st
+
+# The identity of the file the cached results were built from.
+UPLOAD_IDENTITY_KEY = "upload_identity"
 
 
 def neutral_stem(now: datetime) -> str:
@@ -34,6 +38,17 @@ def output_stem() -> str:
     return str(st.session_state.output_stem)
 
 
+def upload_identity(uploaded: Any) -> tuple[str, int, str]:
+    """Return ``(name, size, SHA-256 of the bytes)``: what makes an upload "the same file".
+
+    The name alone is not enough: a file edited and uploaded again under the
+    same name must not reuse the old scan, or the download would be built
+    from the wrong document. Hashing the whole buffer is cheap next to a scan.
+    """
+    data = uploaded.getbuffer()
+    return uploaded.name, len(data), hashlib.sha256(data).hexdigest()
+
+
 def reset_on_new_upload(
     uploaded: Any,
     file_type: str,
@@ -43,17 +58,18 @@ def reset_on_new_upload(
 ) -> bool:
     """Clear stale cached results when a new file (or file type) is uploaded.
 
-    Compares ``uploaded.name``/``file_type`` against what's already recorded
-    in session_state; ``force`` allows a caller (Excel, which also depends on
-    a ``df`` key surviving) to fold in an extra reset condition of its own.
-    When a reset is triggered, records the new ``uploaded_name``/``file_type`` and
-    pops each of ``clear_keys`` from session_state. Returns whether a reset
-    happened, so callers can gate their own re-population (e.g. re-reading the
-    upload into a DataFrame) on it.
+    Compares :func:`upload_identity` and ``file_type`` against what's already
+    recorded in session_state; ``force`` allows a caller (Excel, which also
+    depends on a ``sheets`` key surviving) to fold in an extra reset condition
+    of its own. When a reset is triggered, records the new identity and
+    ``file_type`` and pops each of ``clear_keys`` from session_state. Returns
+    whether a reset happened, so callers can gate their own re-population
+    (e.g. re-reading the upload into a DataFrame) on it.
     """
+    identity = upload_identity(uploaded)
     is_new = (
         force
-        or st.session_state.get("uploaded_name") != uploaded.name
+        or st.session_state.get(UPLOAD_IDENTITY_KEY) != identity
         or st.session_state.get("file_type") != file_type
     )
     if is_new:
@@ -65,7 +81,7 @@ def reset_on_new_upload(
         for key in [k for k in st.session_state if str(k).startswith("excel_cols_")]:
             del st.session_state[key]
         st.session_state.pop("excel_tabs", None)
-        st.session_state.uploaded_name = uploaded.name
+        st.session_state[UPLOAD_IDENTITY_KEY] = identity
         st.session_state.file_type = file_type
         for key in clear_keys:
             st.session_state.pop(key, None)

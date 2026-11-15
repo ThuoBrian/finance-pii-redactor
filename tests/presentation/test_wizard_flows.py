@@ -54,6 +54,15 @@ def _flow(fmt: str) -> None:
                 for m in re.finditer(r"Jane Doe|Sample\d{2}", text)
             ]
 
+    def stable(buffer: BytesIO) -> BytesIO:
+        # Writers stamp the time into xlsx and PDF files, so a file rebuilt
+        # on every run would count as a new upload each time. A real upload
+        # keeps its bytes, so keep the first build's bytes for the session.
+        data = st.session_state.setdefault("_made_up_bytes", buffer.getvalue())
+        kept = BytesIO(data)
+        kept.name = buffer.name
+        return kept
+
     wizard.keep_option_choices()
     steps = st.empty()
     if fmt in ("excel", "excel-long"):
@@ -71,7 +80,7 @@ def _flow(fmt: str) -> None:
             fixed_masks=S.fixed_masks,
         )
         run_excel_flow(
-            buffer,
+            stable(buffer),
             excel_service=service,
             excel_gateway=OpenpyxlExcelGateway(),
             settings=S,
@@ -119,7 +128,7 @@ def _flow(fmt: str) -> None:
             S.custom_words_score,
             fixed_masks=S.fixed_masks,
         )
-        run_pdf_flow(buffer, pdf_service=service, steps=steps)
+        run_pdf_flow(stable(buffer), pdf_service=service, steps=steps)
     else:
         document = Document()
         document.add_paragraph("Jane Doe approved the payment.")
@@ -136,7 +145,7 @@ def _flow(fmt: str) -> None:
             S.custom_words_score,
             fixed_masks=S.fixed_masks,
         )
-        run_docx_flow(buffer, docx_service=service, settings=S, steps=steps)
+        run_docx_flow(stable(buffer), docx_service=service, settings=S, steps=steps)
 
 
 def _start(fmt: str) -> AppTest:

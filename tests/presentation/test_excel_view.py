@@ -47,7 +47,9 @@ def _flow(tabs: dict[str, dict[str, list[object]]]) -> None:
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         for name, columns in tabs.items():
             pd.DataFrame(columns).to_excel(writer, index=False, sheet_name=name)
-    buffer.seek(0)
+    # openpyxl stamps the time into the file, so a workbook rebuilt on every
+    # run would count as a new upload each time; a real upload keeps its bytes.
+    buffer = BytesIO(st.session_state.setdefault("_made_up_bytes", buffer.getvalue()))
     buffer.name = "made_up.xlsx"
     service = RedactExcelService(
         Detector(),

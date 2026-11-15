@@ -253,6 +253,11 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **A file edited and uploaded again under the same name is scanned again.**
+  The app used to treat an upload as new only when its name changed, so a
+  corrected `report.pdf` uploaded over the old one showed the old scan,
+  review and download. An upload is now identified by its name, size and a
+  hash of its contents.
 - **Intel Macs get a clear message instead of a setup error.** `install.sh`
   and `run.sh` now stop on an Intel Mac and say the tool isn't supported
   there. onnxruntime, used to read scanned pages, publishes no Intel-Mac
