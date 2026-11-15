@@ -41,6 +41,7 @@ from finance_redactor.presentation.master_list_setup import (
 )
 from finance_redactor.presentation.master_list_view import render_master_list_card
 from finance_redactor.presentation.pdf_view import run_pdf_flow
+from finance_redactor.presentation.session import UPLOAD_IDENTITY_KEY, upload_identity
 from finance_redactor.presentation.shutdown import render_quit_control
 from finance_redactor.presentation.steps import show_step
 
@@ -199,7 +200,12 @@ def _main() -> None:
             st.rerun()
         st.stop()
     if on_upload_step:
-        wizard.go(wizard.OPTIONS)
+        # A new file moves on by itself. The same file again means the user
+        # came Back from Options (to look, or to swap the file): wait.
+        if upload_identity(uploaded) != st.session_state.get(UPLOAD_IDENTITY_KEY):
+            wizard.go(wizard.OPTIONS)
+        wizard.nav(forward=("Continue to options", wizard.OPTIONS))
+        st.stop()
 
     extension = uploaded.name.rsplit(".", 1)[-1].lower()
 

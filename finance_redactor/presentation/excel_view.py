@@ -84,6 +84,7 @@ def run_excel_flow(
     sheets: dict[str, pd.DataFrame] = st.session_state.sheets
     if wizard.current() == wizard.OPTIONS or "findings" not in st.session_state:
         _options_step(sheets, excel_service, excel_gateway, settings, steps)
+        wizard.nav(back=("Back to upload", wizard.UPLOAD))
         return
     if wizard.current() == wizard.REVIEW:
         _review_step(excel_service, steps)

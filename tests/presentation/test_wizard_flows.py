@@ -456,3 +456,12 @@ def test_a_first_redact_has_nothing_to_carry_over() -> None:
 
     assert at.session_state["pdf_excluded_applied"] == frozenset()
     assert not any(i.value.startswith("Kept ") for i in at.info)
+
+
+@pytest.mark.parametrize("fmt", ["excel", "pdf", "word"])
+def test_options_has_a_back_button_to_upload(fmt: str) -> None:
+    at = _start(fmt)
+
+    _click(at, "← Back to upload")
+
+    assert at.session_state["wizard_step"] == 1

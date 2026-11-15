@@ -83,6 +83,7 @@ def run_pdf_flow(
     reset_on_new_upload(uploaded, "pdf")
     if wizard.current() == wizard.OPTIONS or st.session_state.get("pdf_buffer") is None:
         _options_step(uploaded, pdf_service, steps)
+        wizard.nav(back=("Back to upload", wizard.UPLOAD))
         return
     if wizard.current() == wizard.REVIEW:
         _review_step(uploaded, pdf_service, steps)

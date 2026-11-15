@@ -8,6 +8,10 @@ the `version` field in `pyproject.toml`.
 
 ### Added
 
+- **A Back button on the Options step**, in all three formats. It returns to
+  Upload with the file still loaded: **Continue to options** carries on with
+  your choices, and dropping in a different file starts that one fresh.
+  Before, the folded file box was the only way back.
 - **Whole table columns can be redacted in a PDF.** When a PDF holds a table,
   the Review step lists its columns under "Table columns to redact in full".
   Every entry in a chosen column gets a label, like a found name, and goes into

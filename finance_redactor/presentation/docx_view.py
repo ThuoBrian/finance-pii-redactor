@@ -62,6 +62,7 @@ def run_docx_flow(
         or st.session_state.get("docx_buffer") is None
     ):
         _options_step(uploaded, docx_service, settings, steps)
+        wizard.nav(back=("Back to upload", wizard.UPLOAD))
         return
     if wizard.current() == wizard.REVIEW:
         _review_step(uploaded, docx_service, steps)
