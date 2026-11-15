@@ -78,7 +78,7 @@ what happened instead — then file it.
 - [ ] Unchecking an entity type (e.g. `ORGANIZATION`) stops it from being
   redacted.
 - [ ] The **Preview** tab shows one table you can scroll and sort: the
-  redacted one, or the original with **Compare with original** on. Changed
+  redacted one, or the original under **Compare with original**. Changed
   cells are yellow and start with `»`. A tab over 500 rows shows 500 at a
   time, says how many rows and highlighted cells are off screen, and
   **Rows to preview** moves to the next block.

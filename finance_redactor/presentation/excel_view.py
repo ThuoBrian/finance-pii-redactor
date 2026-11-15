@@ -322,12 +322,22 @@ def _review_step(excel_service: RedactExcelService, steps: Any) -> None:
         # A big tab is shown a block of rows at a time; a page of the whole
         # sheet would only slow the browser. Keys are row positions, and
         # read_excel gives a 0..n-1 index, so a slice keeps them lined up.
-        start = _preview_rows(len(df), cell_keys, shown)
+        start = _preview_rows(len(df), cell_keys)
         rows = slice(start, start + PREVIEW_MAX_ROWS)
-        # One table at a time: the redacted one, or the original when the
-        # toggle is on. Rows and columns line up 1:1, so switching loses
-        # nothing, and the page is half as long as two stacked tables.
-        if st.toggle("Compare with original", key="excel_preview_original"):
+        # One table on screen at a time, the redacted one first; the second
+        # tab switches to the original. Rows and columns line up 1:1, so
+        # switching loses nothing, and the page is half as long as two
+        # stacked tables. Tabs rather than a toggle: a toggle here is a
+        # widget past the end of the shorter Download tree, which AppTest
+        # keeps and then fails on (see tests/presentation/test_wizard_flows).
+        redacted_view, original_view = st.tabs(["Redacted", "Compare with original"])
+        with redacted_view:
+            st.dataframe(
+                preview_styler(redacted_df.iloc[rows], cell_keys),
+                width="stretch",
+                hide_index=True,
+            )
+        with original_view:
             # A redacted header renames its column; columns keep their order,
             # so map each highlighted key back to the original by position.
             original_keys = {
@@ -335,16 +345,9 @@ def _review_step(excel_service: RedactExcelService, steps: Any) -> None:
                 for row, col in cell_keys
                 if col in redacted_df.columns
             }
-            st.markdown("**Original** (not redacted)")
+            st.caption("The original, not redacted. Check it against the redacted tab.")
             st.dataframe(
                 preview_styler(df.iloc[rows], original_keys),
-                width="stretch",
-                hide_index=True,
-            )
-        else:
-            st.markdown("**Redacted**")
-            st.dataframe(
-                preview_styler(redacted_df.iloc[rows], cell_keys),
                 width="stretch",
                 hide_index=True,
             )
@@ -391,7 +394,7 @@ def _review_step(excel_service: RedactExcelService, steps: Any) -> None:
     )
 
 
-def _preview_rows(n_rows: int, cell_keys: set[tuple[int, str]], tab: int) -> int:
+def _preview_rows(n_rows: int, cell_keys: set[tuple[int, str]]) -> int:
     """Pick which block of rows to preview, and say plainly what is not shown.
 
     Returns the first row of the block. A tab that fits on one page needs no
@@ -403,7 +406,6 @@ def _preview_rows(n_rows: int, cell_keys: set[tuple[int, str]], tab: int) -> int
         "Rows to preview",
         options=range(0, n_rows, PREVIEW_MAX_ROWS),
         format_func=lambda s: f"Rows {s + 1:,} to {min(s + PREVIEW_MAX_ROWS, n_rows):,}",
-        key=f"excel_preview_rows_{tab}",
     )
     end = min(start + PREVIEW_MAX_ROWS, n_rows)
     elsewhere = sum(1 for row, _ in cell_keys if row >= 0 and not start <= row < end)

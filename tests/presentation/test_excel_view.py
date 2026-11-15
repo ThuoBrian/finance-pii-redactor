@@ -149,29 +149,28 @@ def test_column_choices_stay_with_their_tab_and_reach_the_scan() -> None:
     assert at.session_state["findings"].cell_count == 1
 
 
-def _shown_text(at: AppTest) -> str:
-    """Every cell of the one preview table, as text.
-
-    Preview tables are the ones whose changed cells carry the » marker; the
-    other tabs hold tables too. Exactly one must be on the page.
-    """
-    texts = [
-        " ".join(str(v) for v in table.value.to_numpy().ravel())
-        for table in at.dataframe
-    ]
-    (preview,) = [t for t in texts if "»" in t]
-    return preview
+def _preview_table(at: AppTest, label: str = "Redacted"):
+    """Return the one table in the Preview sub-tab called ``label``."""
+    (view,) = [t for t in at.tabs if t.label == label]
+    (table,) = view.dataframe
+    return table
 
 
-def test_preview_shows_one_table_and_the_toggle_switches_it() -> None:
+def _shown_text(at: AppTest, label: str = "Redacted") -> str:
+    """Every cell of the table in a Preview sub-tab, as text."""
+    table = _preview_table(at, label)
+    return " ".join(str(v) for v in table.value.to_numpy().ravel())
+
+
+def test_preview_puts_redacted_first_and_the_original_one_switch_away() -> None:
     at = _start({"Payments": {"notes": ["Paid Jane Doe", "ok"]}})
     _click(at, "Redact my file")
 
-    assert "Jane Doe" not in _shown_text(at)  # redacted by default
-
-    at.toggle(key="excel_preview_original").set_value(True).run()
-    assert not at.exception, at.exception
-    assert "Jane Doe" in _shown_text(at)  # switched, not stacked
+    (preview,) = [t for t in at.tabs if t.label == "Preview"]
+    labels = [t.label for t in preview.tabs if t is not preview]
+    assert labels == ["Redacted", "Compare with original"]  # Redacted shows first
+    assert "Jane Doe" not in _shown_text(at)
+    assert "» Paid Jane Doe" in _shown_text(at, "Compare with original")
 
 
 def test_a_long_tab_says_what_the_preview_hides_and_pages_through_it() -> None:
@@ -188,14 +187,15 @@ def test_a_long_tab_says_what_the_preview_hides_and_pages_through_it() -> None:
     assert "The download has every row" in note
     assert _shown_text(at).count("»") == 1  # row 1 only
 
-    at.selectbox(key="excel_preview_rows_0").set_value(1000).run()
+    (rows,) = [s for s in at.selectbox if s.label == "Rows to preview"]
+    rows.set_value(1000).run()
     assert not at.exception, at.exception
     (note,) = [m.value for m in at.info if "rows are not on screen" in m.value]
     assert "rows 1,001 to 1,203" in note
     assert "1,000 rows are not on screen" in note
     assert _shown_text(at).count("»") == 1  # row 1,101, now on screen
-    (table,) = [t for t in at.dataframe if "»" in str(t.value.to_numpy())]
-    assert len(table.value) == 203
+    assert len(_preview_table(at).value) == 203
+    assert len(_preview_table(at, "Compare with original").value) == 203
 
 
 def test_no_size_warning_for_an_ordinary_workbook() -> None:
