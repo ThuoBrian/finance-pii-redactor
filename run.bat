@@ -136,7 +136,7 @@ echo      %WHITE%Your web browser will open automatically in a moment.%RESET%
 echo      %DIM%If it does not, open this address:%RESET% %IPA_GREEN%http://127.0.0.1:8501%RESET%
 echo.
 echo      %YELLOW%Keep this window open while you use the app.%RESET%
-echo      %DIM%When you are finished, close this window to stop the app.%RESET%
+echo      %DIM%When you are finished, click "Close the app" in the sidebar.%RESET%
 echo.
 echo  %IPA_GREEN%====================================================================%RESET%
 echo.

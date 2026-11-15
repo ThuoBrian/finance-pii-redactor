@@ -82,6 +82,11 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **The launch window points to "Close the app".** When the app starts, the
+  terminal window now says to stop it with the **Close the app** button in
+  the sidebar, on Windows and macOS/Linux alike.
+- **CI also runs on macOS**, so a dependency that ships no macOS build fails
+  there rather than on a user's Mac.
 - **A calmer, narrower page.** The app now uses Streamlit's centered layout
   instead of stretching across the whole screen, so tables, captions and
   buttons stay in one readable column. The Excel preview shows the redacted
@@ -218,6 +223,13 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **Intel Macs get a clear message instead of a setup error.** `install.sh`
+  and `run.sh` now stop on an Intel Mac and say the tool isn't supported
+  there. onnxruntime, used to read scanned pages, publishes no Intel-Mac
+  build, so setup used to fail partway with an unreadable uv error.
+- **The upload box no longer offers `.xls`.** Old-format workbooks were always
+  rejected as unreadable. The box now lists only `.xlsx`, `.pdf` and `.docx`,
+  and the error for other files says to re-save a `.xls` as `.xlsx`.
 - **Review tick boxes respond to a single click.** Every other tick or
   untick in the "Hide in output?" column was ignored, so a box seemed to
   need a double click. Each click now registers.
