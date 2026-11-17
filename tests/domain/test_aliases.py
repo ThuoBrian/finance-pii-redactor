@@ -2,15 +2,8 @@
 
 from __future__ import annotations
 
-import re
-
-from finance_redactor.domain.aliases import aliases, name_pattern
+from finance_redactor.domain.aliases import aliases
 from finance_redactor.domain.pseudonyms import normalize
-
-
-def _compile(name: str) -> re.Pattern[str]:
-    """Compile ``name_pattern`` the way the custom recognizer does."""
-    return re.compile(rf"\b{name_pattern(name)}(?!\w)", re.IGNORECASE | re.UNICODE)
 
 
 def _norm_aliases(name: str) -> set[str]:
@@ -100,50 +93,3 @@ def test_thailand_not_corrupted_by_and_swap():
     norm = _norm_aliases("Thailand Corp")
     assert "thail& corp" not in norm
     assert "thailand corp" in norm
-
-
-# --- name_pattern() ------------------------------------------------------
-
-
-def test_pattern_matches_suffix_equivalent():
-    pat = _compile("Acme Ltd")
-    assert pat.search("Paid Acme Limited in full")
-    assert pat.search("Paid Acme Ltd in full")
-    assert pat.search("Paid Acme Ltd. in full")
-
-
-def test_pattern_does_not_over_match_bare_stem():
-    pat = _compile("Acme Ltd")
-    assert pat.search("Paid Acme in full") is None
-    assert (
-        pat.search("Paid Acme Limiteds in full") is None
-    )  # "Limiteds" is not "Limited"
-    assert pat.search("Paid AcmeLtd in full") is None  # no space between
-
-
-def test_pattern_matches_ampersand_and():
-    pat = _compile("Smith & Co")
-    assert pat.search("Smith and Co invoice")
-    assert pat.search("Smith & Co invoice")
-    assert pat.search("Smith & Company invoice")
-
-
-def test_pattern_is_case_insensitive():
-    pat = _compile("Acme Ltd")
-    assert pat.search("ACME LIMITED")
-    assert pat.search("acme ltd")
-
-
-def test_pattern_matches_at_end_of_string():
-    pat = _compile("Acme Ltd")
-    assert pat.search("Paid Acme Ltd")
-
-
-def test_pattern_leading_word_boundary_prevents_partial_match():
-    pat = _compile("Acme Ltd")
-    assert pat.search("ReAcme Ltd") is None
-
-
-def test_pattern_whitespace_flexible():
-    pat = _compile("Acme Ltd")
-    assert pat.search("Acme  Ltd")  # multiple spaces

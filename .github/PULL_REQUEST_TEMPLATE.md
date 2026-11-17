@@ -19,7 +19,7 @@
 - [ ] Domain layer (`finance_redactor/domain/`)
 - [ ] Application layer / use cases (`finance_redactor/application/`)
 - [ ] Infrastructure adapters (`finance_redactor/infrastructure/` - detection, documents, names)
-- [ ] Presentation / Streamlit UI (`finance_redactor/presentation/`, `app.py`)
+- [ ] Presentation / web UI (`finance_redactor/presentation/`, `frontend/`, `app.py`)
 - [ ] Config (`finance_redactor/config.py`)
 - [ ] Master list / data handling (`data/`, `FPR_MASTER_LIST_DIR` / in-app setup dialog)
 - [ ] Launcher/installer scripts (`run.bat`, `run.sh`, `install.ps1`, `install.sh`)

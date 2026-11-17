@@ -23,7 +23,7 @@ def _local_settings_file() -> Path:
     unlike anything inside the repo's own folder) rather than the repo,
     since it's a machine-local runtime preference, not project config.
     Written by the in-app "Set up shared master list" dialog (see
-    finance_redactor/presentation/master_list_setup.py), which exists
+    finance_redactor/presentation/api/master_list.py), which exists
     specifically so a shared Box folder location can be picked from the UI
     instead of an OS environment variable that needs a fresh terminal/process
     to take effect (see docs/troubleshooting.md's "0 names" entry). Resolved fresh on
@@ -75,7 +75,7 @@ def master_list_setup_skipped() -> bool:
 def set_master_list_setup_skipped(skipped: bool) -> None:
     """Remember (or forget) the 0-names dialog's "Skip for now" across launches.
 
-    ``app.py`` clears it as soon as a list loads with names, so a later
+    The master-list API clears it as soon as a list loads with names, so a later
     return to 0 names (a moved or renamed workbook) prompts again.
     """
     _update_local_settings(master_list_setup_skipped=skipped)
@@ -234,10 +234,10 @@ def current_settings() -> Settings:
 
     ``DEFAULT_SETTINGS.names_dir`` is fixed once at import time. Call this
     instead anywhere the master-list folder might have changed since then -
-    namely ``app.py``'s ``_main()``, which Streamlit re-executes on every
-    interaction (the module itself is only imported once per process, so
+    namely ``app.py``, which calls it on every request that needs the master
+    list (the module itself is only imported once per process, so
     ``DEFAULT_SETTINGS`` alone would never notice a change). Re-resolving
     here is what allows a folder saved via the in-app "Set up shared master
-    list" dialog to take effect on the very next rerun, with no app restart.
+    list" dialog to take effect on the very next request, with no restart.
     """
     return dataclasses.replace(DEFAULT_SETTINGS, names_dir=_resolve_data_dir())

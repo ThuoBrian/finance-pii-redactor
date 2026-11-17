@@ -17,7 +17,6 @@ dist/
 *.egg-info/
 .eggs/
 *.egg
-finance-pii-redactor.zip
 *.zip
 
 # ── Tooling caches ───────────────────────────────────────────────────────────
@@ -65,23 +64,48 @@ AGENTS.md
 _legacy/
 
 # ── Sensitive data — NEVER commit ────────────────────────────────────────────
-# This is a PII tool. Real spreadsheets, PDFs, the name→pseudonym crosswalk (the
-# re-identification KEY — for pseudonymized Excel output, this is embedded as a
-# "Crosswalk" sheet inside the .xlsx itself, not just a separate CSV), and the
-# master list (real staff names + IDs) are all Confidential under IPA's
-# data-classification policy and must never enter version control. The app reads
-# the master list from a local file that each machine supplies out-of-band;
-# MasterListRepository tolerates its absence.
+# This is a PII tool. Real input documents, everything it writes out, and the
+# master list (real staff names + IDs) are Confidential under IPA's
+# data-classification policy and must never enter version control. The app
+# reads the master list from a local file each machine supplies out-of-band;
+# MasterListRepository tolerates its absence. Tests build their own made-up
+# files at run time, so none of these formats needs to be tracked.
+#
+# Documents (inputs and redacted outputs alike):
 *.xlsx
 *.xls
 *.xlsm
+*.xlsb
+*.ods
 *.pdf
 *.docx
 *.doc
-*_crosswalk.csv
-# Master list and any other data CSVs (real names) — keep local, never commit.
-data/*.csv
+*.odt
+*.rtf
+# Every CSV/TSV: the name crosswalk (`*_crosswalk.csv`, Excel/Word, and the
+# opt-in PDF names file) is the re-identification key, and the PDF label
+# mapping (`*_mapping.csv`) decodes the labels together with the master list.
+# The repo has no CSV of its own.
+*.csv
+*.tsv
+# Screenshots and scans can show real documents. Images the repo does need
+# live under assets/ or docs/images/ and must be made up.
+*.png
+*.jpg
+*.jpeg
+!assets/**
+!docs/images/**
 # data/ is the local-only drop point for the master list and real input
 # documents: ignore everything in it whatever the extension, keep the README.
 data/*
 !data/README.md
+
+# ── Frontend (React UI) ──────────────────────────────────────────────────────
+# The built bundle in finance_redactor/presentation/static/ IS committed, so
+# end users need no Node; CI checks it matches frontend/.
+node_modules/
+frontend/coverage/
+*.tsbuildinfo
+.eslintcache
+npm-debug.log*
+*.log

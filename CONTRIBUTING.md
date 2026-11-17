@@ -36,6 +36,19 @@ Run the app locally with:
 just run
 ```
 
+It serves the committed interface bundle, so Python is all you need. To work
+on the interface itself you also need [Node.js](https://nodejs.org/) (LTS):
+
+```bash
+just web-setup   # install the frontend's packages (npm ci)
+just web-dev     # hot-reloading UI on http://127.0.0.1:5173; keep `just run` going for the API
+just web-test    # type check and Vitest
+just web-build   # rebuild finance_redactor/presentation/static/ - commit the result
+```
+
+CI rebuilds the bundle and fails if it differs from the committed one, so run
+`just web-build` and commit its output whenever `frontend/` changes.
+
 ## Before opening a PR
 
 CI runs exactly this command (`.github/workflows/ci.yml` calls the
@@ -49,17 +62,17 @@ just check
 `just`, these are the underlying commands:
 
 ```bash
-uv run ruff check app.py finance_redactor/ tests/ scripts/
-uv run ruff format --check app.py finance_redactor/ tests/ scripts/
+uv run ruff check app.py finance_redactor/ tests/
+uv run ruff format --check app.py finance_redactor/ tests/
 uv run mypy app.py finance_redactor/
 uv run pytest
 uv run codespell
 ```
 
 `uv run ruff format` (without `--check`) will fix formatting in place.
-`uv run pytest` enforces an 80% coverage floor on `finance_redactor/`,
-excluding `finance_redactor/presentation/` (Streamlit UI code — see the
-`[tool.coverage.run]` comment in `pyproject.toml` for why).
+`uv run pytest` enforces an 80% coverage floor on all of
+`finance_redactor/`, the web API included (it is tested through FastAPI's
+`TestClient`; see `tests/presentation/test_api*.py`).
 
 If you changed prose in `README.md`, `docs/`, or `data/README.md`, also run
 [Vale](https://vale.sh/) (config in `.vale.ini`):
@@ -85,16 +98,18 @@ comment.** Use synthetic test data (see
 ## Where things live
 
 - `finance_redactor/domain/` — pure business logic (pseudonymization, rules,
-  fuzzy matching, custom words). No I/O, no Streamlit.
+  fuzzy matching, custom words). No I/O, no web framework.
 - `finance_redactor/application/` — use cases that orchestrate a redaction
   flow for one file format (`redact_excel.py`, `redact_pdf.py`,
   `redact_docx.py`).
 - `finance_redactor/infrastructure/` — adapters: detection (Presidio/spaCy),
   document I/O (openpyxl/PyMuPDF/python-docx), and the master-list
   repository.
-- `finance_redactor/presentation/` — Streamlit widgets and session state.
-  Deliberately excluded from the coverage gate (see above); test it manually.
-- `app.py` — the Streamlit composition root.
+- `finance_redactor/presentation/` — the local web API (`api/`), the
+  in-memory job store, request checks, presenters, and the built interface
+  bundle (`static/`, generated; do not edit by hand).
+- `frontend/` — the React + TypeScript source of the interface.
+- `app.py` — the composition root: wires the adapters and serves the app.
 - `tests/` — one test file per module, in folders that mirror the layers
   (`tests/domain/`, `tests/application/`, …). Cross-cutting tests
   (`test_config.py`, the layer guard, the PII guard) and `conftest.py` sit

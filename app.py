@@ -1,25 +1,31 @@
-"""Finance PII Redactor - Streamlit entry point and composition root.
+"""Finance PII Redactor - entry point and composition root.
 
 This file is the single place where concrete adapters are wired into use cases
-(dependency injection). It stays thin: configure the page, build the object
-graph, route the upload to the right presentation flow. The heavy NLP engine is
-built once and cached across reruns; the master-list-derived bundle (parsed
-rows, recognizers, detection engine) is cached alongside it, keyed on the
-workbook's path and modification time, so an edit or a folder change takes
-effect on the next rerun.
+(dependency injection). ``create_app`` builds the FastAPI app (API plus the
+built React interface) around an :class:`AppContext`; ``python app.py`` serves
+it on 127.0.0.1 and opens the browser.
+
+The heavy NLP engine loads once per process. The master-list bundle (parsed
+rows, recognizers, detection engine) is cached on the workbook's path and
+modification time, so an edit or a folder change takes effect on the next
+request that needs it.
 """
 
 from __future__ import annotations
 
-import time
-from pathlib import Path
+import os
+import socket
+import threading
+import webbrowser
 
-import streamlit as st
+from fastapi import FastAPI
+from presidio_analyzer.nlp_engine import NlpEngine
 
+from finance_redactor.application.ports import OcrEngine
 from finance_redactor.application.redact_docx import RedactDocxService
 from finance_redactor.application.redact_excel import RedactExcelService
 from finance_redactor.application.redact_pdf import RedactPdfService
-from finance_redactor.config import current_settings
+from finance_redactor.config import Settings, current_settings
 from finance_redactor.infrastructure.detection.custom_recognizer import (
     build_custom_recognizers,
 )
@@ -32,250 +38,184 @@ from finance_redactor.infrastructure.documents.pdf_gateway import PyMuPdfDocumen
 from finance_redactor.infrastructure.names.master_list_repository import (
     MasterListRepository,
 )
-from finance_redactor.presentation import wizard
-from finance_redactor.presentation.docx_view import run_docx_flow
-from finance_redactor.presentation.excel_view import run_excel_flow
-from finance_redactor.presentation.master_list_setup import (
-    render_master_list_setup_dialog,
-    should_offer_setup,
-)
-from finance_redactor.presentation.master_list_view import render_master_list_card
-from finance_redactor.presentation.pdf_view import run_pdf_flow
-from finance_redactor.presentation.session import UPLOAD_IDENTITY_KEY, upload_identity
-from finance_redactor.presentation.shutdown import render_quit_control
-from finance_redactor.presentation.steps import show_step
+from finance_redactor.presentation.api import build_api
+from finance_redactor.presentation.api.context import AppContext, MasterListState
+from finance_redactor.presentation.jobs import JobStore
 
-# Resolved from this file, not the CWD - run.bat launches from anywhere.
-_LOGO = Path(__file__).parent / "assets" / "data-privacy-ai-dark-nobg.svg"
-# Streamlit gives a keyed container the class st-key-<key>. #0E1117 is the
-# dark theme's background; white on it is 18.9:1.
-_LOGO_PANEL_CSS = (
-    "<style>.st-key-sidebar_logo {background: #0E1117; "
-    "border-radius: 0.75rem; padding: 0.75rem;}</style>"
-)
-_HELP_URL = "https://github.com/ThuoBrian/finance-pii-redactor/blob/main/docs/troubleshooting.md"
+# 8501 is Streamlit's old port, kept so bookmarks and docs still work;
+# FPR_PORT overrides it.
+PORT = int(os.environ.get("FPR_PORT", "8501"))
 
 
-def _main() -> None:
-    """Run the Streamlit UI. Called only when executed via streamlit run."""
-    # Must be the very first Streamlit command in the script - anything that
-    # renders before it (the master-list-setup dialog below, or even a
-    # cache_resource spinner on a cold cache) would otherwise raise.
-    st.set_page_config(
-        page_title="Finance PII Redactor", page_icon=":shield:", layout="centered"
+def _build_master_list_bundle(
+    settings: Settings, nlp_engine: NlpEngine, mtime: float | None
+) -> MasterListState:
+    """Parse the master list and build its detection engine."""
+    repo = MasterListRepository(
+        settings.master_list_file,
+        settings.categories,
+        category_sheets=settings.category_sheets,
     )
-    # Before any widget is drawn: keeps the Options choices alive on the
-    # steps where those widgets are not shown (see presentation/wizard.py).
-    wizard.keep_option_choices()
+    names = repo.names_by_entity()
+    recognizers = build_custom_recognizers(
+        names.get("PERSON", []),
+        names.get("ORGANIZATION", []),
+        settings.custom_match_score,
+    )
+    return MasterListState(
+        detector=PresidioEngine(settings, recognizers, nlp_engine=nlp_engine),
+        master_map=repo.master_map(),
+        counts=repo.counts_by_category(),
+        issues=repo.quality_report(),
+        fingerprint=repo.fingerprint(),
+        path=settings.master_list_file,
+        mtime=mtime,
+    )
 
-    # Re-resolved fresh (not DEFAULT_SETTINGS) so a folder saved via the in-app
-    # "Set up shared master list" dialog takes effect on the next rerun - see
-    # current_settings()'s docstring.
-    settings = current_settings()
 
-    @st.cache_resource(show_spinner="Loading NLP model (first run only)...")
-    def _get_nlp_engine():
-        """Load the heavy spaCy model once and reuse it across reruns."""
-        return PresidioEngine._create_nlp_engine(settings)
+def create_app(port: int = PORT) -> FastAPI:
+    """Build the web app: wire adapters into the API context.
 
-    @st.cache_resource(show_spinner=False)
-    def _get_ocr_engine():
-        """Return the OCR engine for scanned PDF pages, or None if not installed.
+    The NLP engine loads once per process. The master-list bundle is cached
+    on the workbook's path and modification time, and ``refresh_master_list``
+    clears it for a Box sync that has not changed the mtime yet.
+    """
+    lock = threading.Lock()
+    cache: dict[str, object] = {}
 
-        The model itself loads on first use, so this is cheap until a scanned
-        page actually needs reading.
-        """
+    nlp: list[NlpEngine] = []
+
+    def nlp_engine() -> NlpEngine:
+        if not nlp:
+            nlp.append(PresidioEngine._create_nlp_engine(current_settings()))
+        return nlp[0]
+
+    def load_master_list() -> MasterListState:
+        settings = current_settings()
+        path = settings.master_list_file
         try:
-            from finance_redactor.infrastructure.ocr.rapid_ocr import RapidOcrEngine
-        except ImportError:
-            return None
-        return RapidOcrEngine()
+            mtime: float | None = path.stat().st_mtime
+        except OSError:
+            mtime = None
+        with lock:
+            if cache.get("key") != (str(path), mtime):
+                cache["state"] = _build_master_list_bundle(
+                    settings, nlp_engine(), mtime
+                )
+                cache["key"] = (str(path), mtime)
+            state = cache["state"]
+            assert isinstance(state, MasterListState)
+            return state
 
-    @st.cache_resource(show_spinner="Loading master list...")
-    def _get_master_list_bundle(path: str, mtime: float | None):
-        """Parse the master list and build its detection engine, cached by path+mtime.
+    ocr: list[OcrEngine | None] = []
 
-        Keying on the workbook's path and modification time means identical
-        reruns (e.g. toggling an unrelated widget) reuse the same parsed rows
-        and compiled recognizer patterns instead of redoing the ~26k-row parse
-        and regex compilation every time, while a real edit to the workbook -
-        or the master-list folder changing (e.g. via the "Set up shared
-        master list" dialog) - busts the cache on the next rerun. ``path``
-        alone would already change on a folder switch, but including both makes
-        the key robust even in the unlikely case two different files share an
-        mtime.
+    def ocr_engine() -> OcrEngine | None:
+        # Optional: scans are reported but not read when OCR is missing. The
+        # model itself loads on first use.
+        if not ocr:
+            try:
+                from finance_redactor.infrastructure.ocr.rapid_ocr import (
+                    RapidOcrEngine,
+                )
+            except ImportError:
+                ocr.append(None)
+            else:
+                ocr.append(RapidOcrEngine())
+        return ocr[0]
 
-        The arguments must NOT start with an underscore: Streamlit leaves
-        underscore-prefixed arguments out of the cache key, which would make
-        this cache never invalidate. They are unused in the body because the
-        repository reads ``settings.master_list_file`` directly; they exist
-        only to form the key.
-        """
-        del path, mtime  # key only; see docstring
-        repo = MasterListRepository(
-            settings.master_list_file,
-            settings.categories,
-            category_sheets=settings.category_sheets,
-        )
-        names = repo.names_by_entity()
-        recognizers = build_custom_recognizers(
-            names.get("PERSON", []),
-            names.get("ORGANIZATION", []),
-            settings.custom_match_score,
-        )
-        engine = PresidioEngine(settings, recognizers, nlp_engine=_get_nlp_engine())
-        return (
-            engine,
-            repo.master_map(),
-            repo.counts_by_category(),
-            repo.quality_report(),
-            repo.fingerprint(),
-        )
+    def refresh_master_list() -> None:
+        with lock:
+            cache.pop("key", None)
+            cache.pop("state", None)
 
-    try:
-        master_list_mtime = settings.master_list_file.stat().st_mtime
-    except OSError:
-        master_list_mtime = None
+    def shutdown() -> None:
+        # os._exit: uvicorn would otherwise wait on open connections. The
+        # delay gives the "closing" response time to reach the browser.
+        threading.Timer(0.5, os._exit, args=(0,)).start()
 
-    (
-        engine,
-        master_map,
-        name_counts,
-        quality_issues,
-        master_list_fingerprint,
-    ) = _get_master_list_bundle(str(settings.master_list_file), master_list_mtime)
-
-    # A brand-new install (or one whose FPR_MASTER_LIST_DIR/persisted setting
-    # is missing, wrong, or not yet synced) loads 0 names - offer the in-app
-    # setup dialog right away instead of leaving the user to discover
-    # data/README.md's manual env-var steps on their own. "Skip for now" is
-    # remembered across launches until a list loads (see should_offer_setup).
-    if should_offer_setup(has_names=sum(name_counts.values()) > 0):
-        render_master_list_setup_dialog(settings.names_dir)
-
-    with st.sidebar:
-        # A full-width image, not st.logo: the logo is a wide illustration,
-        # and st.logo's 24px-high slot shrinks it past recognition. It is
-        # white-on-transparent and there is no light version, so it sits on
-        # its own dark panel, which reads in the light and the dark theme.
-        st.html(_LOGO_PANEL_CSS)
-        with st.container(key="sidebar_logo"):
-            st.image(str(_LOGO), width="stretch")
-        st.markdown("### Finance PII Redactor")
-        render_master_list_card(
-            name_counts,
-            quality_issues,
-            settings.master_list_file,
-            age_seconds=(
-                time.time() - master_list_mtime if master_list_mtime else None
-            ),
-            on_refresh=_get_master_list_bundle.clear,
-        )
-        st.caption(f":green[●] Everything stays on this computer · [Help]({_HELP_URL})")
-        # Nothing to start over from until a file is in.
-        if st.session_state.get(wizard.upload_key()) is not None:
-            wizard.render_start_over()
-    render_quit_control()
-
-    steps = st.empty()
-    on_upload_step = wizard.current() == wizard.UPLOAD
-    if on_upload_step:
-        show_step(steps, 1)
-        st.subheader("Upload a file")
-        st.caption(
-            "Excel, PDF or Word. Names become stable codes, and you check the "
-            "result before you download."
-        )
-    # Drawn on every step: the uploaded file lives in this widget and would be
-    # dropped if it were not. After step 1 it folds away under the file name.
-    current_file = st.session_state.get(wizard.upload_key())
-    holder = (
-        st.container()
-        if on_upload_step or current_file is None
-        else st.expander(f"File: {current_file.name} (change)")
+    context = AppContext(
+        load_master_list=load_master_list,
+        refresh_master_list=refresh_master_list,
+        jobs=JobStore(),
+        shutdown=shutdown,
+        settings=current_settings,
+        excel_gateway=OpenpyxlExcelGateway(),
+        excel_service=lambda: _excel_service(current_settings(), load_master_list()),
+        docx_service=lambda: _docx_service(current_settings(), load_master_list()),
+        pdf_service=lambda: _pdf_service(
+            current_settings(), load_master_list(), ocr_engine()
+        ),
+        pdf_open=PyMuPdfDocument.open,
     )
-    with holder:
-        uploaded = st.file_uploader(
-            "Upload a file (.xlsx, .pdf, or .docx)",
-            type=["xlsx", "pdf", "docx"],
-            help="The file is processed entirely on your machine.",
-            key=wizard.upload_key(),
-            # The step heading above says the same; the label stays for
-            # screen readers.
-            label_visibility="collapsed",
-        )
-    if uploaded is None:
-        wizard.set_step(wizard.UPLOAD)
-        if not on_upload_step:
-            st.rerun()
-        st.stop()
-    if on_upload_step:
-        # A new file moves on by itself. The same file again means the user
-        # came Back from Options (to look, or to swap the file): wait.
-        if upload_identity(uploaded) != st.session_state.get(UPLOAD_IDENTITY_KEY):
-            wizard.go(wizard.OPTIONS)
-        wizard.nav(forward=("Continue to options", wizard.OPTIONS))
-        st.stop()
-
-    extension = uploaded.name.rsplit(".", 1)[-1].lower()
-
-    if extension == "xlsx":
-        run_excel_flow(
-            uploaded,
-            excel_service=RedactExcelService(
-                engine,
-                master_map,
-                settings.auto_prefixes,
-                settings.fuzzy_match_threshold,
-                fixed_masks=settings.fixed_masks,
-            ),
-            excel_gateway=OpenpyxlExcelGateway(),
-            settings=settings,
-            steps=steps,
-        )
-    elif extension == "pdf":
-        # Same engine as Excel/Word, so PDF also catches names that aren't on
-        # the master list. The real master_map is passed as well, so a name
-        # the user types resolves to its curated Internal ID for the mapping.
-        run_pdf_flow(
-            uploaded,
-            pdf_service=RedactPdfService(
-                PyMuPdfDocument.open,
-                master_map,
-                settings.auto_prefixes,
-                engine,
-                settings.fuzzy_match_threshold,
-                settings.custom_words_score,
-                fixed_masks=settings.fixed_masks,
-                ocr=_get_ocr_engine(),
-            ),
-            master_list_fingerprint=master_list_fingerprint,
-            steps=steps,
-        )
-    elif extension == "docx":
-        run_docx_flow(
-            uploaded,
-            docx_service=RedactDocxService(
-                engine,
-                PythonDocxDocument.open,
-                master_map,
-                settings.auto_prefixes,
-                settings.fuzzy_match_threshold,
-                settings.custom_words_score,
-                fixed_masks=settings.fixed_masks,
-            ),
-            settings=settings,
-            steps=steps,
-        )
-    else:
-        st.error(
-            "Unsupported file type. Please upload an Excel (.xlsx), PDF, or Word "
-            "file. An older .xls workbook can be re-saved as .xlsx from Excel."
-        )
-        st.stop()
+    return build_api(context, port=port)
 
 
-from streamlit.runtime.scriptrunner import get_script_run_ctx as _get_ctx  # noqa: E402
+def _excel_service(settings: Settings, state: MasterListState) -> RedactExcelService:
+    """Build the Excel use case on the current master list."""
+    return RedactExcelService(
+        state.detector,
+        state.master_map,
+        settings.auto_prefixes,
+        settings.fuzzy_match_threshold,
+        fixed_masks=settings.fixed_masks,
+    )
 
-if _get_ctx() is not None:
-    _main()
+
+def _docx_service(settings: Settings, state: MasterListState) -> RedactDocxService:
+    """Build the Word use case on the current master list."""
+    return RedactDocxService(
+        state.detector,
+        PythonDocxDocument.open,
+        state.master_map,
+        settings.auto_prefixes,
+        settings.fuzzy_match_threshold,
+        settings.custom_words_score,
+        fixed_masks=settings.fixed_masks,
+    )
+
+
+def _pdf_service(
+    settings: Settings, state: MasterListState, ocr: OcrEngine | None
+) -> RedactPdfService:
+    """Build the PDF use case on the current master list."""
+    return RedactPdfService(
+        PyMuPdfDocument.open,
+        state.master_map,
+        settings.auto_prefixes,
+        state.detector,
+        settings.fuzzy_match_threshold,
+        settings.custom_words_score,
+        fixed_masks=settings.fixed_masks,
+        ocr=ocr,
+    )
+
+
+def _serve() -> None:
+    """Start the web app on 127.0.0.1 and open it in the browser."""
+    import uvicorn
+
+    with socket.socket() as probe:
+        try:
+            probe.bind(("127.0.0.1", PORT))
+        except OSError:
+            print(
+                f"Port {PORT} is already in use. The app may already be open: "
+                f"try http://127.0.0.1:{PORT}/ in your browser, or close the "
+                "other window first.",
+                flush=True,
+            )
+            raise SystemExit(1) from None
+    app = create_app()
+    # Warm the NLP model and master list while the browser opens.
+    threading.Thread(target=app.state.context.load_master_list, daemon=True).start()
+    url = f"http://127.0.0.1:{PORT}/"
+    print(
+        f"Finance PII Redactor is running at {url} - keep this window open.",
+        flush=True,
+    )
+    threading.Timer(1.0, webbrowser.open, args=(url,)).start()
+    uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="warning")
+
+
+if __name__ == "__main__":
+    _serve()

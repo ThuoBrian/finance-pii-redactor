@@ -12,15 +12,11 @@ ligature/hyphenation artifacts to undo - and there is no blackout mode:
 Word text stays editable, replaced in place with pseudonyms (matching the
 Excel flow's approach), and images are untouched.
 
-``execute`` runs the whole pipeline - including the detector call - every
-time, which is wasteful when only ``exclude`` changed (unticking a false
-positive in the review table). ``scan``/``redact`` split that in two, the
-same way Excel's ``RedactExcelService`` and PDF's ``RedactPdfService`` already
-are: ``scan`` opens the document once and runs the detector once per block,
-returning a :class:`DocxScanResult`; ``redact`` takes that cached result plus
-a fresh ``custom_words``/``exclude`` and rebuilds the output with no detector
-call and no ``block_text`` call at all. ``execute`` is unchanged and kept for
-callers that don't need the split.
+Detection is split in two so a review change never re-runs it, as in the
+Excel and PDF services: ``scan`` opens the document once and runs the
+detector once per block, returning a :class:`DocxScanResult`; ``redact``
+takes that cached result plus fresh ``custom_words``/``exclude`` and rebuilds
+the output with no detector call and no ``block_text`` call at all.
 """
 
 from __future__ import annotations
@@ -64,11 +60,6 @@ class DocxScanResult:
 
     blocks: list[_DocxBlockScan]
 
-    @property
-    def block_count(self) -> int:
-        """Number of blocks captured by the scan."""
-        return len(self.blocks)
-
 
 class RedactDocxService:
     """Detects and pseudonymizes PII throughout a Word document."""
@@ -90,8 +81,7 @@ class RedactDocxService:
         passed explicitly by the composition root; the default here only covers
         callers (e.g. tests) that don't care about the fuzzy-suggestion feature.
         ``custom_words_score`` should normally be ``Settings.custom_words_score``;
-        it's the confidence recorded for an ad-hoc "words to redact" match (see
-        ``execute``'s ``custom_words`` param). ``fixed_masks`` is
+        it's the confidence recorded for a typed-word match. ``fixed_masks`` is
         ``Settings.fixed_masks``: bank/payment types get that mask and never
         reach the pseudonymizer, so the raw number stays out of the crosswalk.
         """
@@ -102,69 +92,6 @@ class RedactDocxService:
         self._fuzzy_threshold = fuzzy_threshold
         self._custom_words_score = custom_words_score
         self._fixed_masks = fixed_masks
-
-    def execute(
-        self,
-        source: object,
-        entities: list[str],
-        threshold: float,
-        *,
-        custom_words: list[str] | None = None,
-        exclude: frozenset[str] = frozenset(),
-    ) -> DocxRedactionResult:
-        """Pseudonymize ``source`` and return new bytes, findings, crosswalk.
-
-        ``custom_words``, if given, is a list of ad-hoc words/phrases to
-        redact in every block in addition to whatever ``entities`` detects -
-        matched literally and case-insensitively (see
-        ``domain/custom_words.find_custom_words``), even if not in the master
-        list. Not curated, not saved anywhere: re-supplied by the caller on
-        every run.
-
-        ``exclude`` is a set of already-normalized terms (see
-        ``domain/pseudonyms.normalize``) the operator ticked off in the review
-        table as false positives. A matching detection is dropped before it
-        reaches the pseudonymizer, so it is neither replaced in the output nor
-        recorded in the crosswalk. Per-run only: nothing about it persists, and
-        the caller re-supplies it on every call.
-        """
-        document = self._open_document(source)
-        pseudonymizer = Pseudonymizer(
-            self._master_map, self._auto_prefixes, fuzzy_threshold=self._fuzzy_threshold
-        )
-        try:
-            findings: list[Finding] = []
-            for block_index in range(document.block_count):
-                text = document.block_text(block_index)
-                if not text.strip():
-                    continue
-
-                detections = self._detector.analyze(text, entities, threshold)
-                if custom_words:
-                    detections = detections + find_custom_words(
-                        text, custom_words, self._custom_words_score
-                    )
-                replacements = self._block_replacements(
-                    block_index=block_index,
-                    detections=detections,
-                    exclude=exclude,
-                    pseudonymizer=pseudonymizer,
-                    findings=findings,
-                )
-                if not replacements:
-                    continue
-                document.replace_block_text(block_index, replacements)
-
-            removed_links = document.remove_external_links()
-            return DocxRedactionResult(
-                data=document.to_bytes(),
-                findings=findings,
-                block_count=document.block_count,
-                crosswalk=pseudonymizer.crosswalk(),
-                removed_links=removed_links,
-            )
-        finally:
-            document.close()
 
     def scan(
         self,
@@ -236,16 +163,12 @@ class RedactDocxService:
                 if not block.text.strip():
                     continue
 
-                detections = (
-                    [
-                        *block.detections,
-                        *find_custom_words(
-                            block.text, custom_words, self._custom_words_score
-                        ),
-                    ]
-                    if custom_words
-                    else list(block.detections)
-                )
+                detections = [
+                    *block.detections,
+                    *find_custom_words(
+                        block.text, custom_words or [], self._custom_words_score
+                    ),
+                ]
                 replacements = self._block_replacements(
                     block_index=block_index,
                     detections=detections,
@@ -261,7 +184,6 @@ class RedactDocxService:
             return DocxRedactionResult(
                 data=document.to_bytes(),
                 findings=findings,
-                block_count=document.block_count,
                 crosswalk=pseudonymizer.crosswalk(),
                 removed_links=removed_links,
             )
@@ -279,10 +201,8 @@ class RedactDocxService:
     ) -> list[tuple[Span, str]]:
         """Dedupe/exclude/assign/build the replacement list for one block.
 
-        Shared by ``execute`` and ``redact`` - identical logic, factored out
-        once both methods needed it. Appends to ``findings`` in place (one
-        list spans the whole document in both callers) and returns this
-        block's ``(span, pseudonym)`` replacement list.
+        Appends to ``findings`` in place (one list spans the whole document)
+        and returns this block's ``(span, pseudonym)`` replacement list.
         """
         kept = [
             d

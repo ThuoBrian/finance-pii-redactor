@@ -26,8 +26,6 @@ from finance_redactor.infrastructure.documents.excel_gateway import (
     OpenpyxlExcelGateway,
 )
 
-_EMPTY_CROSSWALK = pd.DataFrame(columns=["Original name"])
-
 
 def _formatted_workbook() -> bytes:
     """Build a made-up report: title row, styles, and risky extras."""
@@ -82,7 +80,7 @@ def _round_trip(data: bytes, tab: str = "Report") -> bytes:
     gateway = OpenpyxlExcelGateway()
     sheets = gateway.read_sheets(BytesIO(data))
     formats = gateway.read_formatting(BytesIO(data))
-    return gateway.write([(tab, sheets[tab], set())], _EMPTY_CROSSWALK, [formats[tab]])
+    return gateway.write([(tab, sheets[tab], set())], [formats[tab]])
 
 
 def test_the_look_of_a_title_row_sheet_survives():
@@ -167,11 +165,7 @@ def test_the_changed_cell_highlight_wins_over_the_source_fill():
     formats = gateway.read_formatting(BytesIO(data))
 
     out = load_workbook(
-        BytesIO(
-            gateway.write(
-                [("T", sheets["T"], {(0, "notes")})], _EMPTY_CROSSWALK, [formats["T"]]
-            )
-        )
+        BytesIO(gateway.write([("T", sheets["T"], {(0, "notes")})], [formats["T"]]))
     )["T"]
 
     assert out["A2"].fill.fgColor.rgb == "00FFFF00"  # changed: yellow
@@ -201,7 +195,6 @@ def test_each_tab_gets_its_own_formatting_whatever_it_is_renamed_to():
                     ("VND-10011", sheets["One"], set()),
                     ("ORG-20022", sheets["Two"], set()),
                 ],
-                _EMPTY_CROSSWALK,
                 [formats["One"], formats["Two"]],
             )
         )
@@ -215,7 +208,7 @@ def test_unreadable_formatting_gives_a_plain_workbook_not_an_error():
     assert OpenpyxlExcelGateway().read_formatting(BytesIO(b"not a workbook")) == {}
 
     out = OpenpyxlExcelGateway().write(
-        [("T", pd.DataFrame({"a": ["x"]}), set())], _EMPTY_CROSSWALK, [None]
+        [("T", pd.DataFrame({"a": ["x"]}), set())], [None]
     )
 
-    assert load_workbook(BytesIO(out)).sheetnames == ["T", "Crosswalk"]
+    assert load_workbook(BytesIO(out)).sheetnames == ["T"]

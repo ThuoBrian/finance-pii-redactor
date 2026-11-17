@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+/* Colour tokens. The accent, link and border values are the contrast-checked
+   ones from the Streamlit theme (all pairs clear WCAG AA: text >= 4.5:1,
+   borders and controls >= 3:1). Red only means "careful": the Confidential
+   download and real warnings. No web fonts: the app makes no outside
+   requests, so the system font stack is used. */
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7f9;
+  --surface-2: #eef0f4;
+  --text: #111827;
+  --muted: #4b5563; /* 7.5:1 on white */
+  --border: #6b7280; /* 4.83:1 on white */
+  --border-soft: #e5e7eb; /* dividers only, never the sole edge of a control */
+  --primary: #2563eb; /* 5.17:1 with white label text */
+  --primary-hover: #1d4ed8;
+  --link: #1d4ed8;
+  --danger: #b91c1c;
+  --danger-soft: #fef2f2;
+  --warn: #92400e;
+  --warn-soft: #fffbeb;
+  --success: #15803d;
+  --success-soft: #f0fdf4;
+  --overlay: rgb(17 24 39 / 0.45);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1117;
+    --surface: #1a1d27;
+    --surface-2: #1e222d;
+    --text: #fafafa;
+    --muted: #a1a1aa;
+    --border: #6b7280;
+    --border-soft: #2a2f3a;
+    --primary-hover: #3b82f6;
+    --link: #93c5fd; /* 10.48:1 on the dark background */
+    --danger: #f87171;
+    --danger-soft: #2a1416;
+    --warn: #fbbf24;
+    --warn-soft: #2a2210;
+    --success: #4ade80;
+    --success-soft: #0f2418;
+    --overlay: rgb(0 0 0 / 0.6);
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-link: var(--link);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-overlay: var(--overlay);
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Headings take focus on each step change (for screen readers); they are not
+   controls, so no focus ring. */
+h1[tabindex="-1"]:focus {
+  outline: none;
+}
+
+/* Respect a system request for less motion: no spinners, pulses, slides or
+   smooth scrolling. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

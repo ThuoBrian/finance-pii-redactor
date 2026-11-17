@@ -386,7 +386,7 @@ def test_unreadable_workbook_loads_zero_names_and_says_why(tmp_path, content):
     path.write_bytes(data)
     repo = MasterListRepository(path, _CATEGORIES, category_sheets=_CATEGORY_SHEETS)
 
-    # Everything app.py's _get_master_list_bundle calls must not raise.
+    # Everything app.py's _build_master_list_bundle calls must not raise.
     assert repo.names_by_entity() == {}
     assert repo.master_map() == {}
     assert repo.counts_by_category() == {}

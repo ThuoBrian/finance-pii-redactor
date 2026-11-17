@@ -78,12 +78,11 @@ what happened instead — then file it.
 - [ ] Unchecking an entity type (e.g. `ORGANIZATION`) stops it from being
   redacted.
 - [ ] The Review step fills the window's width (the other steps stay in a
-  centered column), so a workbook with about ten columns shows them all.
-- [ ] The **Preview** tab shows one table you can scroll and sort: the
-  redacted one, or the original under **Compare with original**. Changed
-  cells are yellow and start with `»`. A tab over 500 rows shows 500 at a
-  time, says how many rows and highlighted cells are off screen, and
-  **Rows to preview** moves to the next block.
+  centered column), with the findings on the left and the panel on the right.
+- [ ] The **Preview** panel shows one table you can scroll: **Redacted**, or
+  **Original** with the switch above it. Changed cells are yellow and start
+  with `»`. A tab over 500 rows shows 500 at a time, says how many changed
+  cells are in rows not shown, and **Rows to preview** moves to the next block.
 - [ ] A made-up name used as a column header is replaced in the download, and
   a text ID such as `0041` stays `0041`.
 - [ ] A workbook with nothing to find still offers the download.
@@ -93,8 +92,9 @@ what happened instead — then file it.
   **Back** keeps your choices (open Customize, change something, go to
   Review, come back). Options has **Back to upload** too: the file is still
   there, **Continue to options** goes on with your choices intact, and
-  dropping in a different file starts that one fresh. **Start over** asks first, then empties the file and
-  the results; **Cancel** leaves everything as it was.
+  dropping in a different file starts that one fresh. **Start over** (in
+  the **⋯** menu) asks first, then empties the file and the results;
+  **Cancel** leaves everything as it was.
 - [ ] Build a made-up formatted workbook (bold coloured header, a title row
   with merged cells, a currency column, a date column, a frozen header row,
   wide first column). The download looks the same in Excel, apart from yellow
@@ -107,11 +107,12 @@ what happened instead — then file it.
   gets the same ID on every tab.
 - [ ] A tab named after a made-up person or vendor is renamed in the download.
   A tab you untick is **not** in the download.
-- [ ] Editing the master list workbook, saving, and clicking **Refresh** on
-  the sidebar's master-list card picks up the change without restarting the
-  app. The card shows the summary line, a "things to tidy" badge when there
-  is anything to tidy, and **Refresh**; the workbook's path is folded under
-  **Where it is**.
+- [ ] Editing the master list workbook, saving, and clicking **Refresh** in
+  the master-list popover (click the name count at the top) picks up the
+  change without restarting the app. The popover shows the counts per
+  category, a "things to tidy" section when there is anything to tidy, the
+  workbook's path, and **Refresh**. The dot beside the count is green, amber
+  when there are warnings, red with no names.
 
 ### File names and properties (all formats)
 
@@ -137,16 +138,15 @@ what happened instead — then file it.
   [troubleshooting.md](troubleshooting.md#pdf-detects-names-the-same-way-excel-and-word-do)).
 - [ ] A P.O. box or street address becomes `[ADDRESS]`, with no mapping row.
 - [ ] The Download step offers one mapping download (no names) by default,
-  under the two cards as **Label mapping**. Switch on
-  **Also prepare a mapping with names (Confidential)** in the **Keep
-  private** card: a second download
-  appears with a Confidential warning, and its CSV has an `Original name`
-  column. The first file still has no names. Upload another PDF and the
-  toggle is off again.
+  in the **Safe to share** card as **Download label mapping**. Tick
+  **Also prepare a mapping with names** in the **Keep private** card: a
+  second download appears with a Confidential warning, and its CSV has an
+  `Original name` column. The first file still has no names. Redact the PDF
+  again (or upload another) and the option is off again.
 - [ ] A link in the PDF (for example a `mailto:` behind someone's name) no
   longer opens anything in the downloaded file.
-- [ ] The master-list card in the sidebar shows
-  the same row counts as Excel and Word. If it shows 0 names, curated names
+- [ ] The master-list count at the top shows the same number as for Excel
+  and Word. If it shows 0 names, curated names
   will silently not be redacted — that is the check that catches it.
 - [ ] Typing a name into that box redacts every occurrence, case-insensitive.
 - [ ] Redacted text is replaced by a numbered label (`[001]`, `[002]`, and so on),
@@ -200,15 +200,57 @@ what happened instead — then file it.
 - [ ] A made-up word typed into "Add something the tool missed" on the
   Review step is redacted after **Add and rebuild**. The box starts folded.
 
+### Finding your way around Review (all formats)
+
+- [ ] Click a term in the list. Its tick box does not change. The panel on
+  the right switches to **Preview** (Excel, PDF) or **Where found** (Word),
+  and a bar shows "place 1 of N". In Excel the cell is outlined, on the
+  right tab and block of rows, even past row 500; a name in a column header
+  outlines the header. In a PDF the preview shows the right page.
+- [ ] **‹ ›** step through every place the term occurs; **×** clears the
+  selection. Changing tab or page by hand afterwards stays where you put it.
+- [ ] Keyboard only: Tab into the list, **↑ ↓** move between terms (the
+  preview follows), **Space** ticks or unticks.
+- [ ] On a list of more than 12 terms with model guesses that have a hint,
+  **Worth a closer look** shows just those.
+- [ ] After **Apply changes**, a short "Rebuilt the file" message appears at
+  the bottom and clears itself after a few seconds.
+- [ ] The Mapping and Where found tables sort when you click a column
+  header, and a long table has a search box.
+
+### Settings, scans and finishing (all formats)
+
+- [ ] The step tracker reads **File → Review → Download**. After a file is
+  dropped, the same stage shows **Ready to redact** with **Redact with
+  recommended settings**; changing anything under **Customize** turns it
+  into **Redact with your settings**.
+- [ ] Change the confidence threshold (or the PDF style), finish, and open a
+  second file of the same kind: the setting is remembered. Close the app
+  and open it again: back to the recommended settings.
+- [ ] Start a long scan (a big workbook or a PDF with many scanned pages).
+  The progress line adds "about N minutes left" after a while. **Cancel**
+  stops it within a page or two and returns to the settings screen with
+  "Scan cancelled. Nothing was changed."
+- [ ] Download only the redacted file, then try to close the browser tab: the
+  browser asks whether to leave. **Redact another file**, **Start over** and
+  **Close the app** each name what has not been downloaded yet. Apply a
+  change on Review after downloading: the file counts as not downloaded
+  again, because the old copy is out of date.
+- [ ] With an empty master list (or after "Skip for now"), the Upload screen
+  shows "No names loaded from the master list" with **Set up master list**,
+  which opens the setup.
+- [ ] Each step change moves the screen reader to the new step's heading.
+  With "reduce motion" on in your system settings, nothing spins or slides.
+
 ### Rejecting a false positive
 
 - [ ] Add a row to your test master list whose `Name` is an ordinary word
   (`Salaries` works), then redact a document that uses that word normally.
   It should be redacted — that is the bug this control exists for.
-- [ ] Open the **Review** tab. The word appears as **one** row, not
-  one per occurrence, with **Why it was found** = "On your master list".
-  Turn on **Show details**: the row has an **Occurrences** count and
-  **Source** = `master list`, and your ticks are unchanged.
+- [ ] On the Review step, the word appears as **one** row, not one per
+  occurrence, with "On your master list" under it. Tick **Show details**:
+  the row shows its source (Master list) and how many times it occurs
+  (`3×`), and your ticks are unchanged.
 - [ ] Untick it, then click **Apply changes**. The file rebuilds, and the
   downloaded file now contains the word while **every other detection is
   still redacted**. That second half is the important check.
@@ -225,14 +267,16 @@ what happened instead — then file it.
 - [ ] With a mix of terms (a few ordinary words, an ALL-CAPS heading, a
   curated name), the likeliest false positives are at the top and the curated
   name is last. The status line above the table matches what you see.
-- [ ] The review step opens on the **Review** tab, labelled with how many
-  terms were found and how many are model guesses to check, e.g. "Review
-  (57 terms, 2 to check)". The other tab is **Mapping** (plus **Preview** in
-  Excel); the step tracker reads Upload, Options, Review, Download. Tables
-  show readable kinds and sources ("Email address", "Model guess"), not
-  codes. A file with nothing found says so on the Review tab instead of
-  showing a blank tab. The per-occurrence table is folded under
-  **Where each term was found** at the bottom of the step, not in a tab.
+- [ ] The Review step has a summary line under its heading saying how many
+  terms were found and of which kinds, e.g. "57 terms: 2 model guesses, 55
+  master-list names". The panel on the right has **Preview** (Excel and
+  PDF), **Mapping** and **Where found**; the step tracker reads Upload,
+  Options, Review, Download. Kinds and sources read plainly ("Email
+  address", "Model guess"), not as codes. A file with nothing found says
+  so instead of showing an empty list.
+- [ ] The bar at the bottom of Review counts the hidden terms and any left
+  visible. Unticking a term without applying shows "1 change not applied"
+  and greys out **Continue to download** until you apply or undo it.
 - [ ] With a dozen terms or fewer, there is no filter, search or "Untick all"
   row above the table, just the list. With more, they appear.
 - [ ] A scanned PDF warns about its scanned pages on Review. The **Before you

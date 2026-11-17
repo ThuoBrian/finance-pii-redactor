@@ -12,6 +12,7 @@ from __future__ import annotations
 import pytest
 
 from finance_redactor.application.redact_pdf import RedactionStyle, RedactPdfService
+from finance_redactor.application.results import PdfRedactionResult
 from finance_redactor.config import DEFAULT_SETTINGS
 from finance_redactor.domain.entities import DetectionSource, PiiDetection, Span
 from finance_redactor.domain.pseudonyms import MasterEntry, normalize
@@ -154,6 +155,13 @@ def _document_factory(source: object) -> FakePdfDocument:
     return source
 
 
+def _run(
+    service: RedactPdfService, doc: FakePdfDocument, words: list[str], **options
+) -> PdfRedactionResult:
+    """Scan, then redact: the path the app takes."""
+    return service.redact(doc, service.scan(doc), words, **options)
+
+
 def _service(
     detector: FakeDetector | None = None,
     master_map: dict | None = None,
@@ -173,15 +181,15 @@ def _service(
     )
 
 
-def test_execute_returns_redacted_document_and_findings() -> None:
+def test_redact_returns_redacted_document_and_findings() -> None:
     """The service redacts every page, records findings, and returns bytes."""
     doc = FakePdfDocument(
         ["John paid invoice 1", "No name here", "John paid invoice 2"]
     )
-    result = _service().execute(doc, ["John"])
+    result = _run(_service(), doc, ["John"])
 
     assert result.page_count == 3
-    assert result.entity_count == 2
+    assert len(result.findings) == 2
     assert result.data == doc.to_bytes()
     assert doc.closed is True
     assert result.findings[0].page == 0
@@ -192,7 +200,7 @@ def test_execute_returns_redacted_document_and_findings() -> None:
 def test_label_is_consistent_across_pages() -> None:
     """The same word on different pages gets the same document-local label."""
     doc = FakePdfDocument(["John paid", "John approved"])
-    _service().execute(doc, ["John"])
+    _run(_service(), doc, ["John"])
 
     page_0_label = doc.redactions_by_page[0][0][1]
     page_1_label = doc.redactions_by_page[1][0][1]
@@ -203,9 +211,9 @@ def test_label_is_consistent_across_pages() -> None:
 def test_empty_pages_are_skipped() -> None:
     """Pages with no text do not produce findings or redactions."""
     doc = FakePdfDocument(["", "John paid", "   "])
-    result = _service().execute(doc, ["John"])
+    result = _run(_service(), doc, ["John"])
 
-    assert result.entity_count == 1
+    assert len(result.findings) == 1
     assert 0 not in doc.redactions_by_page
     assert 2 not in doc.redactions_by_page
     assert 1 in doc.redactions_by_page
@@ -214,7 +222,7 @@ def test_empty_pages_are_skipped() -> None:
 def test_crosswalk_lists_distinct_assignments() -> None:
     """The crosswalk contains each distinct word->pseudonym assignment once."""
     doc = FakePdfDocument(["John paid", "John approved", "Mary paid"])
-    result = _service().execute(doc, ["John", "Mary"])
+    result = _run(_service(), doc, ["John", "Mary"])
 
     assert len(result.crosswalk) == 2
     names = {a.original_name for a in result.crosswalk}
@@ -225,9 +233,9 @@ def test_crosswalk_lists_distinct_assignments() -> None:
 def test_overlapping_custom_words_are_deduped_leftmost_longest() -> None:
     """Two overlapping custom words resolve via leftmost/longest, as before."""
     doc = FakePdfDocument(["Jane Doe Enterprises invoice"])
-    result = _service().execute(doc, ["Jane Doe Enterprises", "Doe Enterprises"])
+    result = _run(_service(), doc, ["Jane Doe Enterprises", "Doe Enterprises"])
 
-    assert result.entity_count == 1
+    assert len(result.findings) == 1
     assert result.findings[0].detected_text == "Jane Doe Enterprises"
 
 
@@ -235,9 +243,9 @@ def test_custom_word_with_pdf_artifacts_is_detected_after_normalization() -> Non
     """Ligatures and line-break hyphens are normalized before matching."""
     raw = "Acme Sup-\nplies invoice"
     doc = FakePdfDocument([raw])
-    result = _service().execute(doc, ["Acme Supplies"])
+    result = _run(_service(), doc, ["Acme Supplies"])
 
-    assert result.entity_count == 1
+    assert len(result.findings) == 1
     assert result.findings[0].detected_text == "Acme Supplies"
     # The page text was updated using whichever candidate the gateway could find.
     assert result.crosswalk[0].label in doc._pages[0]
@@ -273,7 +281,7 @@ def test_a_term_no_search_variant_finds_is_reported_not_located(split: bool) -> 
     if split:
         result = service.redact(doc, service.scan(doc), ["Zorbo Quillfeather"])
     else:
-        result = service.execute(doc, ["Zorbo Quillfeather"])
+        result = _run(service, doc, ["Zorbo Quillfeather"])
 
     assert [f.detected_text for f in result.findings] == ["Zorbo Quillfeather"]
     assert [(f.page, f.detected_text) for f in result.not_located] == [
@@ -296,14 +304,14 @@ def test_located_terms_are_not_reported_and_pages_line_up() -> None:
             return super().redact_page(page_index, replacements, blackout)
 
     doc = SecondPageUnsearchable(["Ann Example paid", "Bo Sample signed"])
-    result = _service().execute(doc, ["Ann Example", "Bo Sample"])
+    result = _run(_service(), doc, ["Ann Example", "Bo Sample"])
 
     assert [(f.page, f.detected_text) for f in result.not_located] == [(1, "Bo Sample")]
 
 
 def test_nothing_is_reported_not_located_when_every_term_is_found() -> None:
     doc = FakePdfDocument(["John paid"], image_rects={0: [(0, 0, 10, 10)]})
-    result = _service().execute(doc, ["John"], redact_images=True)
+    result = _run(_service(), doc, ["John"], redact_images=True)
 
     assert result.not_located == ()
 
@@ -318,7 +326,7 @@ def test_document_is_closed_even_if_page_text_raises() -> None:
     doc = FailingDocument(["John paid"])
 
     with pytest.raises(RuntimeError, match="page read failure"):
-        _service().execute(doc, ["John"])
+        _run(_service(), doc, ["John"])
 
     assert doc.closed is True
 
@@ -326,9 +334,7 @@ def test_document_is_closed_even_if_page_text_raises() -> None:
 def test_blackout_mode_passes_blackout_flag() -> None:
     """Blackout mode instructs the gateway to cover text with black boxes."""
     doc = FakePdfDocument(["John paid"])
-    _service().execute(
-        doc, ["John"], style=RedactionStyle.BLACKOUT, redact_images=False
-    )
+    _run(_service(), doc, ["John"], style=RedactionStyle.BLACKOUT, redact_images=False)
 
     assert doc.blackout_by_page[0] is True
     # Text redaction still records the matched text and assigned label.
@@ -345,7 +351,7 @@ def test_blackout_mode_can_redact_images() -> None:
         ["John paid"],
         image_rects={0: [(10.0, 10.0, 50.0, 50.0)]},
     )
-    _service().execute(doc, [], style=RedactionStyle.BLACKOUT, redact_images=True)
+    _run(_service(), doc, [], style=RedactionStyle.BLACKOUT, redact_images=True)
 
     sentinels = [r for r, _ in doc.redactions_by_page[0] if r == "__IMAGE__"]
     assert sentinels == ["__IMAGE__"]
@@ -363,8 +369,8 @@ def test_pseudonymize_mode_can_redact_images_too() -> None:
         ["John paid"],
         image_rects={0: [(10.0, 10.0, 50.0, 50.0)]},
     )
-    _service().execute(
-        doc, ["John"], style=RedactionStyle.PSEUDONYMIZE, redact_images=True
+    _run(
+        _service(), doc, ["John"], style=RedactionStyle.PSEUDONYMIZE, redact_images=True
     )
 
     sentinels = [r for r, _ in doc.redactions_by_page[0] if r == "__IMAGE__"]
@@ -395,9 +401,9 @@ def test_detector_matches_are_merged_with_custom_words() -> None:
         ]
     )
     doc = FakePdfDocument([text])
-    result = _service(detector).execute(doc, ["John"])
+    result = _run(_service(detector), doc, ["John"])
 
-    assert result.entity_count == 2
+    assert len(result.findings) == 2
     sources = {f.detected_text: f.source for f in result.findings}
     assert sources["jane@example.com"] == DetectionSource.PATTERN
     assert sources["John"] == DetectionSource.CUSTOM
@@ -413,14 +419,14 @@ def test_existing_bracketed_numbers_in_the_source_are_counted() -> None:
     operator is told instead, and decides whether the output is readable.
     """
     doc = FakePdfDocument(["John paid, per note [4] and item [12]."])
-    result = _service().execute(doc, ["John"])
+    result = _run(_service(), doc, ["John"])
 
     assert result.source_bracketed_numbers == 2
 
 
 def test_no_bracketed_numbers_reports_zero() -> None:
     doc = FakePdfDocument(["John paid the invoice."])
-    result = _service().execute(doc, ["John"])
+    result = _run(_service(), doc, ["John"])
 
     assert result.source_bracketed_numbers == 0
 
@@ -437,7 +443,7 @@ def test_typed_word_resolves_to_its_curated_internal_id() -> None:
         )
     }
     doc = FakePdfDocument(["Paid to Care Organisation for services."])
-    result = _service(master_map=master).execute(doc, ["Care Organisation"])
+    result = _run(_service(master_map=master), doc, ["Care Organisation"])
 
     assert doc.redactions_by_page[0][0][1] == "[001]"
     assert result.crosswalk[0].internal_id == "17728"
@@ -468,9 +474,9 @@ def test_curated_name_is_redacted_without_being_typed_in() -> None:
     )
     doc = FakePdfDocument(["Paid to Jane Doe."])
 
-    result = _service(detector=detector, master_map=master).execute(doc, [])
+    result = _run(_service(detector=detector, master_map=master), doc, [])
 
-    assert result.entity_count == 1
+    assert len(result.findings) == 1
     assert doc.redactions_by_page[0][0][1] == "[001]"
     # Resolves on the exact (PERSON, name) key, so it carries the curated ID.
     assert result.crosswalk[0].internal_id == "10010"
@@ -485,7 +491,7 @@ def test_person_and_organization_are_requested_from_the_detector() -> None:
     master-list detection reachable at all in the PDF flow.
     """
     detector = FakeDetector([])
-    _service(detector=detector).execute(FakePdfDocument(["text"]), [])
+    _run(_service(detector=detector), FakePdfDocument(["text"]), [])
 
     assert "PERSON" in detector.requested_entities
     assert "ORGANIZATION" in detector.requested_entities
@@ -500,8 +506,8 @@ def test_excluded_term_is_not_redacted_and_not_in_the_crosswalk() -> None:
     """
     doc = FakePdfDocument(["Total salaries paid to John"])
 
-    result = _service().execute(
-        doc, ["salaries", "John"], exclude=frozenset({"salaries"})
+    result = _run(
+        _service(), doc, ["salaries", "John"], exclude=frozenset({"salaries"})
     )
 
     redacted_terms = [candidate for candidate, _ in doc.redactions_by_page[0]]
@@ -514,11 +520,11 @@ def test_excluding_one_term_leaves_the_others_redacted() -> None:
     """The failure to rule out: one deselection suppressing everything."""
     doc = FakePdfDocument(["salaries, John, Mary"])
 
-    result = _service().execute(
-        doc, ["salaries", "John", "Mary"], exclude=frozenset({"salaries"})
+    result = _run(
+        _service(), doc, ["salaries", "John", "Mary"], exclude=frozenset({"salaries"})
     )
 
-    assert result.entity_count == 2
+    assert len(result.findings) == 2
     assert {a.original_name for a in result.crosswalk} == {"John", "Mary"}
 
 
@@ -526,8 +532,8 @@ def test_labels_stay_contiguous_when_a_term_is_excluded() -> None:
     """Excluded before assign, so no ordinal is claimed and no label is skipped."""
     doc = FakePdfDocument(["salaries, John, Mary"])
 
-    result = _service().execute(
-        doc, ["salaries", "John", "Mary"], exclude=frozenset({"salaries"})
+    result = _run(
+        _service(), doc, ["salaries", "John", "Mary"], exclude=frozenset({"salaries"})
     )
 
     assert [a.label for a in result.crosswalk] == ["[001]", "[002]"]
@@ -537,7 +543,7 @@ def test_exclusion_is_case_and_whitespace_insensitive() -> None:
     """The set holds normalized terms, so every casing of the word is covered."""
     doc = FakePdfDocument(["SALARIES and Salaries and salaries"])
 
-    result = _service().execute(doc, ["salaries"], exclude=frozenset({"salaries"}))
+    result = _run(_service(), doc, ["salaries"], exclude=frozenset({"salaries"}))
 
     assert result.crosswalk == []
     assert 0 not in doc.redactions_by_page
@@ -547,9 +553,9 @@ def test_no_exclusions_redacts_everything_as_before() -> None:
     """The default must not change existing behaviour."""
     doc = FakePdfDocument(["Total salaries paid to John"])
 
-    result = _service().execute(doc, ["salaries", "John"])
+    result = _run(_service(), doc, ["salaries", "John"])
 
-    assert result.entity_count == 2
+    assert len(result.findings) == 2
 
 
 def test_bank_detail_is_masked_without_claiming_a_label() -> None:
@@ -564,7 +570,7 @@ def test_bank_detail_is_masked_without_claiming_a_label() -> None:
     )
     doc = FakePdfDocument([text])
 
-    result = _service(FakeDetector([account])).execute(doc, ["John", "Mary"])
+    result = _run(_service(FakeDetector([account])), doc, ["John", "Mary"])
 
     assert ("0123456789", "[ACCOUNT]") in doc.redactions_by_page[0]
     assert [(a.original_name, a.label) for a in result.crosswalk] == [
@@ -575,7 +581,7 @@ def test_bank_detail_is_masked_without_claiming_a_label() -> None:
 
 def test_financial_types_are_requested_from_the_detector() -> None:
     detector = FakeDetector()
-    _service(detector).execute(FakePdfDocument(["anything"]), [])
+    _run(_service(detector), FakePdfDocument(["anything"]), [])
 
     assert set(DEFAULT_SETTINGS.fixed_masks) <= set(detector.requested_entities)
 
@@ -596,8 +602,8 @@ def test_unlisted_name_from_the_model_is_redacted_with_a_flagged_placeholder() -
     )
     doc = FakePdfDocument([text])
 
-    result = _service(FakeDetector([name]), auto_prefixes={"PERSON": "PSN"}).execute(
-        doc, []
+    result = _run(
+        _service(FakeDetector([name]), auto_prefixes={"PERSON": "PSN"}), doc, []
     )
 
     assert doc.redactions_by_page[0] == [("Someone Uncurated", "[001]")]
@@ -619,7 +625,7 @@ def test_address_is_masked_without_a_label_or_mapping_row() -> None:
     )
     doc = FakePdfDocument([text])
 
-    result = _service(FakeDetector([address])).execute(doc, [])
+    result = _run(_service(FakeDetector([address])), doc, [])
 
     assert doc.redactions_by_page[0] == [
         ("P.O. Box 123-00100, Springfield", "[ADDRESS]")
@@ -631,79 +637,12 @@ def test_link_targets_are_removed_and_counted() -> None:
     doc = FakePdfDocument(["See the attached report."])
     doc.links = 2
 
-    result = _service().execute(doc, [])
+    result = _run(_service(), doc, [])
 
     assert result.removed_links == 2
 
 
 # --- scan()/redact() split -------------------------------------------------
-
-
-def test_scan_then_redact_matches_execute_for_a_plain_custom_word() -> None:
-    """scan()+redact() with no exclusions equals execute() for a custom word."""
-    pages = ["John paid invoice 1", "No name here", "John paid invoice 2"]
-    service = _service()
-
-    expected = service.execute(FakePdfDocument(list(pages)), ["John"])
-
-    scan_result = service.scan(FakePdfDocument(list(pages)))
-    actual = service.redact(FakePdfDocument(list(pages)), scan_result, ["John"])
-
-    assert actual.findings == expected.findings
-    assert actual.crosswalk == expected.crosswalk
-    assert actual.data == expected.data
-
-
-def test_scan_then_redact_matches_execute_for_a_detector_sourced_match() -> None:
-    """scan()+redact() with no exclusions equals execute() for a detector hit."""
-    text = "Contact jane@example.com or ask John for details"
-    email_span = Span(
-        text.index("jane@example.com"),
-        text.index("jane@example.com") + len("jane@example.com"),
-    )
-    detector = FakeDetector(
-        [
-            PiiDetection(
-                entity_type="EMAIL_ADDRESS",
-                span=email_span,
-                score=1.0,
-                text="jane@example.com",
-                source=DetectionSource.PATTERN,
-            )
-        ]
-    )
-    service = _service(detector)
-
-    expected = service.execute(FakePdfDocument([text]), ["John"])
-
-    scan_result = service.scan(FakePdfDocument([text]))
-    actual = service.redact(FakePdfDocument([text]), scan_result, ["John"])
-
-    assert actual.findings == expected.findings
-    assert actual.crosswalk == expected.crosswalk
-    assert actual.data == expected.data
-
-
-def test_scan_then_redact_matches_execute_with_an_excluded_term() -> None:
-    """scan()+redact() reproduces execute()'s exclude behavior exactly."""
-    text = "Total salaries paid to John"
-    service = _service()
-
-    expected = service.execute(
-        FakePdfDocument([text]), ["salaries", "John"], exclude=frozenset({"salaries"})
-    )
-
-    scan_result = service.scan(FakePdfDocument([text]))
-    actual = service.redact(
-        FakePdfDocument([text]),
-        scan_result,
-        ["salaries", "John"],
-        exclude=frozenset({"salaries"}),
-    )
-
-    assert actual.findings == expected.findings
-    assert actual.crosswalk == expected.crosswalk
-    assert actual.data == expected.data
 
 
 def test_redact_does_not_call_the_detector_again_across_exclude_changes() -> None:
@@ -740,64 +679,6 @@ def test_scan_closes_the_document_and_does_not_redact() -> None:
     assert doc.closed is True
     assert doc.links_removed_before_render is False
     assert doc.redactions_by_page == {}
-
-
-def test_scan_redact_excluded_term_is_not_redacted_and_not_in_the_crosswalk() -> None:
-    """The exclude behavior still holds when driven through scan()+redact()."""
-    doc = FakePdfDocument(["Total salaries paid to John"])
-    service = _service()
-    scan_result = service.scan(FakePdfDocument(["Total salaries paid to John"]))
-
-    result = service.redact(
-        doc, scan_result, ["salaries", "John"], exclude=frozenset({"salaries"})
-    )
-
-    redacted_terms = [candidate for candidate, _ in doc.redactions_by_page[0]]
-    assert "John" in redacted_terms
-    assert "salaries" not in redacted_terms
-    assert [a.original_name for a in result.crosswalk] == ["John"]
-
-
-def test_scan_redact_excluding_one_term_leaves_the_others_redacted() -> None:
-    service = _service()
-    scan_result = service.scan(FakePdfDocument(["salaries, John, Mary"]))
-
-    result = service.redact(
-        FakePdfDocument(["salaries, John, Mary"]),
-        scan_result,
-        ["salaries", "John", "Mary"],
-        exclude=frozenset({"salaries"}),
-    )
-
-    assert result.entity_count == 2
-    assert {a.original_name for a in result.crosswalk} == {"John", "Mary"}
-
-
-def test_scan_redact_labels_stay_contiguous_when_a_term_is_excluded() -> None:
-    service = _service()
-    scan_result = service.scan(FakePdfDocument(["salaries, John, Mary"]))
-
-    result = service.redact(
-        FakePdfDocument(["salaries, John, Mary"]),
-        scan_result,
-        ["salaries", "John", "Mary"],
-        exclude=frozenset({"salaries"}),
-    )
-
-    assert [a.label for a in result.crosswalk] == ["[001]", "[002]"]
-
-
-def test_scan_redact_exclusion_is_case_and_whitespace_insensitive() -> None:
-    service = _service()
-    doc = FakePdfDocument(["SALARIES and Salaries and salaries"])
-    scan_result = service.scan(FakePdfDocument(["SALARIES and Salaries and salaries"]))
-
-    result = service.redact(
-        doc, scan_result, ["salaries"], exclude=frozenset({"salaries"})
-    )
-
-    assert result.crosswalk == []
-    assert 0 not in doc.redactions_by_page
 
 
 def test_scan_marks_pages_with_images_but_no_text_as_scanned() -> None:

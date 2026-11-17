@@ -115,15 +115,10 @@ class PdfRedactionResult:
     removed_links: int = 0
     not_located: tuple[Finding, ...] = ()
 
-    @property
-    def entity_count(self) -> int:
-        """Total number of pseudonymized detections."""
-        return len(self.findings)
-
 
 @dataclass(frozen=True)
 class DocxRedactionResult:
-    """Outcome of pseudonymizing a Word doc: bytes, findings, blocks, crosswalk.
+    """Outcome of pseudonymizing a Word doc: bytes, findings, crosswalk.
 
     ``findings`` reuses :class:`Finding`, whose ``page`` field holds the
     paragraph/block ordinal here rather than a PDF page number.
@@ -132,11 +127,5 @@ class DocxRedactionResult:
 
     data: bytes
     findings: list[Finding]
-    block_count: int
     crosswalk: list[Assignment]
     removed_links: int = 0
-
-    @property
-    def entity_count(self) -> int:
-        """Total number of pseudonymized detections."""
-        return len(self.findings)

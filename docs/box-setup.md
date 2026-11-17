@@ -32,7 +32,7 @@ IT/scripted setup) see **[data/README.md](../data/README.md)**.
 
 ## Check it worked
 
-Look at the master-list card in the app's sidebar:
+Look at the master-list count at the top of the app (click it for details):
 
 - **Row counts look right** (roughly what a teammate already on the shared
   list sees) → you're connected.

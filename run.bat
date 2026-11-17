@@ -45,9 +45,23 @@ set "APPDIR=%~dp0"
 if "%APPDIR:~-1%"=="\" set "APPDIR=%APPDIR:~0,-1%"
 
 call :stepnum 2 3 "Preparing the program"
-if not exist "%APPDIR%\.venv" (
-    call :info "First-time setup: installing the program and language model (one-time)."
-    call :wait "This is a large download and can take a few minutes. Please leave this window open..."
+:: Set up on first run, and again whenever uv.lock changed since the last
+:: setup (an update copied over an existing folder, or a git pull). A copy
+:: of uv.lock kept inside .venv records what was last installed.
+set "SYNCED=%APPDIR%\.venv\.synced-uv.lock"
+set "NEEDSYNC="
+if not exist "%APPDIR%\.venv" set "NEEDSYNC=first"
+if not defined NEEDSYNC (
+    fc /b "%APPDIR%\uv.lock" "!SYNCED!" >nul 2>&1 || set "NEEDSYNC=update"
+)
+if defined NEEDSYNC (
+    if "!NEEDSYNC!"=="first" (
+        call :info "First-time setup: installing the program and language model (one-time)."
+        call :wait "This is a large download and can take a few minutes. Please leave this window open..."
+    ) else (
+        call :info "Installing updated components for this version (one-time)."
+        call :wait "This can take a minute. Please leave this window open..."
+    )
     set "SETUPLOG=%TEMP%\finance-redact-setup.log"
     uv sync --python 3.12 --project "%APPDIR%" >"!SETUPLOG!" 2>&1
     if !errorlevel! neq 0 (
@@ -59,6 +73,7 @@ if not exist "%APPDIR%\.venv" (
         call :bye
         exit /b 1
     )
+    copy /y "%APPDIR%\uv.lock" "!SYNCED!" >nul
     call :ok "Program is ready."
 ) else (
     call :ok "Program is ready."
@@ -78,7 +93,7 @@ if exist "%SHORTCUT%" (
 
 :: -- 4. Launch the app --------------------------------------------------------
 call :ready
-"%APPDIR%\.venv\Scripts\streamlit.exe" run "%APPDIR%\app.py" --server.address=127.0.0.1
+"%APPDIR%\.venv\Scripts\python.exe" "%APPDIR%\app.py"
 
 endlocal
 goto :eof

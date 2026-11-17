@@ -58,16 +58,11 @@ cannot be located on the page; redactions are applied per page. A finding
 whose text the gateway could not locate is also listed in the result's
 ``not_located``, because nothing covers it and the UI must say so.
 
-``execute`` runs the whole pipeline - including the detector call - every
-time, which is wasteful when only ``exclude`` changed (unticking a false
-positive in the review table). ``scan``/``redact`` split that in two, the
-same way Excel's ``RedactExcelService`` already does: ``scan`` opens the
-document once and runs the detector once per page, returning a
-:class:`PdfScanResult`; ``redact`` takes that cached result plus a fresh
-``exclude`` set and rebuilds the output with no detector call and no
-``page_text`` call at all. ``execute`` is unchanged and kept for callers that
-don't need the split; it does not read scanned pages (the app uses
-``scan``/``redact``).
+Detection is split in two so a review change never re-runs it: ``scan``
+opens the document once and runs the detector once per page, returning a
+:class:`PdfScanResult`; ``redact`` takes that cached result plus the
+review's choices (``exclude``, typed words, table columns) and rebuilds the
+output with no detector call and no ``page_text`` call at all.
 
 Scanned pages (images and no text layer, or a text layer over images that
 cover ``_MIXED_PAGE_IMAGE_SHARE`` of the page) are read with the optional ``ocr``
@@ -208,11 +203,6 @@ class PdfScanResult:
     pages: list[_PdfPageScan]
 
     @property
-    def page_count(self) -> int:
-        """Number of pages captured by the scan."""
-        return len(self.pages)
-
-    @property
     def scanned_pages(self) -> list[int]:
         """Zero-based indices of pages that are scans or mostly a scanned image."""
         return [index for index, page in enumerate(self.pages) if page.scanned]
@@ -260,8 +250,7 @@ class RedactPdfService:
         passed explicitly by the composition root; the default here only covers
         callers (e.g. tests) that don't care about the fuzzy-suggestion feature.
         ``custom_words_score`` should normally be ``Settings.custom_words_score``;
-        it's the confidence recorded for every custom-word match (see
-        ``execute``'s ``custom_words`` param). ``fixed_masks`` is
+        it's the confidence recorded for every typed-word match. ``fixed_masks`` is
         ``Settings.fixed_masks``: those bank/payment types are also requested
         from the detector, and are written as their mask with no label and no
         mapping row.
@@ -279,111 +268,6 @@ class RedactPdfService:
     def can_read_scans(self) -> bool:
         """Whether an OCR engine is wired in to read scanned pages."""
         return self._ocr is not None
-
-    def execute(
-        self,
-        source: object,
-        custom_words: list[str],
-        *,
-        style: RedactionStyle = RedactionStyle.PSEUDONYMIZE,
-        redact_images: bool = False,
-        exclude: frozenset[str] = frozenset(),
-    ) -> PdfRedactionResult:
-        """Redact ``source`` and return new bytes, findings, page count, crosswalk.
-
-        Names, organizations, emails, URLs and masked types are always
-        detected automatically (``detector``, no toggle). ``custom_words`` is an
-        additional list of words/phrases to redact on every page - matched
-        literally and case-insensitively (see
-        ``domain/custom_words.find_custom_words``). An empty ``custom_words``
-        list just means there's nothing extra to add on top of the automatic
-        detection - this method runs cleanly either way.
-
-        ``exclude`` is a set of already-normalized terms (see
-        ``domain/pseudonyms.normalize``) the operator ticked off in the review
-        table as false positives. A matching detection is dropped before it
-        reaches the pseudonymizer, so it is neither replaced in the output nor
-        recorded in the crosswalk. Per-run only: nothing about it persists, and
-        the caller re-supplies it on every call.
-        """
-        document = self._open_document(source)
-        pseudonymizer = Pseudonymizer(
-            self._master_map, self._auto_prefixes, fuzzy_threshold=self._fuzzy_threshold
-        )
-        try:
-            # Before redacting: ``apply_redactions`` silently deletes links
-            # that overlap a redaction, which would make this count too low.
-            removed_links = document.remove_external_links()
-            findings: list[Finding] = []
-            not_located: list[Finding] = []
-            bracketed = 0
-            for page_index in range(document.page_count):
-                raw_text = document.page_text(page_index)
-                has_text = bool(raw_text.strip())
-                normalized = (
-                    normalize_pdf_text(raw_text)
-                    if has_text
-                    else NormalizedText("", raw_text, ())
-                )
-                detections = (
-                    [
-                        *self._detector.analyze(
-                            normalized.text,
-                            [*_ENTITIES, *self._fixed_masks],
-                            _THRESHOLD,
-                        ),
-                        *find_custom_words(
-                            normalized.text, custom_words, self._custom_words_score
-                        ),
-                    ]
-                    if has_text
-                    else []
-                )
-
-                # Sorted by position, not by dedupe_overlapping's own order:
-                # that sorts by source priority first (see domain/rules.py), so
-                # a master-list match late on the page would otherwise be
-                # assigned - and therefore numbered - before a custom-word match
-                # near the top. The gateway adds all annotations and applies
-                # them in one pass, so the order it receives them in is
-                # irrelevant to the output; it only fixes the label numbering.
-                bracketed += len(_BRACKETED_NUMBER.findall(normalized.text))
-
-                page_start = len(findings)
-                redactions = self._page_redactions(
-                    page_index=page_index,
-                    raw_text=raw_text,
-                    normalized=normalized,
-                    detections=detections,
-                    exclude=exclude,
-                    pseudonymizer=pseudonymizer,
-                    findings=findings,
-                )
-
-                if redact_images and document.page_image_rects(page_index):
-                    redactions.append((IMAGE_REDACTION_SENTINEL, ""))
-
-                if redactions:
-                    missed = document.redact_page(
-                        page_index,
-                        redactions,
-                        blackout=(style == RedactionStyle.BLACKOUT),
-                    )
-                    # Redaction i of this page came from finding i of it:
-                    # ``_page_redactions`` appends both in the same order.
-                    not_located += [findings[page_start + i] for i in missed]
-
-            return PdfRedactionResult(
-                data=document.to_bytes(),
-                findings=findings,
-                page_count=document.page_count,
-                crosswalk=pseudonymizer.crosswalk(),
-                source_bracketed_numbers=bracketed,
-                removed_links=removed_links,
-                not_located=tuple(not_located),
-            )
-        finally:
-            document.close()
 
     def count_scanned_pages(self, source: object) -> tuple[int, int]:
         """Return ``(scanned pages, total pages)`` without detecting or OCR.
@@ -520,8 +404,8 @@ class RedactPdfService:
             self._master_map, self._auto_prefixes, fuzzy_threshold=self._fuzzy_threshold
         )
         try:
-            # Same ordering/reasoning as ``execute``: must happen before
-            # ``apply_redactions`` deletes overlapping links.
+            # Before redacting: ``apply_redactions`` silently deletes links
+            # that overlap a redaction, which would make this count too low.
             removed_links = document.remove_external_links()
             findings: list[Finding] = []
             not_located: list[Finding] = []
@@ -644,10 +528,8 @@ class RedactPdfService:
     ) -> list[tuple[str | list[str], str]]:
         """Dedupe/exclude/assign/build the redaction list for one page.
 
-        Shared by ``execute`` and ``redact`` - identical logic, factored out
-        once both methods needed it. Appends to ``findings`` in place (one
-        list spans the whole document in both callers) and returns this
-        page's ``(candidates, label)`` redaction list.
+        Appends to ``findings`` in place (one list spans the whole document)
+        and returns this page's ``(candidates, label)`` redaction list.
         """
         redactions: list[tuple[str | list[str], str]] = []
         for detection, label in self._labelled(

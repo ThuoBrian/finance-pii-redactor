@@ -2,16 +2,10 @@
 
 The master list stores one surface form per name (e.g. ``Acme Ltd``), but documents
 use many: ``Acme Limited``, ``Acme Ltd.``, ``Smith & Co`` vs ``Smith and Co``. To fold
-those onto the curated ID without editing the workbook, this module derives, from one
-master-list name, both:
-
-- the set of variant **surface strings** (:func:`aliases`) — used to register extra
-  lookup keys in the master map; and
-- one **regex source** (:func:`name_pattern`) matching every variant — used by the
-  custom recognizer so it detects the variants in the first place.
-
-Both derive from the same suffix / ampersand rules, so the recognizer's matchable set
-exactly equals the map's resolvable set.
+those onto the curated ID without editing the workbook, :func:`aliases` derives the set
+of variant surface strings from one master-list name. Both the master map (extra lookup
+keys) and the custom recognizer (extra matcher keys) are built from it, so every
+variant the recognizer detects also resolves to the curated ID.
 
 Framework-free and unit-testable. No middle-initial handling by design: stripping
 initials would merge ``Brian O. Thuo`` and ``Brian A. Thuo`` into one pseudonym, which
@@ -21,10 +15,8 @@ breaks the per-entity identity guarantee the tool exists to provide.
 from __future__ import annotations
 
 import itertools
-import re
 
-# Canonical short suffix -> its long-form equivalent(s). Used for both ``aliases`` and
-# ``name_pattern`` so the two stay in sync.
+# Canonical short suffix -> its long-form equivalent(s).
 SUFFIX_EQUIVALENTS: dict[str, tuple[str, ...]] = {
     "ltd": ("limited",),
     "inc": ("incorporated",),
@@ -49,13 +41,7 @@ SUFFIX_SET: frozenset[str] = frozenset(_SUFFIX_TO_FORMS)
 
 def _dedup(items: list[str]) -> list[str]:
     """Return ``items`` with duplicates removed, preserving first-seen order."""
-    seen: set[str] = set()
-    out: list[str] = []
-    for item in items:
-        if item not in seen:
-            seen.add(item)
-            out.append(item)
-    return out
+    return list(dict.fromkeys(items))
 
 
 def _suffix_forms(core: str) -> list[str]:
@@ -122,32 +108,3 @@ def aliases(name: str) -> list[str]:
         results = _amp_variants(name)
 
     return _dedup([name, *results])
-
-
-def name_pattern(name: str) -> str:
-    r"""Return a regex source matching every variant of ``name`` (no word-boundary wraps).
-
-    Tokens are joined with ``\\s+`` (whitespace-flexible). The last token, when it is an
-    org suffix, becomes an alternation of equivalent forms (``(?:ltd|limited)``);
-    ``&``/``and`` tokens become ``(?:and|&)``. The caller wraps this with a leading
-    ``\\b`` and a trailing ``(?!\\w)`` — the right side is a non-word lookahead rather
-    than ``\\b`` so an optional trailing period (left unconsumed) doesn't break the
-    boundary.
-    """
-    name = name.strip()
-    if not name:
-        return ""
-    tokens = name.split()
-    parts: list[str] = []
-    for index, tok in enumerate(tokens):
-        is_last = index == len(tokens) - 1
-        core = tok.rstrip(".").lower()
-        if tok == "&" or core == "and":
-            parts.append(r"(?:and|&)")
-        elif is_last and core in SUFFIX_SET:
-            forms = _SUFFIX_TO_FORMS.get(core, [core])
-            alts = _dedup([re.escape(form) for form in forms])
-            parts.append("(?:" + "|".join(alts) + ")")
-        else:
-            parts.append(re.escape(tok))
-    return r"\s+".join(parts)

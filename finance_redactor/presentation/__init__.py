@@ -1,11 +1,7 @@
-"""Presentation layer: Streamlit flows and view formatting.
+"""Presentation layer: the local web API and the built React interface.
 
-The only layer that imports Streamlit. View functions call use cases and render
-their results; ``presenters`` turn domain results into UI artifacts (HTML, the
-findings tables).
+``api`` holds the FastAPI routers, ``jobs`` the in-memory store for uploads,
+``security`` the request checks, and ``presenters`` turn domain results into
+the tables and wording the interface shows. ``static`` is the built bundle
+(source in ``frontend/``).
 """
-
-from finance_redactor.presentation.excel_view import run_excel_flow
-from finance_redactor.presentation.pdf_view import run_pdf_flow
-
-__all__ = ["run_excel_flow", "run_pdf_flow"]

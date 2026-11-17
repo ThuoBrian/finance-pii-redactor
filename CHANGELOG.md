@@ -6,6 +6,59 @@ the `version` field in `pyproject.toml`.
 
 ## [Unreleased]
 
+### Changed
+
+- **A new, calmer interface.** The app is now a React page served by a small
+  local web server, in place of Streamlit. It still runs only on your
+  computer, opens in your browser at the same address
+  (http://127.0.0.1:8501), and starts the same way (`run.bat`, `run.sh`, or
+  the Desktop shortcut). Redaction, the outputs and the data classifications
+  are unchanged.
+  - The sidebar is gone. The master list shows as a name count at the top;
+    click it for the details and **Refresh**. **Start over**, **Help** and
+    **Close the app** are in the **⋯** menu.
+  - Each step has one main button. Options show only the essentials, with
+    the rest under **Customize**.
+  - Review is one screen: the findings on the left, a **Preview**,
+    **Mapping** and **Where found** panel on the right, and a bar at the
+    bottom with **Apply changes** and **Continue to download**. PDF pages
+    can now be previewed, redacted or original.
+  - For a PDF, the names-free label mapping is now in the **Safe to share**
+    card, next to the PDF it decodes.
+  - Light and dark mode follow your system setting, with the same
+    contrast-checked colours as before.
+- **Review is quicker to check.** Click a term to jump the preview to the
+  exact cell (Excel) or page (PDF) and step through every place it occurs.
+  ↑ ↓ and Space work through the list from the keyboard. A **Worth a closer
+  look** filter shows the model guesses most likely to be wrong.
+- **Fewer steps.** Choosing the file and its settings is now one stage
+  (**File → Review → Download**), with **Redact with recommended settings**
+  as the main button. Customize choices are remembered for the next file
+  until you close the app.
+- **Nothing gets lost by accident.** Each file shows **✓ Downloaded** once
+  you have it, and leaving, starting over or closing the app before
+  downloading everything asks first. With no master list loaded, the Upload
+  screen says so and offers the setup.
+- **Long scans can be cancelled**, and show roughly how long is left.
+- **Calmer screens.** Help text moved behind small **?** buttons, "Rebuilt
+  the file" is a brief message that clears itself, tables sort and search,
+  focus moves to each new step's heading for screen readers, and "reduce
+  motion" is respected.
+- **Leaner code, no change in behaviour.** Removed code only the old
+  Streamlit screens or nothing at all used (two unused `execute()` methods,
+  single-sheet Excel methods, a never-used crosswalk-sheet option in the Excel
+  writer, the one-off `scripts/migrate_to_master_list.py`, and fields the
+  interface never read), and gave the routers and the three format screens one
+  shared copy of what they repeated. Tests now go through the same scan-then-
+  redact path the app uses.
+- **Fixed:** the Excel settings screen no longer redraws itself every 400 ms
+  while it is open.
+- **The launchers install updated components by themselves.** `run.bat` and
+  `run.sh` now set the program up again whenever `uv.lock` has changed since
+  the last setup, not only on the first run. Copying a new version over an
+  existing folder (or a `git pull`) no longer leaves it missing packages. The
+  installer already started each update from a fresh folder.
+
 ### Added
 
 - **PDF and Word scans show live progress**, like Excel's. The scanning box

@@ -38,3 +38,36 @@ jobs:
       # The justfile's `check` recipe is the single list of what CI runs.
       - name: Run checks
         run: uv run just check
+
+  frontend:
+    # The React interface: type check, tests, and a rebuild that must match
+    # the committed bundle in finance_redactor/presentation/static/. End
+    # users run that bundle without Node, so a stale one would ship old UI.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm --prefix frontend ci
+
+      - name: Type check and tests
+        run: |
+          npm --prefix frontend run typecheck
+          npm --prefix frontend test
+
+      - name: Rebuild the bundle and compare
+        run: |
+          npm --prefix frontend run build
+          if [ -n "$(git status --porcelain -- finance_redactor/presentation/static)" ]; then
+            git status --short -- finance_redactor/presentation/static
+            echo "The committed UI bundle is out of date. Run 'just web-build' and commit it."
+            exit 1
+          fi

@@ -111,10 +111,26 @@ fi
 
 # -- 2. Create virtual environment and install dependencies -------------------
 print_step 2 2 "Preparing the program"
+# Set up on first run, and again whenever uv.lock changed since the last
+# setup (an update copied over an existing folder, or a git pull). A copy of
+# uv.lock kept inside .venv records what was last installed.
+SYNCED="$APP_DIR/.venv/.synced-uv.lock"
+NEEDSYNC=""
 if [ ! -d "$APP_DIR/.venv" ]; then
-    print_info "First-time setup: installing the program and language model (one-time)."
+    NEEDSYNC="first"
+elif ! cmp -s "$APP_DIR/uv.lock" "$SYNCED"; then
+    NEEDSYNC="update"
+fi
+if [ -n "$NEEDSYNC" ]; then
+    if [ "$NEEDSYNC" = "first" ]; then
+        print_info "First-time setup: installing the program and language model (one-time)."
+        WAIT_MSG="Large download, this can take a few minutes..."
+    else
+        print_info "Installing updated components for this version (one-time)."
+        WAIT_MSG="This can take a minute..."
+    fi
     (uv sync --python 3.12 --project "$APP_DIR" >/tmp/finance-redact-setup.log 2>&1) &
-    spinner $! "Large download, this can take a few minutes..."
+    spinner $! "$WAIT_MSG"
     wait $! || {
         print_error "The program could not be set up."
         print_hint "Please check your internet connection, then run this again."
@@ -123,6 +139,7 @@ if [ ! -d "$APP_DIR/.venv" ]; then
         cat /tmp/finance-redact-setup.log 2>/dev/null || true
         exit 1
     }
+    cp "$APP_DIR/uv.lock" "$SYNCED"
     print_ok "Program is ready."
 else
     print_ok "Program is ready."
@@ -130,4 +147,4 @@ fi
 
 # -- 3. Launch the app --------------------------------------------------------
 print_ready
-"$APP_DIR/.venv/bin/streamlit" run "$APP_DIR/app.py" --server.address=127.0.0.1
+"$APP_DIR/.venv/bin/python" "$APP_DIR/app.py"

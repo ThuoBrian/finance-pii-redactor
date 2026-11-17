@@ -18,21 +18,13 @@ from finance_redactor.domain.entities import (
 )
 from finance_redactor.domain.pseudonyms import Assignment
 from finance_redactor.presentation.presenters import (
-    CHANGED_MARKER,
-    HIGHLIGHT_HEX,
-    apply_notice,
-    carried_over_notice,
     carry_over_exclusions,
     crosswalk_dataframe,
-    detection_editor_dataframe,
     entity_label,
     excel_findings_dataframe,
-    excluded_terms,
-    filter_editor_rows,
-    findings_dataframe,
     formatting_note,
     merge_findings,
-    merge_pending,
+    name_summary,
     not_located_warning,
     pdf_job_size_note,
     pdf_mapping_dataframe,
@@ -40,57 +32,13 @@ from finance_redactor.presentation.presenters import (
     pdf_mapping_with_names_dataframe,
     pdf_review_dataframe,
     plural,
-    preview_hidden_count,
-    preview_styler,
-    review_status,
     review_summary,
-    review_tab_labels,
+    review_terms,
     scan_result_findings,
+    scan_size_warning,
     scanned_pages_warning,
-    search_editor_rows,
     why_found,
 )
-
-
-def test_preview_shows_markup_literally_and_never_as_html_source() -> None:
-    """Cell text with markup stays text; st.dataframe draws it on a canvas."""
-    df = pd.DataFrame({"<b>Name</b>": ["<img src=x onerror=alert(1)>", "**bold**"]})
-    styler = preview_styler(df, cell_keys=set())
-    assert list(styler.data.columns) == ["<b>Name</b>"]
-    assert list(styler.data["<b>Name</b>"]) == [
-        "<img src=x onerror=alert(1)>",
-        "**bold**",
-    ]
-
-
-def test_preview_marks_flagged_cells_by_text_and_by_colour() -> None:
-    df = pd.DataFrame({"Name": ["Alice Test", "Bob Test"], "Note": ["a", "b"]})
-    styler = preview_styler(df, cell_keys={(0, "Name")})
-    assert list(styler.data["Name"]) == [CHANGED_MARKER + "Alice Test", "Bob Test"]
-    assert list(styler.data["Note"]) == ["a", "b"]
-    html = styler.to_html()
-    assert html.count(HIGHLIGHT_HEX) == 1  # only the flagged cell is filled
-    assert HIGHLIGHT_HEX == "#FFFF00"  # same yellow as the downloaded workbook
-
-
-def test_preview_renders_missing_values_as_empty_text() -> None:
-    df = pd.DataFrame({"Name": ["Alice Test", None]})
-    assert list(preview_styler(df, cell_keys=set()).data["Name"]) == ["Alice Test", ""]
-
-
-def test_preview_is_row_capped_and_reports_flagged_cells_it_hid() -> None:
-    df = pd.DataFrame({"Name": [f"Person {i}" for i in range(5)]})
-    keys = {(0, "Name"), (3, "Name"), (4, "Name")}
-    styler = preview_styler(df, keys, max_rows=2)
-    assert len(styler.data) == 2
-    assert preview_hidden_count(df, keys, max_rows=2) == 2
-    assert preview_hidden_count(df, keys, max_rows=5) == 0
-
-
-def test_preview_ignores_keys_for_unknown_rows_or_columns() -> None:
-    df = pd.DataFrame({"Name": ["Alice Test"]})
-    styler = preview_styler(df, {(9, "Name"), (0, "Missing")})
-    assert list(styler.data["Name"]) == ["Alice Test"]
 
 
 @pytest.mark.parametrize(
@@ -106,26 +54,25 @@ def test_plural_defaults_to_adding_s() -> None:
     assert plural(3, "page") == "3 pages"
 
 
-def test_findings_dataframe_labels_the_location_column_paragraph() -> None:
-    """Docx findings reuse Finding.page, labeled 'Paragraph' rather than 'Page'."""
+def test_occurrences_are_one_based_with_a_readable_kind() -> None:
+    """Word paragraphs and PDF pages reuse Finding.page, shown 1-based."""
+    from finance_redactor.presentation.api.review import text_occurrences
+
     findings = [
         Finding(
             page=2,
             detected_text="John Doe",
-            entity_type="PERSON",
+            entity_type="EMAIL_ADDRESS",
             score=0.87,
             source=DetectionSource.MODEL,
         )
     ]
-    df = findings_dataframe(findings, "Paragraph")
-    assert list(df.columns) == [
-        "Paragraph",
-        "Detected text",
-        "Entity type",
-        "Confidence",
-        "Source",
-    ]
-    assert df.iloc[0]["Paragraph"] == 3
+
+    (occurrence,) = text_occurrences(findings)
+
+    assert occurrence.location == 3
+    assert occurrence.key == "john doe"
+    assert occurrence.kind == "Email address"
 
 
 # --- PDF mapping / review frames ---------------------------------------------
@@ -269,11 +216,12 @@ def test_editor_collapses_repeats_of_the_same_term_to_one_row() -> None:
     """A word appearing forty times is one decision, not forty tick boxes."""
     findings = [_finding("Salaries"), _finding("Salaries", 1), _finding("Salaries", 2)]
 
-    table = detection_editor_dataframe(findings)
+    terms = review_terms(findings)
 
-    assert len(table) == 1
-    assert table.loc[0, "Occurrences"] == 3
-    assert table.loc[0, "Detected text"] == "Salaries"
+    assert len(terms) == 1
+    assert terms[0].occurrences == 3
+    assert terms[0].term == "Salaries"
+    assert terms[0].key == "salaries"
 
 
 def test_editor_groups_across_casing_and_spacing() -> None:
@@ -283,10 +231,10 @@ def test_editor_groups_across_casing_and_spacing() -> None:
     """
     findings = [_finding("Salaries"), _finding("salaries"), _finding("  SALARIES  ")]
 
-    table = detection_editor_dataframe(findings)
+    terms = review_terms(findings)
 
-    assert len(table) == 1
-    assert table.loc[0, "Occurrences"] == 3
+    assert len(terms) == 1
+    assert terms[0].occurrences == 3
 
 
 def test_editor_reports_the_source_so_the_user_knows_which_fix_applies() -> None:
@@ -296,47 +244,9 @@ def test_editor_reports_the_source_so_the_user_knows_which_fix_applies() -> None
         _finding("someone@example.org", source=DetectionSource.PATTERN),
     ]
 
-    table = detection_editor_dataframe(findings)
+    terms = review_terms(findings)
 
-    assert set(table["Source"]) == {"Master list", "Pattern match"}
-
-
-def test_editor_defaults_to_redacting_everything() -> None:
-    """The safe default: nothing is excluded until someone unticks it."""
-    table = detection_editor_dataframe([_finding("Salaries")])
-
-    assert bool(table.loc[0, "Hide in output?"]) is True
-
-
-def test_unticking_round_trips_through_excluded_terms() -> None:
-    """The editor and its inverse have to agree, or a tick would not stick."""
-    findings = [_finding("Salaries"), _finding("Care Organisation")]
-    table = detection_editor_dataframe(findings)
-    table.loc[table["Detected text"] == "Salaries", "Hide in output?"] = False
-
-    excluded = excluded_terms(table)
-
-    assert excluded == frozenset({"salaries"})
-    # Seeding a fresh table with that set leaves the same row unticked.
-    reseeded = detection_editor_dataframe(findings, excluded)
-    assert bool(reseeded.loc[0, "Hide in output?"]) is False
-    assert bool(reseeded.loc[1, "Hide in output?"]) is True
-
-
-def test_empty_inputs_exclude_nothing() -> None:
-    """Losing the widget state must fail towards redacting, not away from it."""
-    assert excluded_terms(pd.DataFrame()) == frozenset()
-    assert detection_editor_dataframe([]).empty
-    assert list(detection_editor_dataframe([]).columns) == [
-        "Hide in output?",
-        "Detected text",
-        "Why it was found",
-        "Kind",
-        "Source",
-        "Confidence",
-        "Hint",
-        "Occurrences",
-    ]
+    assert {t.source for t in terms} == {"Master list", "Pattern match"}
 
 
 def _detection(text: str = "Jane Doe") -> PiiDetection:
@@ -488,9 +398,9 @@ def _mixed_findings() -> list[Finding]:
 
 
 def test_editor_puts_the_likely_false_positives_first_and_curated_names_last() -> None:
-    table = detection_editor_dataframe(_mixed_findings())
+    terms = review_terms(_mixed_findings())
 
-    assert list(table["Detected text"]) == [
+    assert [t.term for t in terms] == [
         "Salaries",
         "Across",
         "Mary Test",
@@ -502,134 +412,25 @@ def test_editor_puts_the_likely_false_positives_first_and_curated_names_last() -
 
 
 def test_editor_reports_confidence_and_hint_per_term() -> None:
-    table = detection_editor_dataframe(
+    terms = review_terms(
         [_model("Across", 0.5), _model("across", 0.8), _finding("Care Organisation")]
     )
 
-    across = table[table["Detected text"] == "Across"].iloc[0]
-    assert across["Confidence"] == 0.8  # strongest of its occurrences
-    assert across["Hint"] == "ordinary word"
-    assert across["Occurrences"] == 2
-    curated = table[table["Detected text"] == "Care Organisation"].iloc[0]
-    assert curated["Hint"] == ""
+    across = next(t for t in terms if t.term == "Across")
+    assert across.confidence == 0.8  # strongest of its occurrences
+    assert across.hint == "ordinary word"
+    assert across.occurrences == 2
+    curated = next(t for t in terms if t.term == "Care Organisation")
+    assert curated.hint == ""
 
 
 def test_review_summary_counts_each_kind_and_the_hinted_ones() -> None:
-    summary = review_summary(detection_editor_dataframe(_mixed_findings()))
+    summary = review_summary(review_terms(_mixed_findings()))
 
     assert summary == (
         "7 terms: 4 model guesses (2 worth a closer look), 1 typed word, "
         "1 pattern match, 1 master-list name."
     )
-
-
-def test_filter_shows_one_source_and_all_by_default() -> None:
-    table = detection_editor_dataframe(_mixed_findings())
-
-    assert len(filter_editor_rows(table, None)) == 7
-    assert len(filter_editor_rows(table, "All")) == 7
-    assert set(filter_editor_rows(table, "Model guesses")["Source"]) == {"Model guess"}
-    assert len(filter_editor_rows(table, "Model guesses")) == 4
-
-
-def test_a_filter_never_changes_a_hidden_rows_tick() -> None:
-    """Hidden rows keep their state: filtering is display only."""
-    table = detection_editor_dataframe(_mixed_findings())
-    shown = filter_editor_rows(table, "Model guesses")
-    edited = shown.copy()
-    edited.loc[edited["Detected text"] == "Across", "Hide in output?"] = False
-    already_unticked_but_hidden = frozenset({"care organisation"})
-
-    merged = merge_pending(already_unticked_but_hidden, shown, edited)
-
-    assert merged == frozenset({"care organisation", "across"})
-
-
-def test_reticking_a_shown_row_removes_it_from_the_pending_set() -> None:
-    table = detection_editor_dataframe(_mixed_findings())
-    shown = filter_editor_rows(table, "Model guesses")
-
-    merged = merge_pending(frozenset({"across"}), shown, shown)  # all ticked again
-
-    assert merged == frozenset()
-
-
-def test_review_comes_first_and_counts_the_model_guesses() -> None:
-    findings = _mixed_findings()  # 4 model guesses among 7 terms
-
-    assert review_tab_labels(findings) == [
-        "Review (7 terms, 4 to check)",
-        "Mapping",
-    ]
-    assert review_tab_labels(findings, preview=True)[1] == "Preview"
-
-
-def test_review_tab_label_has_no_count_when_nothing_is_a_guess() -> None:
-    assert review_tab_labels([_finding("Care Organisation")])[0] == "Review (1 term)"
-    assert review_tab_labels([])[0] == "Review"
-
-
-def test_review_tab_label_does_not_depend_on_the_ticks() -> None:
-    """Streamlit keys tabs by label; a label that moved would jump tabs."""
-    findings = _mixed_findings()
-
-    assert review_tab_labels(findings) == review_tab_labels(list(findings))
-
-
-def test_review_status_is_one_line_with_the_breakdown_and_the_progress() -> None:
-    table = detection_editor_dataframe(_mixed_findings())
-    breakdown = (
-        "7 terms: 4 model guesses (2 worth a closer look), 1 typed word, "
-        "1 pattern match, 1 master-list name"
-    )
-
-    assert review_status(table, frozenset(), frozenset()) == breakdown + "."
-    assert review_status(
-        table, frozenset({"across"}), frozenset({"across", "salaries", "mary test"})
-    ) == (breakdown + " · 1 term left visible · 2 changes not applied yet.")
-
-
-def test_review_status_for_a_clean_run() -> None:
-    table = detection_editor_dataframe([_finding("Care Organisation")])
-
-    assert review_status(table, frozenset(), frozenset()) == (
-        "1 term: 1 master-list name."
-    )
-
-
-def test_search_is_case_insensitive_and_blank_shows_everything() -> None:
-    table = detection_editor_dataframe(_mixed_findings())
-
-    assert len(search_editor_rows(table, "")) == 7
-    assert len(search_editor_rows(table, None)) == 7
-    assert list(search_editor_rows(table, "JANE")["Detected text"]) == [
-        "Jane Doe",
-        "jane@example.org",
-    ]
-
-
-def test_search_combines_with_the_source_filter() -> None:
-    table = detection_editor_dataframe(_mixed_findings())
-
-    shown = search_editor_rows(filter_editor_rows(table, "Model guesses"), "jane")
-
-    assert list(shown["Detected text"]) == ["Jane Doe"]
-
-
-def test_apply_notice_says_what_was_left_visible() -> None:
-    assert (
-        apply_notice(frozenset()) == "Rebuilt the file. Every detected term is hidden."
-    )
-    assert apply_notice(frozenset({"across"})) == (
-        "Rebuilt the file. 1 term is left visible; they are listed above the download."
-    )
-
-
-def test_apply_notice_never_says_all_hidden_when_a_term_was_not_found() -> None:
-    notice = apply_notice(frozenset(), not_located=2)
-
-    assert "Every detected term is hidden" not in notice
-    assert "2 detected terms were not found on the page" in notice
 
 
 def _unlocated(page: int, text: str) -> Finding:
@@ -690,34 +491,6 @@ def test_not_located_warning_is_empty_when_everything_was_found() -> None:
     assert not_located_warning([]) == ""
 
 
-def test_findings_from_before_a_module_reload_still_sort_and_hint() -> None:
-    """Streamlit re-imports changed modules, so a finding kept in session state
-    can hold a member of an older copy of ``DetectionSource``. It is equal in
-    value but not the same object; the review table must not crash on it.
-    """
-    from enum import Enum
-
-    reloaded = Enum(  # type: ignore[misc]
-        "DetectionSource", {m.name: m.value for m in DetectionSource}, type=str
-    )
-    findings = [
-        Finding(
-            page=0,
-            detected_text=text,
-            entity_type="ORGANIZATION",
-            score=0.85,
-            source=reloaded[name],
-        )
-        for text, name in (("Across", "MODEL"), ("Care Organisation", "MASTER_LIST"))
-    ]
-
-    table = detection_editor_dataframe(findings)
-
-    assert list(table["Detected text"]) == ["Across", "Care Organisation"]
-    assert table.loc[0, "Hint"] == "ordinary word"
-    assert review_tab_labels(findings)[0] == "Review (2 terms, 1 to check)"
-
-
 def test_scanned_pages_warning_says_what_happens_to_the_pages() -> None:
     on = scanned_pages_warning([0], 3, images_blacked_out=True)
     off = scanned_pages_warning([0, 2], 3, images_blacked_out=False)
@@ -767,7 +540,7 @@ def test_review_summary_counts_table_cells() -> None:
         )
     ]
 
-    assert "1 table cell" in review_summary(detection_editor_dataframe(findings))
+    assert "1 table cell" in review_summary(review_terms(findings))
 
 
 def _plain_finding(source: DetectionSource, entity_type: str = "PERSON") -> Finding:
@@ -804,10 +577,10 @@ def test_why_found_turns_a_hint_into_advice() -> None:
 
 
 def test_the_review_table_fills_the_why_column() -> None:
-    table = detection_editor_dataframe([_plain_finding(DetectionSource.MASTER_LIST)])
+    (term,) = review_terms([_plain_finding(DetectionSource.MASTER_LIST)])
 
-    assert table.loc[0, "Why it was found"] == "On your master list"
-    assert table.loc[0, "Kind"] == "Person"
+    assert term.why == "On your master list"
+    assert term.kind == "Person"
 
 
 def test_pdf_mapping_notes_cover_missing_and_ambiguous_items() -> None:
@@ -842,31 +615,6 @@ def test_carry_over_of_nothing_is_nothing() -> None:
     assert carry_over_exclusions(frozenset(), [_finding("Salaries")]) == frozenset()
 
 
-def test_carried_over_notice_says_the_terms_stay_visible() -> None:
-    one = carried_over_notice(frozenset({"salaries"}))
-    two = carried_over_notice(frozenset({"salaries", "totals"}))
-
-    assert one.startswith("Kept 1 term you unticked last time: `salaries`.")
-    assert "It stays visible" in one and "to hide it." in one
-    assert "They stay visible" in two and "to hide them." in two
-
-
-def test_where_found_tables_read_as_words_not_codes() -> None:
-    findings = [
-        Finding(
-            page=0,
-            detected_text="someone@example.org",
-            entity_type="EMAIL_ADDRESS",
-            score=1.0,
-            source=DetectionSource.CUSTOM,
-        )
-    ]
-
-    row = findings_dataframe(findings, "Page").iloc[0]
-
-    assert (row["Entity type"], row["Source"]) == ("Email address", "Typed word")
-
-
 def test_every_source_has_a_readable_label() -> None:
     from finance_redactor.presentation.presenters import source_label
 
@@ -899,3 +647,45 @@ def test_entity_codes_read_as_plain_words(
 
     assert entity_label(entity_type) == label
     assert why_found(finding) == why
+
+
+def test_name_summary_lists_the_first_names_then_a_count() -> None:
+    assert name_summary(["Jan"]) == "Jan"
+    assert name_summary(["Jan", "Feb"]) == "Jan, Feb"
+    assert name_summary(["Jan", "Feb", "Mar"]) == "Jan, Feb + 1 more"
+    assert name_summary([f"T{n}" for n in range(12)]) == "T0, T1 + 10 more"
+
+
+def test_no_size_warning_for_an_ordinary_workbook() -> None:
+    df = pd.DataFrame({"notes": [f"value {n}" for n in range(2_999)]})
+    assert scan_size_warning({"Jan": df}, {"Jan": ["notes"]}) is None
+
+
+def test_many_distinct_values_warn_with_a_time_range() -> None:
+    df = pd.DataFrame(
+        {"notes": [f"value {n}" for n in range(30_000)], "other": ["x"] * 30_000}
+    )
+    message = scan_size_warning({"Jan": df}, {"Jan": ["notes"]})
+    assert message is not None
+    assert "30,000 distinct values" in message
+    assert "roughly 8 to 17 minutes" in message
+    assert "held in memory" not in message  # 60,000 cells is not big
+
+
+def test_distinct_values_count_only_chosen_columns_and_repeat_once() -> None:
+    df = pd.DataFrame(
+        {
+            "notes": [f"value {n % 100}" for n in range(3_000)],
+            "unchosen": [f"other {n}" for n in range(3_000)],
+        }
+    )
+    assert scan_size_warning({"Jan": df}, {"Jan": ["notes"]}) is None
+
+
+def test_a_very_big_workbook_warns_about_memory_too() -> None:
+    df = pd.DataFrame({"a": ["same"] * 250_000, "b": [1] * 250_000})
+    message = scan_size_warning({"Jan": df}, {"Jan": ["a"]})
+    assert message is not None
+    assert "500,000 cells" in message
+    assert "held in memory" in message
+    assert "minutes" not in message  # one distinct value scans quickly

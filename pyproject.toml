@@ -1,18 +1,15 @@
 [project]
 name = "finance-pii-redactor"
 version = "0.1.0"
-description = "Local Streamlit tool that pseudonymizes names in Excel, PDF, and Word files"
+description = "Local web app that pseudonymizes names in Excel, PDF, and Word files"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12,<3.14"
 dependencies = [
     "openpyxl>=3.1.0,<4.0",
     "pandas>=3.0,<4.0",
-    # pandas Styler (used for the Excel preview) needs jinja2 >= 3.1.5.
-    "jinja2>=3.1.5,<4.0",
     "presidio-analyzer>=2.2.354,<3.0",
     "spacy>=3.7.0,<4.0",
-    "streamlit>=1.52.0,<2.0",
     "pymupdf>=1.24.0,<3.0",
     # Import name is "docx". Note: there is a separate, unmaintained "docx"
     # package on PyPI - this must stay "python-docx".
@@ -24,12 +21,18 @@ dependencies = [
     "pyahocorasick>=2.3.1",
     "rapidocr>=3.10,<4",
     "onnxruntime>=1.31,<2",
+    # The local web server behind the React interface. python-multipart
+    # parses file uploads.
+    "fastapi>=0.115,<1.0",
+    "uvicorn>=0.30,<1.0",
+    "python-multipart>=0.0.20,<1.0",
 ]
 
 
 [dependency-groups]
 dev = [
     "codespell>=2.4.1",
+    "httpx>=0.27",
     "mypy>=2.3.1",
     "pandas-stubs>=3.0.5.260730",
     "pytest>=8.0.0",
@@ -90,18 +93,15 @@ pythonpath = ["."]
 addopts = "--cov=finance_redactor --cov-report=term-missing --cov-fail-under=80"
 
 [tool.coverage.run]
-# app.py (the Streamlit composition root) and finance_redactor/presentation/
-# (Streamlit widgets/session state) are deliberately not unit-tested - see
-# ARCHITECTURE.md's "Tests" section - so they're excluded from the
-# measured/enforced total below rather than dragging it down with a number
-# nothing can move (there's no unit-testable behavior to add tests for
-# there; that would need Streamlit's own testing harness, a separate effort).
-# domain/application/infrastructure - the actual business logic - stay in.
-omit = ["finance_redactor/presentation/*"]
+# Every layer is measured, presentation included: the web API is tested
+# through FastAPI's TestClient (tests/presentation/test_api*.py). app.py is
+# outside the package, so it is not measured; it only wires adapters, and
+# the API tests use a fake composition root (tests/presentation/api_fakes.py).
+source = ["finance_redactor"]
 
 [tool.coverage.report]
-# 80 is a real floor just under the current ~90%+ for the measured layers
-# (domain/application/infrastructure), not a number picked to look good -
+# 80 is a real floor just under the current ~90%+ for the package, not a
+# number picked to look good -
 # it's meant to fail CI on a genuine regression, with a little headroom for
 # normal fluctuation as code is added.
 fail_under = 80
@@ -133,4 +133,5 @@ ignore_missing_imports = true
 [tool.codespell]
 builtin = "clear,rare,informal,usage,code,names"
 ignore-words-list = "jupyter,ipa,spacy,ws,thead,GOTCHA,gotcha,master,slave,falsy"
-skip = "uv.lock,*.txt,*.csv"
+# Generated: third-party packages, the built UI bundle, the npm lockfile.
+skip = "uv.lock,*.txt,*.csv,./frontend/node_modules,./finance_redactor/presentation/static,package-lock.json"
