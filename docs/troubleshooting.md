@@ -339,6 +339,19 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Symptom:** The `frontend` CI job fails after the build step with that message and a list of changed files under `finance_redactor/presentation/static/`.
 - **Cause:** Something under `frontend/` changed (code or `package-lock.json`, including a Dependabot update) but the built bundle was not rebuilt. End users run the committed bundle, so it must match the source.
 - **Solution:** Run `just web-build` and commit the changed files in `finance_redactor/presentation/static/`.
+- **On a Dependabot PR** (it cannot run the build itself), from the repository root:
+
+  ```bash
+  gh pr checkout <number>
+  just web-setup      # installs the updated packages
+  just web-test       # type check and frontend tests on the new versions
+  just web-build
+  git add finance_redactor/presentation/static
+  git commit -m "chore(ui): rebuild the interface bundle"
+  git push
+  ```
+
+  For a major update (its own PR), also start the app with `just run` and click through a made-up file before merging. Dependabot stops rebasing a PR once someone else commits to it; that is expected.
 
 ### `codespell` flags HTML variable names like `thead` or `ws`
 

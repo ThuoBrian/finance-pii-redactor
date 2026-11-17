@@ -14,9 +14,14 @@ updates:
         patterns:
           - "*"
 
-  # The React interface's npm packages (frontend/package-lock.json). A
-  # Dependabot PR here also needs `just web-build` and the rebuilt bundle
-  # committed, or CI's bundle check fails.
+  # The React interface's npm packages (frontend/package-lock.json).
+  # Minor and patch updates arrive together in one weekly PR; each major
+  # update (Vite, TypeScript, a test library...) gets its own PR, so a
+  # breaking change is reviewed on its own instead of hiding in the group.
+  # Every one of these PRs also needs `just web-build` run and the rebuilt
+  # finance_redactor/presentation/static/ committed, or CI's bundle check
+  # fails: Dependabot cannot run the build itself. That step stays manual
+  # on purpose; see docs/troubleshooting.md.
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
@@ -25,6 +30,9 @@ updates:
       frontend-dependencies:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # Keep the CI workflow's own actions (actions/checkout, astral-sh/setup-uv)
   # up to date too - these run with repo access, so an out-of-date action
