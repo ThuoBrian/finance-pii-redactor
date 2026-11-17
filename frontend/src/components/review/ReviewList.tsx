@@ -8,6 +8,7 @@
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import type { ReviewRow, SourceFilter } from "../../api";
+import { Icon } from "../Icon";
 import { Button, Notice } from "../ui";
 
 // Filter, search and bulk buttons help only once the list scrolls.
@@ -123,24 +124,33 @@ export function ReviewList({
                 type="button"
                 aria-pressed={source === f.source}
                 onClick={() => setSource(f.source)}
-                className={`rounded-full border px-3 py-1 text-xs ${
+                className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition ${
                   source === f.source
-                    ? "border-primary bg-primary text-white"
-                    : "border-border-soft hover:bg-surface"
+                    ? "border-primary bg-primary text-white shadow-sm"
+                    : "border-border-soft bg-card text-text hover:bg-surface"
                 }`}
               >
-                {f.label} ({f.count})
+                {f.label}
+                <span className={`tabular ${source === f.source ? "text-white/80" : "text-muted"}`}>
+                  ({f.count})
+                </span>
               </button>
             ))}
           </div>
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Find a term"
-            aria-label="Find a term"
-            className="w-full rounded-lg border border-border bg-bg px-3 py-1.5 text-sm"
-          />
+          <div className="relative">
+            <Icon
+              name="search"
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+            />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Find a term"
+              aria-label="Find a term"
+              className="h-9 w-full rounded-lg border border-border bg-card pl-9 pr-3 text-sm shadow-sm"
+            />
+          </div>
         </div>
       )}
 
@@ -153,20 +163,24 @@ export function ReviewList({
           />
           Show details
         </label>
-        <span className="hidden text-muted sm:inline" aria-hidden>
-          ↑ ↓ move · Space ticks or unticks
+        <span className="hidden items-center gap-1 text-muted sm:inline-flex" aria-hidden>
+          <kbd className="rounded border border-border-soft bg-card px-1 font-sans">↑</kbd>
+          <kbd className="rounded border border-border-soft bg-card px-1 font-sans">↓</kbd>
+          move ·
+          <kbd className="rounded border border-border-soft bg-card px-1 font-sans">Space</kbd>
+          ticks or unticks
         </span>
         {long && (
           <span className="flex gap-1">
             <Button
-              className="!px-2.5 !py-1 text-xs"
+              size="sm"
               disabled={!shown.length}
               onClick={() => setAll(false)}
             >
               Untick all shown ({shown.length})
             </Button>
             <Button
-              className="!px-2.5 !py-1 text-xs"
+              size="sm"
               disabled={!shown.length}
               onClick={() => setAll(true)}
             >
@@ -179,7 +193,7 @@ export function ReviewList({
       <ul
         aria-label="Detected terms"
         onKeyDown={onKeyDown}
-        className="max-h-[55vh] divide-y divide-border-soft overflow-y-auto rounded-xl border border-border-soft"
+        className="card max-h-[55vh] divide-y divide-border-soft overflow-y-auto"
       >
         {shown.map((r, i) => {
           const hidden = !pending.has(r.key);
@@ -187,8 +201,10 @@ export function ReviewList({
           return (
             <li
               key={r.key}
-              className={`flex items-start gap-3 px-3 py-2.5 ${
-                isSelected ? "bg-surface shadow-[inset_3px_0_0_var(--primary)]" : "hover:bg-surface"
+              className={`flex items-start gap-3 px-3.5 py-3 transition-colors ${
+                isSelected
+                  ? "bg-primary-soft shadow-[inset_3px_0_0_var(--primary)]"
+                  : "hover:bg-surface"
               }`}
             >
               <input
@@ -196,7 +212,7 @@ export function ReviewList({
                   boxes.current[i] = el;
                 }}
                 type="checkbox"
-                className="mt-1"
+                className="mt-0.5 cursor-pointer"
                 checked={hidden}
                 onChange={() => toggle(r.key)}
                 onFocus={() => onSelect?.(r.key)}
@@ -214,14 +230,14 @@ export function ReviewList({
                 >
                   {r.term}
                 </span>
-                <span id={`why-${r.key}`} className="block text-xs text-muted">
+                <span id={`why-${r.key}`} className="mt-0.5 block text-xs text-muted">
                   {r.why}
                   {!hidden && " · left visible"}
                 </span>
                 {details && (
                   <span className="mt-0.5 block text-xs text-muted">
                     {r.kind} · {r.source} · confidence {r.confidence.toFixed(2)} ·{" "}
-                    {r.occurrences}×
+                    {r.occurrences} {r.occurrences === 1 ? "place" : "places"}
                   </span>
                 )}
               </button>
@@ -229,7 +245,10 @@ export function ReviewList({
           );
         })}
         {shown.length === 0 && (
-          <li className="px-3 py-4 text-sm text-muted">No terms match.</li>
+          <li className="flex items-center gap-2 px-3.5 py-6 text-sm text-muted">
+            <Icon name="search" className="h-4 w-4" />
+            No terms match.
+          </li>
         )}
       </ul>
     </div>

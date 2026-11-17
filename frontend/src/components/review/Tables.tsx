@@ -6,9 +6,11 @@ import { plural } from "../../api";
 import { Notice } from "../ui";
 import { SortHeader, TableSearch, useTableControls } from "../useTableControls";
 
-export const TH = "sticky top-0 bg-surface px-3 py-2 text-left text-xs font-semibold";
+export const TH =
+  "sticky top-0 z-[1] border-b border-border-soft bg-surface px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted";
 export const TD = "px-3 py-2 align-top";
-export const FRAME = "max-h-[55vh] overflow-auto rounded-xl border border-border-soft";
+export const FRAME =
+  "card max-h-[55vh] overflow-auto [&_tbody_tr:nth-child(even)]:bg-surface/50 [&_tbody_tr:hover]:bg-surface";
 
 const MAPPING_COLUMNS = {
   name: (r: MappingRow) => r.original_name,

@@ -8,7 +8,7 @@ import { CrosswalkCard, DownloadButton, DownloadCards, DownloadStep } from "../D
 import { MappingTable, OccurrenceTable } from "../review/Tables";
 import { ReviewLayout } from "../review/ReviewLayout";
 import { ScanProgress } from "../TaskProgress";
-import { Button, Notice, Spinner } from "../ui";
+import { Button, Notice, Skeleton } from "../ui";
 import { useFormatFlow } from "../useFormatFlow";
 import { ExcelOptions, defaultChoices, type ExcelChoices } from "./ExcelOptions";
 import { ExcelPreview } from "./ExcelPreview";
@@ -72,7 +72,7 @@ export function ExcelFlow({
         </section>
       );
     }
-    if (!options.data || !choices) return <Spinner label="Reading the workbook..." />;
+    if (!options.data || !choices) return <Skeleton label="Reading the workbook..." />;
     if (flow.scanning) {
       return <ScanProgress jobId={job.id} unit="unique value" progress={flow.progress} />;
     }
@@ -103,7 +103,7 @@ export function ExcelFlow({
 
   if (flow.review.error) return <Notice tone="danger">{flow.review.error.message}</Notice>;
   const r = flow.review.data;
-  if (!r) return <Spinner label="Loading..." />;
+  if (!r) return <Skeleton label="Loading..." />;
 
   if (step === 2) {
     return (

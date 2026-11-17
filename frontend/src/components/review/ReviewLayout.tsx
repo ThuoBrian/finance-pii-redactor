@@ -9,7 +9,8 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 
 import { plural, type ReviewRow, type SourceFilter } from "../../api";
 import { Toast } from "../Toast";
-import { Button, Notice } from "../ui";
+import { Icon } from "../Icon";
+import { Button, IconButton, Notice } from "../ui";
 import { ReviewList } from "./ReviewList";
 
 export type Panel = { id: string; label: string; content: ReactNode };
@@ -84,7 +85,7 @@ export function ReviewLayout({
 
   return (
     <section aria-labelledby="review-heading" className="pb-24">
-      <h1 id="review-heading" tabIndex={-1} className="text-2xl font-semibold tracking-tight outline-none">
+      <h1 id="review-heading" tabIndex={-1} className="text-3xl font-semibold tracking-tight outline-none">
         {heading}
       </h1>
       {summary && <p className="mt-1 text-muted">{summary}</p>}
@@ -113,7 +114,7 @@ export function ReviewLayout({
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <div className="min-w-0">
-          <p className="mb-3 text-sm text-muted">
+          <p className="mb-4 text-sm leading-relaxed text-muted">
             Ticked terms are hidden in your download; the likeliest mistakes are
             at the top. Untick anything that is not a name or private detail,
             then apply. Click a term to see where it is. This fixes this file
@@ -132,8 +133,12 @@ export function ReviewLayout({
             }}
           />
           {additions && (
-            <details className="mt-4 rounded-xl border border-border-soft" open={Boolean(hold) || undefined}>
-              <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
+            <details className="card group mt-4 overflow-hidden" open={Boolean(hold) || undefined}>
+              <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-1 px-4 py-3 text-sm font-medium transition hover:bg-surface [&::-webkit-details-marker]:hidden">
+                <Icon
+                  name="chevron-right"
+                  className="h-4 w-4 text-muted transition-transform duration-150 group-open:rotate-90"
+                />
                 Add something the tool missed{" "}
                 <span className="font-normal text-muted">(most files need nothing here)</span>
               </summary>
@@ -143,7 +148,10 @@ export function ReviewLayout({
         </div>
         <div className="min-w-0">
           {selection && selectedRow && places > 0 && (
-            <div className="mb-3 flex items-center gap-2 rounded-lg bg-surface px-3 py-2 text-sm" aria-live="polite">
+            <div
+              className="mb-3 flex items-center gap-1 rounded-xl border border-primary/25 bg-primary-soft py-1.5 pl-3.5 pr-1.5 text-sm"
+              aria-live="polite"
+            >
               <span className="min-w-0 flex-1 truncate">
                 <strong>{selectedRow.term}</strong>
                 <span className="text-muted">
@@ -151,35 +159,33 @@ export function ReviewLayout({
                   · place {selection.place + 1} of {places}
                 </span>
               </span>
-              <button
-                type="button"
-                aria-label="Previous place"
+              <IconButton
+                icon="chevron-left"
+                label="Previous place"
                 disabled={selection.place <= 0}
                 onClick={() => select(selection.key, selection.place - 1)}
-                className="rounded-md border border-border-soft px-2 py-0.5 disabled:opacity-40"
-              >
-                ‹
-              </button>
-              <button
-                type="button"
-                aria-label="Next place"
+                className="hover:bg-card"
+              />
+              <IconButton
+                icon="chevron-right"
+                label="Next place"
                 disabled={selection.place >= places - 1}
                 onClick={() => select(selection.key, selection.place + 1)}
-                className="rounded-md border border-border-soft px-2 py-0.5 disabled:opacity-40"
-              >
-                ›
-              </button>
-              <button
-                type="button"
-                aria-label="Clear selection"
+                className="hover:bg-card"
+              />
+              <IconButton
+                icon="x"
+                label="Clear selection"
                 onClick={() => setSelection(null)}
-                className="rounded-md px-2 py-0.5 text-muted hover:bg-bg"
-              >
-                ×
-              </button>
+                className="hover:bg-card"
+              />
             </div>
           )}
-          <div role="tablist" aria-label="Details" className="mb-3 flex gap-1 border-b border-border-soft">
+          <div
+            role="tablist"
+            aria-label="Details"
+            className="mb-3 flex gap-0.5 overflow-x-auto rounded-xl bg-surface-2 p-1"
+          >
             {resolved.map((p) => (
               <button
                 key={p.id}
@@ -189,8 +195,10 @@ export function ReviewLayout({
                 aria-selected={panel === p.id}
                 aria-controls={`panel-${p.id}`}
                 onClick={() => setPanel(p.id)}
-                className={`-mb-px border-b-2 px-3 py-2 text-sm ${
-                  panel === p.id ? "border-primary font-medium" : "border-transparent text-muted"
+                className={`flex-1 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm transition ${
+                  panel === p.id
+                    ? "bg-card font-medium text-text shadow-sm"
+                    : "text-muted hover:text-text"
                 }`}
               >
                 {p.label}
@@ -207,9 +215,9 @@ export function ReviewLayout({
         </div>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-border-soft bg-bg/95 backdrop-blur">
+      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-border-soft bg-card/90 shadow-up backdrop-blur-md backdrop-saturate-150">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3">
-          <p className="text-sm" aria-live="polite">
+          <p className="tabular text-sm" aria-live="polite">
             <strong>{plural(hidden, "term")}</strong> hidden
             {rows.length - hidden > 0 && ` · ${rows.length - hidden} left visible`}
             {changes > 0 && (

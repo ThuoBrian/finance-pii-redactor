@@ -5,7 +5,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
 import { api, plural } from "../../api";
-import { Notice, Spinner } from "../ui";
+import { Notice, Skeleton } from "../ui";
 
 const MARKER = "» ";
 
@@ -71,7 +71,7 @@ export function ExcelPreview({
   }, [target, focus?.seq]);
 
   if (preview.error) return <Notice tone="danger">{preview.error.message}</Notice>;
-  if (!data) return <Spinner label="Loading preview..." />;
+  if (!data) return <Skeleton label="Loading preview..." lines={6} />;
 
   const marked = new Set(data.marked.map(([r, c]) => `${r}:${c}`));
   const columns = original ? data.original_columns : data.columns;
@@ -80,7 +80,9 @@ export function ExcelPreview({
   const blocks = Math.ceil(data.total_rows / data.page_size);
 
   const outline = (key: string) =>
-    key === target ? "outline outline-2 outline-offset-[-2px] outline-[var(--primary)]" : "";
+    key === target
+      ? "outline outline-2 outline-offset-[-2px] outline-[var(--primary)] bg-primary-soft"
+      : "";
   const cell = (text: string, key: string) =>
     marked.has(key) ? (
       <span className="rounded bg-[#FFFF00] px-1 text-[#1a1a1a]">
@@ -102,7 +104,7 @@ export function ExcelPreview({
               setTab(Number(e.target.value));
               setStart(0);
             }}
-            className="rounded-lg border border-border bg-bg px-2 py-1"
+            className="rounded-lg border border-border bg-card shadow-sm px-2 py-1"
           >
             {data.tabs.map((name, i) => (
               <option key={name} value={i}>
@@ -116,7 +118,7 @@ export function ExcelPreview({
             aria-label="Rows to preview"
             value={data.start}
             onChange={(e) => setStart(Number(e.target.value))}
-            className="rounded-lg border border-border bg-bg px-2 py-1"
+            className="rounded-lg border border-border bg-card shadow-sm px-2 py-1"
           >
             {Array.from({ length: blocks }, (_, i) => i * data.page_size).map((s) => (
               <option key={s} value={s}>
@@ -126,7 +128,7 @@ export function ExcelPreview({
             ))}
           </select>
         )}
-        <div role="group" aria-label="Version" className="ml-auto flex rounded-lg border border-border-soft p-0.5">
+        <div role="group" aria-label="Version" className="ml-auto flex rounded-lg bg-surface-2 p-0.5">
           {[
             ["Redacted", false],
             ["Original", true],
@@ -136,7 +138,7 @@ export function ExcelPreview({
               type="button"
               aria-pressed={original === value}
               onClick={() => setOriginal(Boolean(value))}
-              className={`rounded-md px-2.5 py-1 text-xs ${original === value ? "bg-surface font-medium" : "text-muted"}`}
+              className={`rounded-md px-3 py-1 text-xs transition ${original === value ? "bg-card font-medium text-text shadow-sm" : "text-muted hover:text-text"}`}
             >
               {label}
             </button>
@@ -157,7 +159,10 @@ export function ExcelPreview({
         </p>
       )}
 
-      <div ref={scroller} className="max-h-[60vh] overflow-auto rounded-xl border border-border-soft">
+      <div
+        ref={scroller}
+        className="card max-h-[60vh] overflow-auto [&_tbody_tr:nth-child(even)]:bg-surface/50"
+      >
         <table className="min-w-full text-sm">
           <thead>
             <tr>
@@ -166,7 +171,7 @@ export function ExcelPreview({
                   key={c}
                   scope="col"
                   data-focus={target === `-1:${c}` || undefined}
-                  className={`sticky top-0 whitespace-nowrap bg-surface px-3 py-2 text-left text-xs font-semibold ${outline(`-1:${c}`)}`}
+                  className={`sticky top-0 z-[1] whitespace-nowrap border-b border-border-soft bg-surface px-3 py-2.5 text-left text-xs font-semibold ${outline(`-1:${c}`)}`}
                 >
                   {cell(name, `-1:${c}`)}
                 </th>

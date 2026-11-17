@@ -5,7 +5,8 @@ import { useMutation, type UseQueryResult } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { downloadFile, plural } from "../api";
-import { Button, Notice, Spinner } from "./ui";
+import { Icon } from "./Icon";
+import { Badge, Button, Notice, Skeleton } from "./ui";
 
 export type ExpectedFile = { kind: string; label: string };
 
@@ -88,11 +89,13 @@ export function DownloadButton({
         disabled={download.isPending}
         onClick={() => download.mutate()}
       >
+        <Icon name={done ? "check" : "download"} className="h-4 w-4" />
         {download.isPending ? "Preparing..." : label}
       </Button>
       {done && !download.isPending && (
-        <p className="mt-1 text-xs text-success" role="status">
-          ✓ Downloaded. You can download it again if you need another copy.
+        <p className="mt-2 flex items-start gap-1.5 text-xs text-success" role="status">
+          <Icon name="circle-check" className="mt-px h-3.5 w-3.5" />
+          Downloaded. You can download it again if you need another copy.
         </p>
       )}
       {download.error && (
@@ -149,20 +152,20 @@ export function DownloadStep<T extends { excluded: string[] }>({
 }) {
   const d = info.data;
   return (
-    <section aria-labelledby="download-heading" className="mx-auto max-w-4xl space-y-4">
-      <h1 tabIndex={-1} id="download-heading" className="text-2xl font-semibold tracking-tight">
+    <section aria-labelledby="download-heading" className="mx-auto max-w-4xl space-y-5">
+      <h1 tabIndex={-1} id="download-heading" className="text-3xl font-semibold tracking-tight">
         Download
       </h1>
       {info.error && <Notice tone="danger">{info.error.message}</Notice>}
       {!d ? (
-        <Spinner label="Loading..." />
+        <Skeleton label="Loading..." />
       ) : (
         <>
           <ExclusionWarning excluded={d.excluded} />
           {children(d)}
         </>
       )}
-      <div className="flex justify-between gap-3 pt-2">
+      <div className="flex flex-wrap justify-between gap-3 border-t border-border-soft pt-5">
         <Button onClick={onBack}>Back to review</Button>
         <Button onClick={onFinish}>Redact another file</Button>
       </div>
@@ -179,26 +182,32 @@ export function DownloadCards({
 }) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <section aria-labelledby="safe-heading" className="rounded-2xl border border-border-soft p-5">
-        <h2 id="safe-heading" className="flex items-center justify-between font-semibold">
-          Safe to share
-          <span className="rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success">
-            Internal
+      <section aria-labelledby="safe-heading" className="card flex flex-col p-6">
+        <h2 id="safe-heading" className="flex items-center gap-3 font-semibold">
+          <span aria-hidden className="flex h-9 w-9 items-center justify-center rounded-lg bg-success-soft text-success">
+            <Icon name="shield-check" className="h-5 w-5" />
           </span>
+          Safe to share
+          <Badge tone="success" className="ml-auto">
+            Internal
+          </Badge>
         </h2>
-        <div className="mt-4 space-y-3 text-sm">{safe}</div>
+        <div className="mt-5 space-y-3 text-sm leading-relaxed">{safe}</div>
       </section>
       <section
         aria-labelledby="private-heading"
-        className="rounded-2xl border border-danger/50 bg-danger-soft/40 p-5"
+        className="card flex flex-col border-danger/40 p-6 shadow-[inset_0_3px_0_var(--danger),var(--shadow-sm)]"
       >
-        <h2 id="private-heading" className="flex items-center justify-between font-semibold">
-          Keep private
-          <span className="rounded-full bg-danger-soft px-2 py-0.5 text-xs font-medium text-danger">
-            Confidential
+        <h2 id="private-heading" className="flex items-center gap-3 font-semibold">
+          <span aria-hidden className="flex h-9 w-9 items-center justify-center rounded-lg bg-danger-soft text-danger">
+            <Icon name="lock" className="h-5 w-5" />
           </span>
+          Keep private
+          <Badge tone="danger" className="ml-auto">
+            Confidential
+          </Badge>
         </h2>
-        <div className="mt-4 space-y-3 text-sm">{confidential}</div>
+        <div className="mt-5 space-y-3 text-sm leading-relaxed">{confidential}</div>
       </section>
     </div>
   );

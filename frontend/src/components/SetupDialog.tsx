@@ -64,7 +64,7 @@ export function SetupDialog({
           setSaveAnyway(false);
         }}
         placeholder="C:\Users\you\Box\Team\Master List Folder"
-        className="mt-1 w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm"
+        className="mt-1 w-full rounded-lg border border-border bg-card shadow-sm px-3 py-2 text-sm"
         autoComplete="off"
         spellCheck={false}
       />

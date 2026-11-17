@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { api } from "../../api";
-import { Notice, Spinner } from "../ui";
+import { IconButton, Notice, Skeleton } from "../ui";
 
 export function PdfPreview({
   jobId,
@@ -42,21 +42,19 @@ export function PdfPreview({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <button
-          type="button"
-          className="rounded-lg border border-border-soft px-2.5 py-1 disabled:opacity-40"
+        <IconButton
+          icon="chevron-left"
+          label="Previous page"
+          className="border border-border-soft bg-card shadow-sm"
           disabled={page <= 1}
           onClick={() => setPage((p) => p - 1)}
-          aria-label="Previous page"
-        >
-          ‹
-        </button>
+        />
         <label className="inline-flex items-center gap-1">
           Page
           <select
             value={page}
             onChange={(e) => setPage(Number(e.target.value))}
-            className="rounded-lg border border-border bg-bg px-2 py-1"
+            className="rounded-lg border border-border bg-card shadow-sm px-2 py-1"
           >
             {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
               <option key={n} value={n}>
@@ -66,23 +64,21 @@ export function PdfPreview({
           </select>
           of {pageCount}
         </label>
-        <button
-          type="button"
-          className="rounded-lg border border-border-soft px-2.5 py-1 disabled:opacity-40"
+        <IconButton
+          icon="chevron-right"
+          label="Next page"
+          className="border border-border-soft bg-card shadow-sm"
           disabled={page >= pageCount}
           onClick={() => setPage((p) => p + 1)}
-          aria-label="Next page"
-        >
-          ›
-        </button>
-        <div role="group" aria-label="Version" className="ml-auto flex rounded-lg border border-border-soft p-0.5">
+        />
+        <div role="group" aria-label="Version" className="ml-auto flex rounded-lg bg-surface-2 p-0.5">
           {(["redacted", "original"] as const).map((v) => (
             <button
               key={v}
               type="button"
               aria-pressed={which === v}
               onClick={() => setWhich(v)}
-              className={`rounded-md px-2.5 py-1 text-xs capitalize ${which === v ? "bg-surface font-medium" : "text-muted"}`}
+              className={`rounded-md px-3 py-1 text-xs capitalize transition ${which === v ? "bg-card font-medium text-text shadow-sm" : "text-muted hover:text-text"}`}
             >
               {v}
             </button>
@@ -92,13 +88,13 @@ export function PdfPreview({
       {image.error ? (
         <Notice tone="danger">{image.error.message}</Notice>
       ) : !url ? (
-        <Spinner label="Rendering page..." />
+        <Skeleton label="Rendering page..." lines={8} />
       ) : (
-        <div className="max-h-[70vh] overflow-auto rounded-xl border border-border-soft bg-white">
+        <div className="card max-h-[70vh] overflow-auto bg-surface-2 p-3">
           <img
             src={url}
             alt={`Page ${page} of ${pageCount}, ${which}`}
-            className="mx-auto block max-w-full"
+            className="mx-auto block max-w-full bg-white shadow-md"
           />
         </div>
       )}

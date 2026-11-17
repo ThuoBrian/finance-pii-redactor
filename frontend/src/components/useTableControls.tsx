@@ -2,6 +2,8 @@
 // Search appears only once a table is long enough to need it.
 import { useMemo, useState } from "react";
 
+import { Icon } from "./Icon";
+
 const SEARCH_FROM = 12;
 
 type Sort = { key: string; dir: 1 | -1 } | null;
@@ -60,11 +62,16 @@ export function SortHeader({
       className={className}
       aria-sort={active ? (sort.dir === 1 ? "ascending" : "descending") : "none"}
     >
-      <button type="button" onClick={() => onSort(column)} className="inline-flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => onSort(column)}
+        className="group inline-flex items-center gap-1 hover:text-text"
+      >
         {label}
-        <span aria-hidden className={active ? "" : "opacity-30"}>
-          {active && sort.dir === -1 ? "▼" : "▲"}
-        </span>
+        <Icon
+          name={!active ? "chevrons-up-down" : sort.dir === -1 ? "arrow-down" : "arrow-up"}
+          className={`h-3 w-3 ${active ? "text-primary" : "opacity-40 group-hover:opacity-80"}`}
+        />
       </button>
     </th>
   );
@@ -80,13 +87,19 @@ export function TableSearch({
   label: string;
 }) {
   return (
-    <input
-      type="search"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={label}
-      aria-label={label}
-      className="mb-2 w-full rounded-lg border border-border bg-bg px-3 py-1.5 text-sm"
-    />
+    <div className="relative mb-2">
+      <Icon
+        name="search"
+        className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+      />
+      <input
+        type="search"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={label}
+        aria-label={label}
+        className="h-9 w-full rounded-lg border border-border bg-card pl-9 pr-3 text-sm shadow-sm"
+      />
+    </div>
   );
 }

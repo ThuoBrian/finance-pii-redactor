@@ -4,6 +4,8 @@
 import * as Popover from "@radix-ui/react-popover";
 import type { ReactNode } from "react";
 
+import { Icon } from "./Icon";
+
 export function InfoTip({ label, children }: { label: string; children: ReactNode }) {
   return (
     <Popover.Root>
@@ -11,9 +13,9 @@ export function InfoTip({ label, children }: { label: string; children: ReactNod
         <button
           type="button"
           aria-label={`About ${label}`}
-          className="ml-1.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border-soft align-middle text-[0.7rem] font-semibold text-muted hover:bg-surface"
+          className="ml-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full align-middle text-muted transition hover:bg-surface hover:text-text"
         >
-          ?
+          <Icon name="help" className="h-4 w-4" />
         </button>
       </Popover.Trigger>
       <Popover.Portal>
@@ -21,7 +23,7 @@ export function InfoTip({ label, children }: { label: string; children: ReactNod
           side="top"
           align="start"
           sideOffset={6}
-          className="z-50 max-w-xs rounded-lg border border-border-soft bg-bg p-3 text-xs font-normal leading-relaxed text-text shadow-lg"
+          className="z-50 max-w-xs rounded-lg border border-border-soft bg-card p-3 text-xs font-normal leading-relaxed text-text shadow-lg"
         >
           {children}
         </Popover.Content>

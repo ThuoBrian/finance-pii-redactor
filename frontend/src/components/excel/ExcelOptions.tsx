@@ -82,10 +82,10 @@ export function ExcelOptions({
 
   return (
     <section aria-labelledby="options-heading" className="mx-auto max-w-2xl">
-      <h1 tabIndex={-1} id="options-heading" className="text-2xl font-semibold tracking-tight">
+      <h1 tabIndex={-1} id="options-heading" className="text-3xl font-semibold tracking-tight">
         Ready to redact
       </h1>
-      <p className="mt-1 text-muted">{options.summary}</p>
+      <p className="mt-2 leading-relaxed text-muted">{options.summary}</p>
 
       <Customize hint="tabs and columns, kinds of information, confidence">
           {options.tabs.length > 1 && (
@@ -101,7 +101,7 @@ export function ExcelOptions({
                 {options.tabs.map((t) => (
                   <label
                     key={t.name}
-                    className="inline-flex items-center gap-2 rounded-lg border border-border-soft px-3 py-1.5 text-sm"
+                    className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border-soft bg-card px-3 py-2 text-sm shadow-sm transition hover:bg-surface has-[:checked]:border-primary/60 has-[:checked]:bg-primary-soft"
                   >
                     <input
                       type="checkbox"
@@ -131,7 +131,7 @@ export function ExcelOptions({
                   <select
                     value={shownTab.name}
                     onChange={(e) => setColumnTab(e.target.value)}
-                    className="rounded-lg border border-border bg-bg px-3 py-1.5 text-sm"
+                    className="rounded-lg border border-border bg-card shadow-sm px-3 py-1.5 text-sm"
                   >
                     {selectedTabs.map((t) => (
                       <option key={t.name} value={t.name}>
@@ -143,7 +143,10 @@ export function ExcelOptions({
               )}
               <div className="mt-2 grid max-h-56 grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2">
                 {shownTab.columns.map((label, i) => (
-                  <label key={i} className="inline-flex items-center gap-2 text-sm">
+                  <label
+                    key={i}
+                    className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm hover:bg-surface"
+                  >
                     <input
                       type="checkbox"
                       checked={(choices.columns[shownTab.name] ?? []).includes(i)}

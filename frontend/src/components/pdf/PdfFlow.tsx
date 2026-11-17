@@ -21,7 +21,7 @@ import { ReviewLayout } from "../review/ReviewLayout";
 import { TextOccurrenceTable } from "../review/Tables";
 import { WordsBox, sameWords } from "../review/WordsBox";
 import { ScanProgress } from "../TaskProgress";
-import { Notice, Spinner } from "../ui";
+import { Notice, Skeleton } from "../ui";
 import { useFormatFlow } from "../useFormatFlow";
 import { PdfMappingTable } from "./PdfMappingTable";
 import { PdfPreview } from "./PdfPreview";
@@ -105,7 +105,7 @@ export function PdfFlow({
   if (step === 1) {
     if (options.error) return <Notice tone="danger">{options.error.message}</Notice>;
     const o = options.data;
-    if (!o) return <Spinner label="Reading the PDF..." />;
+    if (!o) return <Skeleton label="Reading the PDF..." />;
     if (flow.scanning) {
       return <ScanProgress jobId={job.id} unit="page" progress={flow.progress} />;
     }
@@ -113,10 +113,10 @@ export function PdfFlow({
       choices.read_scans && o.can_read_scans ? o.size_note_reading : o.size_note_not_reading;
     return (
       <section aria-labelledby="options-heading" className="mx-auto max-w-2xl">
-        <h1 tabIndex={-1} id="options-heading" className="text-2xl font-semibold tracking-tight">
+        <h1 tabIndex={-1} id="options-heading" className="text-3xl font-semibold tracking-tight">
           Ready to redact
         </h1>
-        <p className="mt-1 text-muted">
+        <p className="mt-2 leading-relaxed text-muted">
           {o.total_pages > 0 && `${plural(o.total_pages, "page")}. `}
           Names, organizations, emails, websites, bank details and addresses are
           found automatically. Images are blacked out. Missed a name? You can add
@@ -125,24 +125,27 @@ export function PdfFlow({
         <Customize hint="labels or black boxes, images, scanned pages">
           <fieldset>
             <legend className="text-sm font-medium">Redaction style</legend>
-            <div className="mt-2 space-y-2 text-sm">
+            <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
               {(
                 [
                   ["pseudonymize", "Replace with labels such as [001]", "A separate mapping file says which Internal ID each label stands for."],
                   ["blackout", "Black out (cover with black boxes)", "Covers matched text with a black box, with nothing to decode."],
                 ] as const
               ).map(([value, label, help]) => (
-                <label key={value} className="flex items-start gap-2">
+                <label
+                  key={value}
+                  className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border-soft bg-card p-3 shadow-sm transition hover:bg-surface has-[:checked]:border-primary/60 has-[:checked]:bg-primary-soft"
+                >
                   <input
                     type="radio"
                     name="pdf-style"
-                    className="mt-1"
+                    className="mt-0.5"
                     checked={choices.style === value}
                     onChange={() => setChoices({ ...choices, style: value })}
                   />
                   <span>
-                    {label}
-                    <span className="block text-xs text-muted">{help}</span>
+                    <span className="font-medium">{label}</span>
+                    <span className="mt-0.5 block text-xs leading-relaxed text-muted">{help}</span>
                   </span>
                 </label>
               ))}
@@ -209,7 +212,7 @@ export function PdfFlow({
 
   if (flow.review.error) return <Notice tone="danger">{flow.review.error.message}</Notice>;
   const r = result;
-  if (!r) return <Spinner label="Loading..." />;
+  if (!r) return <Skeleton label="Loading..." />;
 
   if (step === 2) {
     const columnsPending = !sameSet(columns, r.columns);
@@ -262,7 +265,7 @@ export function PdfFlow({
                   </legend>
                   <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
                     {r.table_columns.map((c) => (
-                      <label key={c.key} className="inline-flex items-center gap-2 text-sm">
+                      <label key={c.key} className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm hover:bg-surface">
                         <input
                           type="checkbox"
                           checked={columns.includes(c.key)}
