@@ -2,6 +2,8 @@
 // (internal steps 0 and 1), so the tracker shows three. Moving between steps
 // happens through each step's own buttons.
 
+import { Icon } from "./Icon";
+
 const STEPS = ["File", "Review", "Download"] as const;
 export type StepIndex = 0 | 1 | 2 | 3;
 
@@ -15,10 +17,11 @@ export function Stepper({ current: step }: { current: StepIndex }) {
           return (
             <li key={label} className="flex items-center gap-2">
               {i > 0 && (
-                <span
-                  aria-hidden
-                  className={`h-px w-6 sm:w-10 ${i <= current ? "bg-primary" : "bg-border-soft"}`}
-                />
+                <span aria-hidden className="h-0.5 w-6 overflow-hidden rounded-full bg-border-soft sm:w-12">
+                  <span
+                    className={`block h-full bg-primary transition-[width] duration-300 ${i <= current ? "w-full" : "w-0"}`}
+                  />
+                </span>
               )}
               <span
                 aria-current={state === "current" ? "step" : undefined}
@@ -26,16 +29,18 @@ export function Stepper({ current: step }: { current: StepIndex }) {
               >
                 <span
                   aria-hidden
-                  className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
+                  className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
                     state === "todo"
-                      ? "border border-border text-muted"
-                      : "bg-primary text-white"
+                      ? "border border-border/70 bg-card text-muted"
+                      : state === "current"
+                        ? "bg-primary text-white shadow-sm ring-4 ring-primary/15"
+                        : "bg-primary-soft text-primary"
                   }`}
                 >
-                  {state === "done" ? "✓" : i + 1}
+                  {state === "done" ? <Icon name="check" className="h-3.5 w-3.5" strokeWidth={3} /> : i + 1}
                 </span>
                 <span
-                  className={`hidden sm:inline ${state === "current" ? "font-semibold" : "text-muted"}`}
+                  className={`hidden sm:inline ${state === "current" ? "font-semibold text-text" : "text-muted"}`}
                 >
                   {label}
                 </span>

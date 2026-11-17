@@ -48,7 +48,7 @@ export function WordsBox({
         onChange={(e) => onTextChange(e.target.value)}
         rows={4}
         spellCheck={false}
-        className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm"
+        className="w-full rounded-lg border border-border bg-card shadow-sm px-3 py-2 text-sm"
         aria-describedby="words-help"
         placeholder="One per line"
       />

@@ -69,13 +69,19 @@ export function TaskProgress({
   const cancelling = cancel.isPending || cancel.data?.cancelling;
 
   return (
-    <div className="rounded-2xl border border-border-soft bg-surface p-5" aria-live="polite">
+    <div className="card p-6" aria-live="polite">
       <div className="flex items-start justify-between gap-3">
-        <p className="font-medium">
+        <p className="flex items-center gap-2.5 font-medium">
+          {task?.status === "running" && !cancelling && (
+            <span aria-hidden className="relative flex h-2.5 w-2.5">
+              <span className="absolute inset-0 animate-ping rounded-full bg-primary opacity-40" />
+              <span className="relative h-2.5 w-2.5 rounded-full bg-primary" />
+            </span>
+          )}
           {cancelling ? "Cancelling..." : task?.label || "Starting..."}
         </p>
         <Button
-          className="!px-3 !py-1 text-xs"
+          size="sm"
           disabled={Boolean(cancelling) || task?.status !== "running"}
           onClick={() => cancel.mutate()}
         >
@@ -83,7 +89,7 @@ export function TaskProgress({
         </Button>
       </div>
       <div
-        className="mt-3 h-2 overflow-hidden rounded-full bg-border-soft"
+        className="mt-4 h-2.5 overflow-hidden rounded-full bg-surface-2"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}
@@ -91,11 +97,11 @@ export function TaskProgress({
         aria-label="Progress"
       >
         <div
-          className={`h-full rounded-full bg-primary transition-[width] ${pct === null ? "w-1/3 animate-pulse" : ""}`}
+          className={`h-full rounded-full bg-primary transition-[width] duration-500 ${task?.status === "running" ? "progress-stripes" : ""} ${pct === null ? "w-1/3 animate-pulse" : ""}`}
           style={pct === null ? undefined : { width: `${pct}%` }}
         />
       </div>
-      <p className="mt-2 text-sm text-muted">
+      <p className="mt-3 text-sm text-muted">
         {task && task.total
           ? `${task.done.toLocaleString()} of ${plural(task.total, unit)} checked${estimate ? ` · ${estimate}` : ""}`
           : "This can take a while for a big file. Keep this page open."}
@@ -116,7 +122,7 @@ export function ScanProgress({
 }) {
   return (
     <section className="mx-auto max-w-2xl">
-      <h1 tabIndex={-1} className="mb-6 text-2xl font-semibold tracking-tight">
+      <h1 tabIndex={-1} className="mb-6 text-3xl font-semibold tracking-tight">
         Redacting
       </h1>
       <TaskProgress jobId={jobId} unit={unit} {...progress} />

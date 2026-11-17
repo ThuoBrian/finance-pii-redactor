@@ -1,41 +1,82 @@
 @import "tailwindcss";
 
-/* Colour tokens. The accent, link and border values are the contrast-checked
-   ones from the Streamlit theme (all pairs clear WCAG AA: text >= 4.5:1,
-   borders and controls >= 3:1). Red only means "careful": the Confidential
-   download and real warnings. No web fonts: the app makes no outside
-   requests, so the system font stack is used. */
+/* Inter, served from the app itself (no outside requests; the CSP allows
+   only 'self'). Only the Latin subsets are declared, so the build emits two
+   font files, and the browser fetches latin-ext only when a name needs it. */
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2")
+    format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("../node_modules/@fontsource-variable/inter/files/inter-latin-ext-wght-normal.woff2")
+    format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* Design tokens. Every screen draws from these; add a token here rather
+   than a one-off colour in a component. The pairs that carry text are
+   checked against WCAG AA in src/test/contrast.test.ts (text >= 4.5:1,
+   control edges >= 3:1). Red only means "careful": the Confidential
+   download and real warnings.
+
+   Surfaces, back to front: bg (the page) < card (raised panels, inputs,
+   menus) < surface / surface-2 (tints inside a card: hover, selected). */
 :root {
-  --bg: #ffffff;
-  --surface: #f6f7f9;
-  --surface-2: #eef0f4;
-  --text: #111827;
-  --muted: #4b5563; /* 7.5:1 on white */
-  --border: #6b7280; /* 4.83:1 on white */
-  --border-soft: #e5e7eb; /* dividers only, never the sole edge of a control */
-  --primary: #2563eb; /* 5.17:1 with white label text */
+  --bg: #f6f7f9;
+  --card: #ffffff;
+  --surface: #f1f4f8;
+  --surface-2: #e8ecf2;
+  --text: #0f172a;
+  --muted: #475569;
+  --border: #64748b; /* control edges */
+  --border-soft: #e2e8f0; /* dividers and card hairlines only */
+  --primary: #2563eb; /* white label text 5.17:1 */
   --primary-hover: #1d4ed8;
+  --primary-soft: #eff4ff;
+  --ring: #2563eb;
   --link: #1d4ed8;
   --danger: #b91c1c;
+  --danger-solid: #b91c1c; /* filled buttons: white label 6.5:1 */
   --danger-soft: #fef2f2;
   --warn: #92400e;
   --warn-soft: #fffbeb;
   --success: #15803d;
   --success-soft: #f0fdf4;
-  --overlay: rgb(17 24 39 / 0.45);
+  --overlay: rgb(15 23 42 / 0.45);
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.05), 0 1px 3px rgb(15 23 42 / 0.07);
+  --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.06);
+  --shadow-lg: 0 16px 40px -12px rgb(15 23 42 / 0.25), 0 4px 10px -4px rgb(15 23 42 / 0.1);
+  --shadow-up: 0 -6px 16px -8px rgb(15 23 42 / 0.12);
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0e1117;
-    --surface: #1a1d27;
-    --surface-2: #1e222d;
-    --text: #fafafa;
-    --muted: #a1a1aa;
-    --border: #6b7280;
-    --border-soft: #2a2f3a;
-    --primary-hover: #3b82f6;
-    --link: #93c5fd; /* 10.48:1 on the dark background */
+    --bg: #0b0e14;
+    --card: #141820;
+    --surface: #1b202a;
+    --surface-2: #242a36;
+    --text: #f1f5f9;
+    --muted: #a7b1c2;
+    --border: #6b7586;
+    --border-soft: #262c38;
+    --primary-hover: #1d4ed8;
+    --primary-soft: #16213a;
+    --ring: #60a5fa;
+    --link: #93c5fd;
     --danger: #f87171;
     --danger-soft: #2a1416;
     --warn: #fbbf24;
@@ -43,11 +84,17 @@
     --success: #4ade80;
     --success-soft: #0f2418;
     --overlay: rgb(0 0 0 / 0.6);
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.5);
+    --shadow-lg: 0 16px 40px -12px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.04);
+    --shadow-up: 0 -6px 16px -8px rgb(0 0 0 / 0.6);
+    color-scheme: dark;
   }
 }
 
 @theme inline {
   --color-bg: var(--bg);
+  --color-card: var(--card);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-text: var(--text);
@@ -56,16 +103,32 @@
   --color-border-soft: var(--border-soft);
   --color-primary: var(--primary);
   --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-ring: var(--ring);
   --color-link: var(--link);
   --color-danger: var(--danger);
+  --color-danger-solid: var(--danger-solid);
   --color-danger-soft: var(--danger-soft);
   --color-warn: var(--warn);
   --color-warn-soft: var(--warn-soft);
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
   --color-overlay: var(--overlay);
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, sans-serif;
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-up: var(--shadow-up);
+  --font-sans: "Inter Variable", "Segoe UI Variable Text", "Segoe UI", system-ui,
+    -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
+}
+
+/* A raised panel: the one card style every screen uses. */
+@utility card {
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-soft);
+  background-color: var(--card);
+  box-shadow: var(--shadow-sm);
 }
 
 html,
@@ -76,18 +139,77 @@ body {
 
 body {
   font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01"; /* Inter's clearer 1, l and a */
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.011em;
+  text-wrap: balance;
+}
+
+/* Counts and progress line up as they change. */
+.tabular,
+[role="progressbar"] + p,
+td {
+  font-variant-numeric: tabular-nums;
+}
+
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"] {
+  accent-color: var(--primary);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
 }
 
 :focus-visible {
-  outline: 2px solid var(--primary);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
+  border-radius: 4px;
 }
 
 /* Headings take focus on each step change (for screen readers); they are not
    controls, so no focus ring. */
 h1[tabindex="-1"]:focus {
   outline: none;
+}
+
+/* The running scan's bar: moving stripes say "still working". */
+@keyframes progress-stripes {
+  from {
+    background-position: 1rem 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+.progress-stripes {
+  background-image: linear-gradient(
+    45deg,
+    rgb(255 255 255 / 0.18) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgb(255 255 255 / 0.18) 50%,
+    rgb(255 255 255 / 0.18) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 1rem 1rem;
+  animation: progress-stripes 1s linear infinite;
 }
 
 /* Respect a system request for less motion: no spinners, pulses, slides or

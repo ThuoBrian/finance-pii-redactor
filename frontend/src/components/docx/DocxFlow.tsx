@@ -19,7 +19,7 @@ import { MappingTable, TextOccurrenceTable } from "../review/Tables";
 import { ReviewLayout } from "../review/ReviewLayout";
 import { WordsBox, sameWords } from "../review/WordsBox";
 import { ScanProgress } from "../TaskProgress";
-import { Notice, Spinner } from "../ui";
+import { Notice, Skeleton } from "../ui";
 import { useFormatFlow } from "../useFormatFlow";
 
 export function DocxFlow({
@@ -86,16 +86,16 @@ export function DocxFlow({
 
   if (step === 1) {
     if (options.error) return <Notice tone="danger">{options.error.message}</Notice>;
-    if (!options.data || !choices) return <Spinner label="Loading..." />;
+    if (!options.data || !choices) return <Skeleton label="Loading..." />;
     if (flow.scanning) {
       return <ScanProgress jobId={job.id} unit="paragraph" progress={flow.progress} />;
     }
     return (
       <section aria-labelledby="options-heading" className="mx-auto max-w-2xl">
-        <h1 tabIndex={-1} id="options-heading" className="text-2xl font-semibold tracking-tight">
+        <h1 tabIndex={-1} id="options-heading" className="text-3xl font-semibold tracking-tight">
           Ready to redact
         </h1>
-        <p className="mt-1 text-muted">
+        <p className="mt-2 leading-relaxed text-muted">
           Names, organizations, emails, websites, bank details and addresses are
           found automatically. Missed a name? You can add it on the next step.
         </p>
@@ -132,7 +132,7 @@ export function DocxFlow({
 
   if (flow.review.error) return <Notice tone="danger">{flow.review.error.message}</Notice>;
   const r = flow.review.data;
-  if (!r) return <Spinner label="Loading..." />;
+  if (!r) return <Skeleton label="Loading..." />;
 
   if (step === 2) {
     const wordsPending = !sameWords(parseWords(wordsText), r.words);

@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useRef, useState, type DragEvent } from "react";
 
 import { ACCEPTED_EXTENSIONS, api, isAccepted, type Job } from "../api";
+import { Icon } from "./Icon";
 import { Button, Notice, Spinner } from "./ui";
 
 const UNSUPPORTED =
@@ -44,10 +45,10 @@ export function UploadStep({
 
   return (
     <section aria-labelledby="upload-heading" className="mx-auto max-w-xl">
-      <h1 tabIndex={-1} id="upload-heading" className="text-2xl font-semibold tracking-tight">
+      <h1 tabIndex={-1} id="upload-heading" className="text-3xl font-semibold tracking-tight">
         Upload a file
       </h1>
-      <p className="mt-1 text-muted">
+      <p className="mt-2 leading-relaxed text-muted">
         Excel, PDF or Word. Names become stable codes, and you check the result
         before you download.
       </p>
@@ -59,23 +60,38 @@ export function UploadStep({
         }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
-        className={`mt-6 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-14 text-center transition-colors ${
-          dragging ? "border-primary bg-surface" : "border-border bg-bg"
+        className={`mt-8 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-14 text-center shadow-sm transition-colors duration-150 ${
+          dragging ? "border-primary bg-primary-soft" : "border-border/50 bg-card hover:border-border"
         }`}
       >
         {upload.isPending ? (
           <Spinner label="Uploading..." />
         ) : (
           <>
-            <p className="text-sm text-muted">Drag a file here, or</p>
-            <button
-              type="button"
-              onClick={() => input.current?.click()}
-              className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover"
+            <span
+              aria-hidden
+              className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-soft text-primary ring-8 ring-primary-soft/50 transition-transform duration-150 ${dragging ? "scale-110" : ""}`}
             >
+              <Icon name="upload" className="h-6 w-6" />
+            </span>
+            <p className="mt-5 font-medium">
+              {dragging ? "Drop to upload" : "Drag a file here"}
+            </p>
+            <p className="mt-1 text-sm text-muted">or</p>
+            <Button variant="primary" className="mt-3" onClick={() => input.current?.click()}>
               Choose a file
-            </button>
-            <p className="mt-3 text-xs text-muted">.xlsx, .pdf or .docx · up to 200 MB</p>
+            </Button>
+            <ul aria-label="Accepted files" className="mt-6 flex flex-wrap justify-center gap-2 text-xs">
+              {[".xlsx", ".pdf", ".docx"].map((ext) => (
+                <li
+                  key={ext}
+                  className="rounded-md border border-border-soft bg-surface px-2 py-0.5 font-mono text-muted"
+                >
+                  {ext}
+                </li>
+              ))}
+              <li className="px-1 py-0.5 text-muted">up to 200 MB</li>
+            </ul>
           </>
         )}
         <input
@@ -104,7 +120,8 @@ export function UploadStep({
           </Button>
         </div>
       )}
-      <p className="mt-6 text-center text-xs text-muted">
+      <p className="mt-6 flex items-center justify-center gap-1.5 text-center text-xs text-muted">
+        <Icon name="lock" className="h-3.5 w-3.5" />
         The file is processed entirely on this computer.
       </p>
     </section>

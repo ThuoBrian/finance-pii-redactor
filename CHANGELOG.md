@@ -8,6 +8,16 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **A more polished look.** White cards on a soft grey page, gentle
+  shadows instead of a border around everything, clearer headings, and
+  proper icons in place of text symbols. Loading screens show placeholder
+  shapes, the running scan's bar moves, and the Review panel tabs and the
+  Download cards are easier to tell apart. The Inter typeface is bundled
+  with the app, so it still makes no outside requests. Wording and
+  behaviour are unchanged.
+  - In dark mode, the red **Close the app** button now has enough contrast
+    for its white label. A new test checks every text colour pair in both
+    themes against WCAG AA.
 - **A new, calmer interface.** The app is now a React page served by a small
   local web server, in place of Streamlit. It still runs only on your
   computer, opens in your browser at the same address

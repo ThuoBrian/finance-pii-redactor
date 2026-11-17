@@ -10,7 +10,8 @@ import { MasterListPill } from "./components/MasterListPill";
 import { SetupDialog } from "./components/SetupDialog";
 import { Stepper, type StepIndex } from "./components/Stepper";
 import { UploadStep } from "./components/UploadStep";
-import { Button, Modal, Notice, ShieldMark } from "./components/ui";
+import { Icon } from "./components/Icon";
+import { Badge, Button, Modal, Notice, ShieldMark } from "./components/ui";
 
 const FORMAT_LABEL = { excel: "Excel", pdf: "PDF", docx: "Word" } as const;
 
@@ -102,7 +103,7 @@ export default function App() {
     return (
       <main className="flex min-h-screen items-center justify-center p-6">
         <div className="max-w-md text-center">
-          <ShieldMark className="mx-auto h-10 w-10" />
+          <ShieldMark className="mx-auto h-12 w-12" />
           <h1 className="mt-4 text-xl font-semibold">The app is closed</h1>
           <p className="mt-2 text-muted">You can close this browser tab now.</p>
         </div>
@@ -112,15 +113,17 @@ export default function App() {
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-20 border-b border-border-soft bg-bg/90 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4">
+      <header className="sticky top-0 z-20 border-b border-border-soft bg-card/80 backdrop-blur-md backdrop-saturate-150">
+        <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4">
           <ShieldMark />
-          <span className="font-semibold">Finance PII Redactor</span>
+          <span className="truncate text-[0.95rem] font-semibold tracking-tight">
+            Finance PII Redactor
+          </span>
           <span className="ml-auto hidden items-center gap-1.5 text-xs text-muted md:inline-flex">
-            <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-success" />
+            <Icon name="lock" className="h-3.5 w-3.5 text-success" />
             Everything stays on this computer
           </span>
-          <div className="ml-auto flex items-center gap-1 md:ml-4">
+          <div className="ml-auto flex items-center gap-1.5 md:ml-4">
             <MasterListPill
               data={masterList.data}
               isLoading={masterList.isLoading}
@@ -136,20 +139,23 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 pb-16 pt-6">
+      <main className="mx-auto max-w-6xl px-4 pb-16 pt-8">
         <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
           <Stepper current={step} />
           {job && (
-            <div className="flex items-center gap-2 rounded-full bg-surface px-3 py-1.5 text-sm">
-              <span className="font-medium">{FORMAT_LABEL[job.format]}</span>
-              <span className="max-w-56 truncate text-muted" title={job.filename}>
+            <div className="card flex min-w-0 max-w-full items-center gap-2.5 rounded-full py-1.5 pl-2 pr-4 text-sm">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary">
+                <Icon name={job.format === "excel" ? "sheet" : "file"} className="h-3.5 w-3.5" />
+              </span>
+              <Badge tone="info">{FORMAT_LABEL[job.format]}</Badge>
+              <span className="min-w-0 max-w-56 truncate font-medium" title={job.filename}>
                 {job.filename}
               </span>
-              <span className="text-muted">· {formatBytes(job.size)}</span>
+              <span className="tabular shrink-0 text-muted">{formatBytes(job.size)}</span>
               {step > 1 && (
                 <button
                   type="button"
-                  className="ml-1 text-link underline-offset-2 hover:underline"
+                  className="ml-1 shrink-0 font-medium text-link underline-offset-2 hover:underline"
                   onClick={() => setStep(0)}
                 >
                   Change

@@ -108,7 +108,7 @@ describe("App shell", () => {
     expect(await screen.findByText(/1 tab \(Jan\)/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Redact with recommended settings" })).toBeEnabled();
     expect(screen.getByText("budget.xlsx")).toBeInTheDocument();
-    expect(screen.getByText("· 2 KB")).toBeInTheDocument();
+    expect(screen.getByText("2 KB")).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Change file" })).toBeInTheDocument(),
     );
