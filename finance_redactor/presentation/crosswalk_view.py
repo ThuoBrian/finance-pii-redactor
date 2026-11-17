@@ -1,7 +1,7 @@
 """Rendering of the mapping between what was redacted and what replaced it.
 
 Two schemes live here, because PDF and Excel/Word differ in what they write
-into a document. Each has a review table (the Review step's Code list tab) and
+into a document. Each has a review table (the Review step's Mapping tab) and
 downloads (the Download step, sorted into an Internal and a Confidential card).
 
 PDF stamps a document-local ``[001]`` label. :func:`render_pdf_mapping_download`
@@ -26,6 +26,7 @@ import streamlit as st
 from finance_redactor.domain.pseudonyms import Assignment
 from finance_redactor.presentation.presenters import (
     crosswalk_dataframe,
+    entity_label,
     pdf_mapping_dataframe,
     pdf_mapping_with_names_dataframe,
     pdf_review_dataframe,
@@ -70,10 +71,22 @@ def render_pdf_mapping_section(crosswalk: list[Assignment]) -> None:
 
 
 def render_pdf_mapping_download(
-    crosswalk: list[Assignment], base_name: str, master_list_fingerprint: str
+    crosswalk: list[Assignment],
+    base_name: str,
+    master_list_fingerprint: str,
+    *,
+    bracketed: int = 0,
 ) -> None:
-    """Offer the names-free label mapping (Internal). Nothing to offer if empty."""
+    """Draw the label-mapping section under the Download cards (Internal).
+
+    Offers the names-free mapping, says why it is safe to keep with the PDF,
+    and, when the PDF had ``bracketed`` numbers of its own like ``[001]``,
+    that the mapping is what tells them apart. Says so plainly when there is
+    nothing to map.
+    """
+    st.markdown("**Label mapping** :green-badge[Internal]")
     if not crosswalk:
+        st.caption("Nothing was replaced with a label, so there is no mapping file.")
         return
     mapping_df = pdf_mapping_dataframe(crosswalk, master_list_fingerprint)
     st.download_button(
@@ -82,9 +95,15 @@ def render_pdf_mapping_download(
         file_name=f"{base_name}_mapping.csv",
         mime="text/csv",
         key="pdf_mapping_download",
-        width="stretch",
     )
-    st.caption(_PDF_MAPPING_NOTICE)
+    note = _PDF_MAPPING_NOTICE
+    if bracketed:
+        note += (
+            f" This PDF already had {plural(bracketed, 'bracketed number')} of "
+            "its own (such as footnote markers) that look like the [001] "
+            "labels; the mapping names every label this tool added."
+        )
+    st.caption(note)
 
 
 def render_pdf_names_download(
@@ -139,7 +158,10 @@ def render_crosswalk_section(crosswalk: list[Assignment]) -> None:
             "hint only; it was **not** applied automatically. Fix the source "
             "document or add an alias, then re-run."
         )
-    st.dataframe(crosswalk_dataframe(crosswalk), width="stretch", hide_index=True)
+    # Readable kinds on screen; the downloaded CSV keeps the raw codes.
+    table = crosswalk_dataframe(crosswalk)
+    table["Entity type"] = table["Entity type"].map(entity_label)
+    st.dataframe(table, width="stretch", hide_index=True)
 
 
 def render_crosswalk_download(

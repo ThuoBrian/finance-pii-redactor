@@ -58,6 +58,10 @@ class FakePdfDocument:
         """Return the table columns recorded for this page."""
         return list(self._tables.get(page_index, []))
 
+    def page_size(self, page_index: int) -> tuple[float, float]:
+        """Every fake page is A4 in points."""
+        return (595.0, 842.0)
+
     def remove_external_links(self) -> int:
         """Report the canned link count and remember it was called."""
         self.links_removed_before_render = True
@@ -86,17 +90,18 @@ class FakePdfDocument:
         page_index: int,
         replacements: list[tuple[str | list[str], str]],
         blackout: bool = False,
-    ) -> list[object]:
-        """Apply replacements for this test document.
+    ) -> list[int]:
+        """Apply replacements for this test document; return those not found.
 
         Each candidate list is tried in order; the first candidate found in the
-        page text is replaced and recorded. Unknown candidate lists are ignored.
+        page text is replaced and recorded. Like the real gateway, the indices
+        of text replacements no candidate matched are returned.
         The ``__IMAGE__`` sentinel is treated as a request to redact images.
         """
-        rects: list[object] = []
+        missed: list[int] = []
         self.blackout_by_page[page_index] = blackout
         image_sentinel = "__IMAGE__"
-        for candidates, replacement in replacements:
+        for index, (candidates, replacement) in enumerate(replacements):
             if isinstance(candidates, str):
                 candidates = [candidates]
             if image_sentinel in candidates:
@@ -104,7 +109,6 @@ class FakePdfDocument:
                     self.redactions_by_page.setdefault(page_index, []).append(
                         (image_sentinel, "")
                     )
-                    rects.append((image_sentinel, ""))
                 continue
             page_text = self._pages[page_index]
             for candidate in candidates:
@@ -115,9 +119,10 @@ class FakePdfDocument:
                     self.redactions_by_page.setdefault(page_index, []).append(
                         (candidate, replacement)
                     )
-                    rects.append((candidate, replacement))
                     break
-        return rects
+            else:
+                missed.append(index)
+        return missed
 
 
 class FakeDetector:
@@ -236,6 +241,71 @@ def test_custom_word_with_pdf_artifacts_is_detected_after_normalization() -> Non
     assert result.findings[0].detected_text == "Acme Supplies"
     # The page text was updated using whichever candidate the gateway could find.
     assert result.crosswalk[0].label in doc._pages[0]
+
+
+class _UnsearchableDocument(FakePdfDocument):
+    """A page whose text is readable but which no search can match.
+
+    Stands in for a PDF whose letters are stored oddly (ligatures, a custom
+    encoding): the text layer reads fine, every search variant fails.
+    """
+
+    def redact_page(
+        self,
+        page_index: int,
+        replacements: list[tuple[str | list[str], str]],
+        blackout: bool = False,
+    ) -> list[int]:
+        """Locate nothing: report every text replacement as not found."""
+        unfindable = [(["⁣not on this page"], label) for _, label in replacements]
+        return super().redact_page(page_index, unfindable, blackout)
+
+
+@pytest.mark.parametrize("split", [True, False])
+def test_a_term_no_search_variant_finds_is_reported_not_located(split: bool) -> None:
+    """A detected term the gateway cannot find is in ``not_located``.
+
+    It stays in ``findings`` (it was detected, and the reviewer can see it),
+    but is no longer silently counted as hidden.
+    """
+    doc = _UnsearchableDocument(["Zorbo Quillfeather paid", "Nothing here"])
+    service = _service()
+    if split:
+        result = service.redact(doc, service.scan(doc), ["Zorbo Quillfeather"])
+    else:
+        result = service.execute(doc, ["Zorbo Quillfeather"])
+
+    assert [f.detected_text for f in result.findings] == ["Zorbo Quillfeather"]
+    assert [(f.page, f.detected_text) for f in result.not_located] == [
+        (0, "Zorbo Quillfeather")
+    ]
+
+
+def test_located_terms_are_not_reported_and_pages_line_up() -> None:
+    """Only the term that was not found is reported, on its own page."""
+
+    class SecondPageUnsearchable(FakePdfDocument):
+        def redact_page(
+            self,
+            page_index: int,
+            replacements: list[tuple[str | list[str], str]],
+            blackout: bool = False,
+        ) -> list[int]:
+            if page_index == 1:
+                replacements = [(["⁣absent"], label) for _, label in replacements]
+            return super().redact_page(page_index, replacements, blackout)
+
+    doc = SecondPageUnsearchable(["Ann Example paid", "Bo Sample signed"])
+    result = _service().execute(doc, ["Ann Example", "Bo Sample"])
+
+    assert [(f.page, f.detected_text) for f in result.not_located] == [(1, "Bo Sample")]
+
+
+def test_nothing_is_reported_not_located_when_every_term_is_found() -> None:
+    doc = FakePdfDocument(["John paid"], image_rects={0: [(0, 0, 10, 10)]})
+    result = _service().execute(doc, ["John"], redact_images=True)
+
+    assert result.not_located == ()
 
 
 def test_document_is_closed_even_if_page_text_raises() -> None:
@@ -832,6 +902,88 @@ def test_without_an_ocr_engine_a_scan_is_reported_but_not_read() -> None:
     assert scan.read_pages == []
 
 
+_OCR_TEXT = "Payment voucher\nPaid to John today\nsmudged footer"
+
+
+@pytest.mark.parametrize(
+    ("image_height", "scanned"),
+    [(117.0, False), (135.0, True)],  # 14% and 16% of an A4 page
+)
+def test_a_text_page_counts_as_a_scan_once_its_images_are_large(
+    image_height: float, scanned: bool
+) -> None:
+    doc = FakePdfDocument(
+        ["Typed heading only"], image_rects={0: [(0, 0, 595, image_height)]}
+    )
+
+    assert _service().scan(doc).scanned_pages == ([0] if scanned else [])
+
+
+def test_images_hanging_off_the_page_count_only_their_visible_part() -> None:
+    # 1000 points tall but only 100 of them on the page: about 12%.
+    doc = FakePdfDocument(["Typed heading"], image_rects={0: [(0, -900, 595, 100)]})
+
+    assert _service().scan(doc).scanned_pages == []
+
+
+def test_a_mixed_page_is_searched_in_its_text_layer_and_rebuilt_from_ocr() -> None:
+    """Typed text over a large scanned image: the image is OCR'd, and the text
+    layer is still search-redacted first, so a name OCR misreads is caught.
+    """
+    doc = FakePdfDocument([_OCR_TEXT], image_rects={0: [(0, 200, 595, 842)]})
+    service = _ocr_service(FakeOcr(_ocr_lines()))
+
+    scan = service.scan(doc)
+    result = service.redact(doc, scan, [], redact_images=False)
+
+    assert scan.scanned_pages == [0] and scan.read_pages == [0]
+    # Text layer: covered by search, with no image sentinel (the rebuild
+    # handles images).
+    assert doc.redactions_by_page[0] == [("John", "[001]")]
+    # OCR: the page is rebuilt with the same label over the same name.
+    assert [label for _, label in doc.rebuilt["names"]] == ["[001]"]
+    assert doc.rebuilt["blackout_other_ink"] is False
+    assert {f.detected_text for f in result.findings} == {"John"}
+    assert result.not_located == ()
+
+
+def test_a_mixed_page_without_ocr_is_reported_and_still_searched() -> None:
+    doc = FakePdfDocument([_OCR_TEXT], image_rects={0: [(0, 200, 595, 842)]})
+    service = _ocr_service(None)
+
+    scan = service.scan(doc)
+    service.redact(doc, scan, [], redact_images=True)
+
+    assert scan.scanned_pages == [0] and scan.read_pages == []
+    assert doc.redactions_by_page[0] == [("John", "[001]"), ("__IMAGE__", "")]
+
+
+def test_count_scanned_pages_matches_scan_without_detecting_or_reading() -> None:
+    doc = FakePdfDocument(
+        ["", _OCR_TEXT, "Text with a logo", ""],
+        image_rects={
+            0: [(0, 0, 595, 842)],  # a plain scan
+            1: [(0, 200, 595, 842)],  # typed text over a large scan
+            2: [(0, 0, 50, 50)],  # a logo: not a scan
+        },
+    )
+    detector = FakeDetector()
+    ocr = FakeOcr(_ocr_lines())
+    service = RedactPdfService(
+        open_document=_document_factory,
+        master_map={},
+        auto_prefixes={},
+        detector=detector,
+        fixed_masks={},
+        ocr=ocr,
+    )
+
+    assert service.count_scanned_pages(doc) == (2, 4)
+    assert detector.call_count == 0 and ocr.calls == 0
+    assert doc.closed is True
+    assert len(service.scan(doc, read_scans=False).scanned_pages) == 2
+
+
 def test_reading_scans_can_be_turned_off_per_run() -> None:
     doc = FakePdfDocument([""], image_rects={0: [(0, 0, 595, 842)]})
     ocr = FakeOcr(_ocr_lines())
@@ -961,3 +1113,14 @@ def test_table_columns_on_a_scanned_page_come_from_the_ocr_lines() -> None:
     names = doc.rebuilt["names"]
     assert [label for _box, label in names] == ["[001]", "[002]"]
     assert [box[1] for box, _label in names] == [130.0, 160.0]  # rows 1 and 2
+
+
+def test_scan_reports_progress_once_per_page() -> None:
+    seen: list[tuple[int, int]] = []
+
+    _service().scan(
+        FakePdfDocument(["John paid", "", "Mary paid"]),
+        on_progress=lambda done, total: seen.append((done, total)),
+    )
+
+    assert seen == [(1, 3), (2, 3), (3, 3)]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from finance_redactor.domain.pseudonyms import normalize
 from finance_redactor.infrastructure.names.master_list_repository import (
@@ -285,7 +286,7 @@ def test_internal_id_is_carried_separately_from_the_pseudonym(tmp_path):
     """The raw Internal ID must survive, not just the concatenated pseudonym.
 
     The PDF mapping file needs the bare ID, and recovering it by splitting
-    "STF-10010" is unsafe: an auto-id like "PSN-AUTO-1A2B3" has the same shape.
+    "STF-10010" is unsafe: an auto-id like "PSN-AUTO-1A2B3C4D" has the same shape.
     """
     rows = _repo(tmp_path, _CATEGORY_SHEETS).rows()
     by_name = {r.name: r for r in rows}
@@ -323,3 +324,90 @@ def test_fingerprint_is_empty_when_the_file_is_missing(tmp_path):
     repo = MasterListRepository(tmp_path / "absent.xlsx", _CATEGORIES)
 
     assert repo.fingerprint() == ""
+
+
+def _one_sheet_repo(tmp_path, staff: dict[str, list]) -> MasterListRepository:
+    path = tmp_path / "master_list.xlsx"
+    _make_excel(path, {"Staff": pd.DataFrame(staff)})
+    return MasterListRepository(path, _CATEGORIES, category_sheets=_CATEGORY_SHEETS)
+
+
+def test_category_mismatch_is_reported_not_loaded(tmp_path):
+    repo = _one_sheet_repo(
+        tmp_path,
+        {
+            "Category": ["Staff", "Employee"],
+            "Internal ID": [1, 2],
+            "Name": ["Jane Testvalid", "Omar Testmismatch"],
+        },
+    )
+
+    assert [r.name for r in repo.rows()] == ["Jane Testvalid"]
+    issue = {i.kind: i for i in repo.quality_report()}["category_mismatch"]
+    assert issue.total == 1
+    assert issue.title.startswith("1 row(s) skipped")
+    assert issue.examples == ["`Omar Testmismatch` (sheet Staff)"]
+
+
+def test_missing_category_column_reports_every_row(tmp_path):
+    repo = _one_sheet_repo(
+        tmp_path,
+        {"Internal ID": [1, 2], "Name": ["Jane Testone", "Omar Testtwo"]},
+    )
+
+    assert repo.rows() == []
+    issue = {i.kind: i for i in repo.quality_report()}["category_mismatch"]
+    assert issue.total == 2
+
+
+def _truncated(tmp_path) -> bytes:
+    _one_sheet_repo(
+        tmp_path, {"Category": ["Staff"], "Internal ID": [1], "Name": ["Jane Test"]}
+    )
+    good = (tmp_path / "master_list.xlsx").read_bytes()
+    return good[: len(good) // 2]
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        pytest.param(_truncated, id="truncated"),
+        # An encrypted workbook is an OLE compound file, not a zip.
+        pytest.param(
+            lambda _: bytes.fromhex("D0CF11E0A1B11AE1") + b"\0" * 504,
+            id="password-protected",
+        ),
+        pytest.param(lambda _: b"not a workbook", id="junk"),
+    ],
+)
+def test_unreadable_workbook_loads_zero_names_and_says_why(tmp_path, content):
+    data = content(tmp_path)
+    path = tmp_path / "broken.xlsx"
+    path.write_bytes(data)
+    repo = MasterListRepository(path, _CATEGORIES, category_sheets=_CATEGORY_SHEETS)
+
+    # Everything app.py's _get_master_list_bundle calls must not raise.
+    assert repo.names_by_entity() == {}
+    assert repo.master_map() == {}
+    assert repo.counts_by_category() == {}
+    assert repo.fingerprint().endswith("/0")
+    issues = repo.quality_report()
+    assert [i.kind for i in issues] == ["unreadable_workbook"]
+    assert "password-protected" in issues[0].detail
+
+
+def test_locked_workbook_is_reported(tmp_path, monkeypatch):
+    def locked(*_args, **_kwargs):
+        raise PermissionError("locked")
+
+    monkeypatch.setattr(pd, "read_excel", locked)
+    repo = MasterListRepository(tmp_path / "x.xlsx", _CATEGORIES)
+
+    assert repo.rows() == []
+    assert "Access was denied" in repo.quality_report()[0].detail
+
+
+def test_missing_file_is_not_reported_as_unreadable(tmp_path):
+    repo = MasterListRepository(tmp_path / "absent.xlsx", _CATEGORIES)
+
+    assert repo.quality_report() == []

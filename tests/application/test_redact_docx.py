@@ -485,3 +485,16 @@ def test_scan_redact_excluding_one_term_leaves_others_replaced() -> None:
     )
 
     assert [a.original_name for a in result.crosswalk] == ["John"]
+
+
+def test_scan_reports_progress_once_per_block() -> None:
+    seen: list[tuple[int, int]] = []
+
+    _service().scan(
+        FakeWordDocument(["John paid", "", "Mary paid"]),
+        ["PERSON"],
+        0.35,
+        on_progress=lambda done, total: seen.append((done, total)),
+    )
+
+    assert seen == [(1, 3), (2, 3), (3, 3)]

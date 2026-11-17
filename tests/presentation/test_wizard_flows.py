@@ -54,6 +54,15 @@ def _flow(fmt: str) -> None:
                 for m in re.finditer(r"Jane Doe|Sample\d{2}", text)
             ]
 
+    def stable(buffer: BytesIO) -> BytesIO:
+        # Writers stamp the time into xlsx and PDF files, so a file rebuilt
+        # on every run would count as a new upload each time. A real upload
+        # keeps its bytes, so keep the first build's bytes for the session.
+        data = st.session_state.setdefault("_made_up_bytes", buffer.getvalue())
+        kept = BytesIO(data)
+        kept.name = buffer.name
+        return kept
+
     wizard.keep_option_choices()
     steps = st.empty()
     if fmt in ("excel", "excel-long"):
@@ -71,16 +80,16 @@ def _flow(fmt: str) -> None:
             fixed_masks=S.fixed_masks,
         )
         run_excel_flow(
-            buffer,
+            stable(buffer),
             excel_service=service,
             excel_gateway=OpenpyxlExcelGateway(),
             settings=S,
             steps=steps,
         )
-    elif fmt in ("pdf", "pdf-scan", "pdf-table"):
+    elif fmt in ("pdf", "pdf-scan", "pdf-table", "pdf-unlocated"):
         doc = fitz.open()
         page = doc.new_page()
-        if fmt == "pdf":
+        if fmt in ("pdf", "pdf-unlocated"):
             page.insert_text((72, 100), "Paid to Jane Doe for field work.")
         elif fmt == "pdf-table":  # a ruled table of made-up payees
             rows = [
@@ -102,8 +111,16 @@ def _flow(fmt: str) -> None:
             page.insert_image(fitz.Rect(0, 0, 595, 842), stream=pix.tobytes("png"))
         buffer = BytesIO(doc.tobytes())
         buffer.name = "made_up.pdf"
+
+        class Unsearchable(PyMuPdfDocument):
+            # Text that reads fine but that no search variant can match
+            # (an odd font encoding): the real gateway reports it.
+            def redact_page(self, page_index, redactions, *, blackout=False):
+                unfindable = [(["⁣absent"], label) for _, label in redactions]
+                return super().redact_page(page_index, unfindable, blackout=blackout)
+
         service = RedactPdfService(
-            PyMuPdfDocument.open,
+            Unsearchable.open if fmt == "pdf-unlocated" else PyMuPdfDocument.open,
             {},
             S.auto_prefixes,
             Detector(),
@@ -111,7 +128,7 @@ def _flow(fmt: str) -> None:
             S.custom_words_score,
             fixed_masks=S.fixed_masks,
         )
-        run_pdf_flow(buffer, pdf_service=service, steps=steps)
+        run_pdf_flow(stable(buffer), pdf_service=service, steps=steps)
     else:
         document = Document()
         document.add_paragraph("Jane Doe approved the payment.")
@@ -128,7 +145,7 @@ def _flow(fmt: str) -> None:
             S.custom_words_score,
             fixed_masks=S.fixed_masks,
         )
-        run_docx_flow(buffer, docx_service=service, settings=S, steps=steps)
+        run_docx_flow(stable(buffer), docx_service=service, settings=S, steps=steps)
 
 
 def _start(fmt: str) -> AppTest:
@@ -153,7 +170,7 @@ def test_each_format_walks_options_review_download_and_back(fmt: str) -> None:
 
     _click(at, "Redact my file")
     assert [s.value for s in at.subheader] == ["Review what was found"]
-    assert at.tabs[0].label == "Review (1 to check)"
+    assert at.tabs[0].label == "Review (1 term, 1 to check)"
 
     _click(at, "Continue to download →")
     assert [s.value for s in at.subheader] == ["Download"]
@@ -305,9 +322,69 @@ def test_a_scanned_pdf_page_is_reported_on_the_review_step() -> None:
     _click(at, "Redact my file")
 
     warnings = [w.value for w in at.warning]
-    assert any("1 of 1 page is a scan" in w and "fully black" in w for w in warnings)
+    # It changes what to check, so it stays on Review, on its own.
+    assert len(warnings) == 1 and "1 of 1 page is a scan" in warnings[0]
+    assert "blacked out" in warnings[0]
+    assert not any("Before you share" in w for w in warnings)
+
+
+def test_the_before_you_share_box_is_on_the_download_step() -> None:
+    at = _start("pdf-scan")
+    _click(at, "Redact my file")
+    _click(at, "Continue to download →")
+
+    warnings = [w.value for w in at.warning]
     # One "Before you share" box, not a stack of separate ones.
     assert len(warnings) == 1 and warnings[0].startswith("**Before you share")
+    assert "1 of 1 page is a scan" in warnings[0]
+
+
+def test_a_term_nothing_covers_is_warned_about_on_download_too() -> None:
+    at = _start("pdf-unlocated")
+    _click(at, "Redact my file")
+    _click(at, "Continue to download →")
+
+    assert any("could not be found on the page" in w.value for w in at.warning)
+
+
+@pytest.mark.parametrize("fmt", ["pdf", "word"])
+def test_the_rare_path_controls_are_folded_into_one_expander(fmt: str) -> None:
+    from finance_redactor.presentation.words_view import ADDITIONS_LABEL
+
+    at = _start(fmt)
+    _click(at, "Redact my file")
+
+    assert [e.label for e in at.expander if e.label == ADDITIONS_LABEL]
+    assert not at.multiselect  # no table, so no column picker
+
+
+def test_a_term_that_cannot_be_found_on_the_page_is_warned_about() -> None:
+    at = _start("pdf-unlocated")
+    _click(at, "Redact my file")
+
+    warnings = [w.value for w in at.warning]
+    assert any(
+        w.startswith("**1 detected term could not be found on the page")
+        and "`Jane Doe`" in w
+        for w in warnings
+    )
+    shown = [m.value for m in [*at.success, *at.info, *at.warning, *at.caption]]
+    assert not any("Every detected term is hidden" in m for m in shown)
+
+
+def test_a_normal_pdf_has_no_not_found_warning() -> None:
+    at = _start("pdf")
+    _click(at, "Redact my file")
+
+    assert not any("could not be found" in w.value for w in at.warning)
+
+
+def test_a_short_pdf_gets_no_job_size_warning_on_options() -> None:
+    at = _start("pdf-scan")
+
+    assert [s.value for s in at.subheader] == ["Options"]
+    assert not at.warning
+    assert at.session_state["pdf_job_size"] == (1, 1)
 
 
 def _continue_button(at: AppTest):
@@ -364,3 +441,96 @@ def test_a_pdf_table_offers_its_columns_with_name_like_ones_chosen() -> None:
     assert at.session_state["pdf_columns_applied"] == frozenset({"payee", "amount"})
     listed = {f.detected_text for f in at.session_state["pdf_all_findings"]}
     assert {"100.00", "250.00"} <= listed
+
+
+def test_unticked_terms_survive_going_back_to_options_and_redacting_again() -> None:
+    at = _start("excel-long")
+    _click(at, "Redact my file")
+    _click(at, "Untick all shown (13)")
+    _click(at, "Apply changes (13 pending)")
+    at.run()
+    applied = at.session_state["excel_excluded_applied"]
+
+    _click(at, "← Back to options")
+    _click(at, "Redact my file")
+
+    assert len(applied) == 13
+    assert at.session_state["excel_excluded_applied"] == applied
+    assert any(i.value.startswith("Kept 13 terms you unticked") for i in at.info)
+    redacted = at.session_state["redacted_sheets"][0].data
+    assert "Paid Jane Doe" in set(redacted["notes"])  # still left visible
+
+
+def test_a_word_untick_survives_redacting_again() -> None:
+    from docx import Document
+
+    from finance_redactor.presentation.presenters import term_key
+
+    at = _start("word")
+    _click(at, "Redact my file")
+    # As if "Jane Doe" had been unticked and applied on Review.
+    at.session_state["docx_excluded_applied"] = frozenset({term_key("Jane Doe")})
+
+    _click(at, "← Back to options")
+    _click(at, "Redact my file")
+
+    text = Document(BytesIO(at.session_state["docx_buffer"])).paragraphs[0].text
+    assert "Jane Doe" in text
+    assert at.session_state["docx_excluded_applied"] == {term_key("Jane Doe")}
+    listed = {f.detected_text for f in at.session_state["docx_all_findings"]}
+    assert "Jane Doe" in listed  # still on the list, so it can be re-ticked
+
+
+def test_a_first_redact_has_nothing_to_carry_over() -> None:
+    at = _start("pdf")
+    _click(at, "Redact my file")
+
+    assert at.session_state["pdf_excluded_applied"] == frozenset()
+    assert not any(i.value.startswith("Kept ") for i in at.info)
+
+
+@pytest.mark.parametrize("fmt", ["excel", "pdf", "word"])
+def test_options_has_a_back_button_to_upload(fmt: str) -> None:
+    at = _start(fmt)
+
+    _click(at, "← Back to upload")
+
+    assert at.session_state["wizard_step"] == 1
+
+
+def test_the_word_threshold_slider_stops_at_the_master_list_score() -> None:
+    """Above 0.85 bank and payment details stop being masked; the slider can't go there."""
+    from finance_redactor.config import DEFAULT_SETTINGS
+
+    at = _start("word")
+    slider = at.slider(key="docx_threshold")
+
+    assert slider.max == DEFAULT_SETTINGS.max_threshold == 0.85
+    assert slider.value == DEFAULT_SETTINGS.default_threshold
+
+
+@pytest.mark.parametrize("fmt", ["excel", "pdf", "word"])
+def test_where_found_is_an_expander_at_the_bottom_not_a_tab(fmt: str) -> None:
+    at = _start(fmt)
+    _click(at, "Redact my file")
+
+    assert "Where found" not in [t.label for t in at.tabs]
+    assert "Where each term was found (1 occurrence)" in [e.label for e in at.expander]
+
+
+def test_the_pdf_label_mapping_sits_under_the_cards_with_its_note() -> None:
+    at = _start("pdf")
+    _click(at, "Redact my file")
+    _click(at, "Continue to download →")
+
+    assert any(m.value.startswith("**Label mapping**") for m in at.markdown)
+    assert any("No names inside" in c.value for c in at.caption)
+
+
+def test_a_pdf_with_nothing_to_map_says_so_on_download() -> None:
+    at = _start("pdf-scan")  # nothing found, so nothing labelled
+    _click(at, "Redact my file")
+    _click(at, "Continue to download →")
+
+    assert _downloads(at) == ["Download redacted PDF"]
+    assert any("there is no mapping file" in c.value for c in at.caption)

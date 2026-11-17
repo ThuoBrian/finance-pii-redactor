@@ -36,13 +36,21 @@ class OpenpyxlExcelGateway:
 
         Hidden sheets are included: a hidden tab is still data.
 
+        ``dtype=object`` keeps each cell as openpyxl read it. Without it,
+        pandas re-parses text columns and a text ID such as ``0041`` comes
+        back as the number ``41``. With it, text stays text and numbers and
+        dates stay numbers and dates, so the rebuilt workbook still writes
+        them as numbers.
+
         Raises :class:`UnreadableFileError` for a corrupted workbook or one
         renamed to ``.xlsx``/``.xls`` without really being one - openpyxl
         raises ``BadZipFile`` when the bytes aren't a zip at all, and
         ``KeyError`` when they're a zip but missing the xlsx package parts.
         """
         try:
-            return pd.read_excel(source, sheet_name=None, engine="openpyxl")
+            return pd.read_excel(
+                source, sheet_name=None, engine="openpyxl", dtype=object
+            )
         except (zipfile.BadZipFile, KeyError) as e:
             raise UnreadableFileError from e
 
@@ -60,19 +68,19 @@ class OpenpyxlExcelGateway:
             return {}
 
     def text_columns(self, df: pd.DataFrame) -> list[str]:
-        """Return free-text (string dtype) columns, used as the scan default.
+        """Return the columns holding any text, used as the scan default.
 
-        Uses ``pandas.api.types.is_string_dtype`` rather than checking
-        ``dtype == object``: pandas 3.0 infers a dedicated string dtype
-        (``StringDtype``, shown as ``str`` in ``df.dtypes``) for text columns
-        read from Excel/CSV by default, not the legacy ``object`` dtype an
-        `== object` check was written against - that check silently matched
-        zero columns on pandas 3.0, so no column was ever pre-selected here.
-        ``is_string_dtype`` matches both the new string dtype and legacy
-        object-dtype string columns, while still excluding numeric/date
-        columns and an all-null object column.
+        :meth:`read_sheets` reads every column as ``object``, so the dtype
+        says nothing; the values do. A column counts as text if any cell in it
+        is a string. That includes a mostly-numeric column with a few text
+        cells: leaning toward scanning more is the safe direction, and the
+        user can still untick it. Numeric, date and empty columns are left out.
         """
-        return [col for col in df.columns if pd.api.types.is_string_dtype(df[col])]
+        return [
+            col
+            for col in df.columns
+            if any(isinstance(value, str) for value in df[col])
+        ]
 
     def write(
         self,

@@ -9,9 +9,15 @@ what the user sees.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
-STEPS = ("Upload", "Set options", "Review", "Download")
+import streamlit as st
+
+from finance_redactor.presentation.presenters import plural
+
+STEPS = ("Upload", "Options", "Review", "Download")
+_REVIEW = 3
 
 
 def steps_markdown(current: int) -> str:
@@ -32,6 +38,31 @@ def steps_markdown(current: int) -> str:
     return " ".join(parts)
 
 
+def progress_bar(unit: str) -> Callable[[int, int], None]:
+    """Draw a progress bar and return the ``(done, total)`` callback that moves it.
+
+    For a scan's ``on_progress``, so a long run (OCR above all) shows how far
+    it has got instead of looking frozen. ``unit`` names what is counted.
+    """
+    bar = st.progress(0.0)
+
+    def update(done: int, total: int) -> None:
+        bar.progress(
+            done / total if total else 1.0,
+            text=f"{done:,} of {plural(total, unit)} checked",
+        )
+
+    return update
+
+
 def show_step(placeholder: Any, current: int) -> None:
-    """Draw the tracker into ``placeholder`` (an ``st.empty()``)."""
+    """Draw the tracker into ``placeholder`` (an ``st.empty()``), and set the layout.
+
+    Review gets the wide layout: in the centered column a 10-column Excel
+    preview showed 4 columns, and the review table's details view hid 3 of
+    its 8. The prose steps stay centered. The pinned Streamlit allows
+    ``st.set_page_config`` to be called again in a run, and the last call
+    wins, as the tracker's does.
+    """
+    st.set_page_config(layout="wide" if current == _REVIEW else "centered")
     placeholder.markdown(steps_markdown(current), text_alignment="center")

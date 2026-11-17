@@ -33,18 +33,28 @@ def _local_settings_file() -> Path:
     return Path.home() / ".finance_pii_redactor" / "settings.json"
 
 
+def _read_local_settings() -> dict[str, object]:
+    """Return the per-user settings, or ``{}`` if missing or unreadable."""
+    try:
+        loaded = json.loads(_local_settings_file().read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, ValueError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _update_local_settings(**values: object) -> None:
+    """Merge ``values`` into the per-user settings file, keeping other keys."""
+    data = _read_local_settings()
+    data.update(values)
+    settings_file = _local_settings_file()
+    settings_file.parent.mkdir(parents=True, exist_ok=True)
+    settings_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
 def read_persisted_master_list_dir() -> Path | None:
     """Return the master-list folder saved via the in-app setup dialog, if any."""
-    try:
-        raw = _local_settings_file().read_text(encoding="utf-8")
-    except (FileNotFoundError, OSError):
-        return None
-    try:
-        data = json.loads(raw)
-    except ValueError:
-        return None
-    value = data.get("master_list_dir") if isinstance(data, dict) else None
-    return Path(value) if value else None
+    value = _read_local_settings().get("master_list_dir")
+    return Path(value) if isinstance(value, str) and value else None
 
 
 def save_master_list_dir(path: Path) -> None:
@@ -54,17 +64,21 @@ def save_master_list_dir(path: Path) -> None:
     and applies on the very next read - no environment variable, registry
     change, or app restart required.
     """
-    settings_file = _local_settings_file()
-    data: dict[str, object] = {}
-    try:
-        loaded = json.loads(settings_file.read_text(encoding="utf-8"))
-        if isinstance(loaded, dict):
-            data = loaded
-    except (FileNotFoundError, OSError, ValueError):
-        pass
-    data["master_list_dir"] = str(path)
-    settings_file.parent.mkdir(parents=True, exist_ok=True)
-    settings_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    _update_local_settings(master_list_dir=str(path))
+
+
+def master_list_setup_skipped() -> bool:
+    """Return True if the user chose "Skip for now" on the 0-names dialog."""
+    return _read_local_settings().get("master_list_setup_skipped") is True
+
+
+def set_master_list_setup_skipped(skipped: bool) -> None:
+    """Remember (or forget) the 0-names dialog's "Skip for now" across launches.
+
+    ``app.py`` clears it as soon as a list loads with names, so a later
+    return to 0 names (a moved or renamed workbook) prompts again.
+    """
+    _update_local_settings(master_list_setup_skipped=skipped)
 
 
 def _resolve_data_dir() -> Path:
@@ -195,6 +209,11 @@ class Settings:
     fixed_masks: Mapping[str, str] = _DEFAULT_FIXED_MASKS
     custom_match_score: float = 0.9
     default_threshold: float = 0.35
+    # Highest value the Confidence threshold slider allows. Equal to the score
+    # of the bank-account, M-Pesa and SWIFT patterns (financial_recognizers.py),
+    # so no slider setting can stop those being masked. It also stays below
+    # custom_match_score, so master-list names always match.
+    max_threshold: float = 0.85
     fuzzy_match_threshold: float = 0.84
     # Confidence shown for an ad-hoc "words to redact" match (domain/custom_words.py) -
     # an exact, user-typed term is maximal confidence, unlike a spaCy model guess.

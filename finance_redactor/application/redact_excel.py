@@ -9,6 +9,7 @@ orchestration - no pandas I/O (that lives in the Excel gateway) and no Streamlit
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping
 
 import pandas as pd
@@ -28,6 +29,13 @@ from finance_redactor.domain.pseudonyms import (
     apply_replacements,
     normalize,
 )
+
+# The row a header cell sits in, in a sheet's highlighted (row, column) keys.
+# Data rows start at 0; the writer puts row ``r`` on sheet row ``r + 2``, so
+# this lands on sheet row 1, the header.
+HEADER_ROW = -1
+# pandas' name for a column whose header cell is blank; the writer blanks it.
+_BLANK_HEADER = re.compile(r"Unnamed: \d+")
 
 
 class RedactExcelService:
@@ -95,26 +103,36 @@ class RedactExcelService:
         threshold: float,
         on_progress: Callable[[int, int], None] | None = None,
     ) -> WorkbookScanResult:
-        """Scan the chosen columns of every tab, plus the tab names themselves.
+        """Scan the chosen columns of every tab, plus tab names and headers.
 
         One cache spans the whole workbook, so a name repeated across tabs is
         analyzed once. ``columns_by_sheet`` lists the columns to scan per tab.
+        Every column header of a tab is scanned, chosen or not: the whole tab
+        goes into the download, headers included, and a payee's name used as
+        a header is still a name.
         """
         sheet_cells = {
             name: _cells(df, columns_by_sheet.get(name, []))
             for name, df in sheets.items()
         }
+        sheet_headers = {name: _header_texts(df) for name, df in sheets.items()}
         unique_texts = dict.fromkeys(
             [text for cells in sheet_cells.values() for _, _, text in cells]
             + list(sheets)
+            + [text for texts in sheet_headers.values() for text in texts]
         )
         cache = self._analyze(list(unique_texts), entities, threshold, on_progress)
+        headers = {
+            name: {text: cache[text] for text in texts if cache[text]}
+            for name, texts in sheet_headers.items()
+        }
         return WorkbookScanResult(
             sheets={
                 name: ExcelScanResult(_findings(cells, cache))
                 for name, cells in sheet_cells.items()
             },
             tab_names={name: cache[name] for name in sheets if cache[name]},
+            headers={name: found for name, found in headers.items() if found},
         )
 
     def _analyze(
@@ -172,31 +190,71 @@ class RedactExcelService:
         on several tabs maps to one pseudonym and one crosswalk row. Tabs come
         back as a list in tab order, not a dict: two tab names can redact to
         the same text, and a dict would silently drop one of the tabs.
-        ``exclude`` applies to cells and tab names alike.
+        ``exclude`` applies to cells, tab names and headers alike.
+
+        A redacted header renames its column in the returned data, and the
+        highlighted keys use the new name. The header cell itself is
+        highlighted as row :data:`HEADER_ROW`.
         """
         pseudonymizer = self._new_pseudonymizer()
         redacted_sheets = []
         for name, df in sheets.items():
             sheet_scan = scan_result.sheets[name]
+            tab_name = self._replace(
+                name, scan_result.tab_names.get(name, []), exclude, pseudonymizer
+            )
+            data = self._redact_sheet(
+                df,
+                sheet_scan,
+                columns_by_sheet.get(name, []),
+                exclude,
+                pseudonymizer,
+            )
+            renamed = self._renamed_headers(
+                df, scan_result.headers.get(name, {}), exclude, pseudonymizer
+            )
             redacted_sheets.append(
                 RedactedSheet(
-                    name=self._replace(
-                        name,
-                        scan_result.tab_names.get(name, []),
-                        exclude,
-                        pseudonymizer,
-                    ),
-                    data=self._redact_sheet(
-                        df,
-                        sheet_scan,
-                        columns_by_sheet.get(name, []),
-                        exclude,
-                        pseudonymizer,
-                    ),
-                    highlighted=sheet_scan.cell_keys(),
+                    name=tab_name,
+                    data=data.rename(columns=renamed),
+                    highlighted={
+                        (row, renamed.get(col, col))
+                        for row, col in sheet_scan.cell_keys()
+                    }
+                    | {(HEADER_ROW, new) for new in renamed.values()},
                 )
             )
         return redacted_sheets, pseudonymizer.crosswalk()
+
+    def _renamed_headers(
+        self,
+        df: pd.DataFrame,
+        found: Mapping[str, list[PiiDetection]],
+        exclude: frozenset[str],
+        pseudonymizer: Pseudonymizer,
+    ) -> dict[object, str]:
+        """``{original column: redacted header}`` for every header that changed.
+
+        Two headers can redact to the same text (the same name in different
+        case), and a DataFrame cannot hold two columns of one name, so a
+        clash gets `` (2)``, `` (3)`` and so on.
+        """
+        renamed: dict[object, str] = {}
+        for col in df.columns:
+            if str(col) not in found:
+                continue
+            new = self._replace(str(col), found[str(col)], exclude, pseudonymizer)
+            if new != str(col):
+                renamed[col] = new
+        taken = {str(col) for col in df.columns if col not in renamed}
+        for original, new in renamed.items():
+            label, attempt = new, 1
+            while label in taken:
+                attempt += 1
+                label = f"{new} ({attempt})"
+            taken.add(label)
+            renamed[original] = label
+        return renamed
 
     def _new_pseudonymizer(self) -> Pseudonymizer:
         return Pseudonymizer(
@@ -237,24 +295,37 @@ class RedactExcelService:
         for col in {cell.column for cell in scan_result.findings} & set(columns):
             if redacted[col].dtype != object:
                 redacted[col] = redacted[col].astype(object)
+        # ``cell.row`` is a position (see ``_cells``), so read and write by
+        # position too; ``.at`` would look it up as an index label.
+        col_positions = {col: pos for pos, col in enumerate(df.columns)}
         for cell in scan_result.findings:
             if cell.column not in columns:
                 continue
-            text = _cell_text(df.at[cell.row, cell.column])
+            col_pos = col_positions[cell.column]
+            text = _cell_text(df.iat[cell.row, col_pos])
             replaced = self._replace(text, cell.detections, exclude, pseudonymizer)
             if replaced != text:
-                redacted.at[cell.row, cell.column] = replaced
+                redacted.iat[cell.row, col_pos] = replaced
         return redacted
 
 
 def _cells(df: pd.DataFrame, columns: list[str]) -> list[tuple[int, str, str]]:
-    """``(row, column, text)`` for every cell of the named columns."""
+    """``(row, column, text)`` for every cell of the named columns.
+
+    ``row`` is the row's position (0 for the first data row), not its index
+    label: the writer and the preview place cells by position.
+    """
     return [
         (row_idx, col, _cell_text(value))
         for col in columns
         if col in df.columns
         for row_idx, value in enumerate(df[col])
     ]
+
+
+def _header_texts(df: pd.DataFrame) -> list[str]:
+    """Header text of every column, skipping pandas' ``Unnamed: N`` for a blank one."""
+    return [str(col) for col in df.columns if not _BLANK_HEADER.fullmatch(str(col))]
 
 
 def _findings(

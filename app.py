@@ -37,14 +37,22 @@ from finance_redactor.presentation.docx_view import run_docx_flow
 from finance_redactor.presentation.excel_view import run_excel_flow
 from finance_redactor.presentation.master_list_setup import (
     render_master_list_setup_dialog,
+    should_offer_setup,
 )
 from finance_redactor.presentation.master_list_view import render_master_list_card
 from finance_redactor.presentation.pdf_view import run_pdf_flow
+from finance_redactor.presentation.session import UPLOAD_IDENTITY_KEY, upload_identity
 from finance_redactor.presentation.shutdown import render_quit_control
 from finance_redactor.presentation.steps import show_step
 
 # Resolved from this file, not the CWD - run.bat launches from anywhere.
 _LOGO = Path(__file__).parent / "assets" / "data-privacy-ai-dark-nobg.svg"
+# Streamlit gives a keyed container the class st-key-<key>. #0E1117 is the
+# dark theme's background; white on it is 18.9:1.
+_LOGO_PANEL_CSS = (
+    "<style>.st-key-sidebar_logo {background: #0E1117; "
+    "border-radius: 0.75rem; padding: 0.75rem;}</style>"
+)
 _HELP_URL = "https://github.com/ThuoBrian/finance-pii-redactor/blob/main/docs/troubleshooting.md"
 
 
@@ -140,18 +148,19 @@ def _main() -> None:
     # A brand-new install (or one whose FPR_MASTER_LIST_DIR/persisted setting
     # is missing, wrong, or not yet synced) loads 0 names - offer the in-app
     # setup dialog right away instead of leaving the user to discover
-    # data/README.md's manual env-var steps on their own. Dismissible per
-    # session (via the dialog's own buttons) so it doesn't reappear on every
-    # rerun for someone who intentionally isn't using a shared list.
-    if sum(name_counts.values()) == 0 and not st.session_state.get(
-        "master_list_setup_dismissed", False
-    ):
+    # data/README.md's manual env-var steps on their own. "Skip for now" is
+    # remembered across launches until a list loads (see should_offer_setup).
+    if should_offer_setup(has_names=sum(name_counts.values()) > 0):
         render_master_list_setup_dialog(settings.names_dir)
 
     with st.sidebar:
         # A full-width image, not st.logo: the logo is a wide illustration,
-        # and st.logo's 24px-high slot shrinks it past recognition.
-        st.image(str(_LOGO), width="stretch")
+        # and st.logo's 24px-high slot shrinks it past recognition. It is
+        # white-on-transparent and there is no light version, so it sits on
+        # its own dark panel, which reads in the light and the dark theme.
+        st.html(_LOGO_PANEL_CSS)
+        with st.container(key="sidebar_logo"):
+            st.image(str(_LOGO), width="stretch")
         st.markdown("### Finance PII Redactor")
         render_master_list_card(
             name_counts,
@@ -164,10 +173,8 @@ def _main() -> None:
         )
         st.caption(f":green[●] Everything stays on this computer · [Help]({_HELP_URL})")
         # Nothing to start over from until a file is in.
-        if st.session_state.get(wizard.upload_key()) is not None and st.button(
-            "Start over", width="stretch", key="sidebar_start_over"
-        ):
-            wizard.start_over()
+        if st.session_state.get(wizard.upload_key()) is not None:
+            wizard.render_start_over()
     render_quit_control()
 
     steps = st.empty()
@@ -189,8 +196,8 @@ def _main() -> None:
     )
     with holder:
         uploaded = st.file_uploader(
-            "Upload a file (.xlsx, .xls, .pdf, or .docx)",
-            type=["xlsx", "xls", "pdf", "docx"],
+            "Upload a file (.xlsx, .pdf, or .docx)",
+            type=["xlsx", "pdf", "docx"],
             help="The file is processed entirely on your machine.",
             key=wizard.upload_key(),
             # The step heading above says the same; the label stays for
@@ -203,11 +210,16 @@ def _main() -> None:
             st.rerun()
         st.stop()
     if on_upload_step:
-        wizard.go(wizard.OPTIONS)
+        # A new file moves on by itself. The same file again means the user
+        # came Back from Options (to look, or to swap the file): wait.
+        if upload_identity(uploaded) != st.session_state.get(UPLOAD_IDENTITY_KEY):
+            wizard.go(wizard.OPTIONS)
+        wizard.nav(forward=("Continue to options", wizard.OPTIONS))
+        st.stop()
 
     extension = uploaded.name.rsplit(".", 1)[-1].lower()
 
-    if extension in {"xlsx", "xls"}:
+    if extension == "xlsx":
         run_excel_flow(
             uploaded,
             excel_service=RedactExcelService(
@@ -256,7 +268,10 @@ def _main() -> None:
             steps=steps,
         )
     else:
-        st.error("Unsupported file type. Please upload an Excel, PDF, or Word file.")
+        st.error(
+            "Unsupported file type. Please upload an Excel (.xlsx), PDF, or Word "
+            "file. An older .xls workbook can be re-saved as .xlsx from Excel."
+        )
         st.stop()
 
 

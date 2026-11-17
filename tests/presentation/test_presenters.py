@@ -21,8 +21,11 @@ from finance_redactor.presentation.presenters import (
     CHANGED_MARKER,
     HIGHLIGHT_HEX,
     apply_notice,
+    carried_over_notice,
+    carry_over_exclusions,
     crosswalk_dataframe,
     detection_editor_dataframe,
+    entity_label,
     excel_findings_dataframe,
     excluded_terms,
     filter_editor_rows,
@@ -30,6 +33,8 @@ from finance_redactor.presentation.presenters import (
     formatting_note,
     merge_findings,
     merge_pending,
+    not_located_warning,
+    pdf_job_size_note,
     pdf_mapping_dataframe,
     pdf_mapping_notes,
     pdf_mapping_with_names_dataframe,
@@ -184,12 +189,12 @@ def test_unresolved_row_gets_the_auto_token_not_a_blank() -> None:
     df = pdf_mapping_dataframe(
         [
             _assignment(
-                pseudonym="CST-AUTO-3F9A1", auto=True, internal_id=None, category=""
+                pseudonym="CST-AUTO-3F9A1C07", auto=True, internal_id=None, category=""
             )
         ]
     )
 
-    assert df.loc[0, "Internal ID"] == "CST-AUTO-3F9A1"
+    assert df.loc[0, "Internal ID"] == "CST-AUTO-3F9A1C07"
     assert df.loc[0, "Flagged"] == "not in master list"
     assert _DISTINCTIVE not in df.to_csv(index=False)
 
@@ -199,7 +204,7 @@ def test_ambiguous_row_is_flagged_distinctly_from_a_plain_orphan() -> None:
     df = pdf_mapping_dataframe(
         [
             _assignment(
-                pseudonym="CST-AUTO-3F9A1",
+                pseudonym="CST-AUTO-3F9A1C07",
                 auto=True,
                 internal_id=None,
                 ambiguous=True,
@@ -293,7 +298,7 @@ def test_editor_reports_the_source_so_the_user_knows_which_fix_applies() -> None
 
     table = detection_editor_dataframe(findings)
 
-    assert set(table["Source"]) == {"master list", "pattern match"}
+    assert set(table["Source"]) == {"Master list", "Pattern match"}
 
 
 def test_editor_defaults_to_redacting_everything() -> None:
@@ -353,25 +358,31 @@ def _workbook_scan() -> WorkbookScanResult:
             "Feb": ExcelScanResult(findings=[]),
         },
         tab_names={"Feb": [_detection("Acme Ltd")]},
+        headers={"Jan": {"Pat Example": [_detection("Pat Example")]}},
     )
 
 
-def test_scan_result_findings_flattens_excel_cells_and_tab_names() -> None:
-    """Excel shares the editor, so cell and tab-name findings become Findings."""
+def test_scan_result_findings_flattens_excel_cells_tab_names_and_headers() -> None:
+    """Excel shares the editor, so every Excel finding becomes a Finding."""
     flattened = scan_result_findings(_workbook_scan())
 
-    assert [f.detected_text for f in flattened] == ["Jane Doe", "Acme Ltd"]
-    assert flattened[0].page == 4
-    assert flattened[1].page == -1
+    assert [f.detected_text for f in flattened] == [
+        "Jane Doe",
+        "Acme Ltd",
+        "Pat Example",
+    ]
+    assert [f.page for f in flattened] == [4, -1, -1]
 
 
 def test_excel_findings_dataframe_names_the_sheet_for_every_finding() -> None:
     table = excel_findings_dataframe(_workbook_scan())
 
-    assert list(table["Sheet"]) == ["Jan", "Feb"]
+    assert list(table["Sheet"]) == ["Jan", "Feb", "Jan"]
     assert table.loc[0, "Row"] == 5
     assert table.loc[1, "Column"] == "(tab name)"
     assert pd.isna(table.loc[1, "Row"])
+    assert table.loc[2, "Column"] == "Pat Example (header)"
+    assert pd.isna(table.loc[2, "Row"])
 
 
 def test_the_default_pdf_mapping_header_is_pinned_without_any_name_column() -> None:
@@ -411,7 +422,7 @@ def test_the_opt_in_mapping_adds_the_name_and_keeps_the_same_rows() -> None:
 
 def test_the_opt_in_mapping_shows_unresolved_rows_and_the_possible_match() -> None:
     assignment = _assignment(
-        pseudonym="CST-AUTO-3F9A1",
+        pseudonym="CST-AUTO-3F9A1C07",
         auto=True,
         internal_id=None,
         category="",
@@ -422,7 +433,7 @@ def test_the_opt_in_mapping_shows_unresolved_rows_and_the_possible_match() -> No
 
     named = pdf_mapping_with_names_dataframe([assignment])
 
-    assert named.loc[0, "Internal ID"] == "CST-AUTO-3F9A1"
+    assert named.loc[0, "Internal ID"] == "CST-AUTO-3F9A1C07"
     assert named.loc[0, "Flagged"] == "not in master list"
     assert named.loc[0, "Possible match"] == "Michael Sample (STF-12345, 92% match)"
 
@@ -517,7 +528,7 @@ def test_filter_shows_one_source_and_all_by_default() -> None:
 
     assert len(filter_editor_rows(table, None)) == 7
     assert len(filter_editor_rows(table, "All")) == 7
-    assert set(filter_editor_rows(table, "Model guesses")["Source"]) == {"model"}
+    assert set(filter_editor_rows(table, "Model guesses")["Source"]) == {"Model guess"}
     assert len(filter_editor_rows(table, "Model guesses")) == 4
 
 
@@ -547,15 +558,14 @@ def test_review_comes_first_and_counts_the_model_guesses() -> None:
     findings = _mixed_findings()  # 4 model guesses among 7 terms
 
     assert review_tab_labels(findings) == [
-        "Review (4 to check)",
-        "Code list",
-        "Where found",
+        "Review (7 terms, 4 to check)",
+        "Mapping",
     ]
     assert review_tab_labels(findings, preview=True)[1] == "Preview"
 
 
 def test_review_tab_label_has_no_count_when_nothing_is_a_guess() -> None:
-    assert review_tab_labels([_finding("Care Organisation")])[0] == "Review"
+    assert review_tab_labels([_finding("Care Organisation")])[0] == "Review (1 term)"
     assert review_tab_labels([])[0] == "Review"
 
 
@@ -615,6 +625,71 @@ def test_apply_notice_says_what_was_left_visible() -> None:
     )
 
 
+def test_apply_notice_never_says_all_hidden_when_a_term_was_not_found() -> None:
+    notice = apply_notice(frozenset(), not_located=2)
+
+    assert "Every detected term is hidden" not in notice
+    assert "2 detected terms were not found on the page" in notice
+
+
+def _unlocated(page: int, text: str) -> Finding:
+    return Finding(
+        page=page,
+        detected_text=text,
+        entity_type="PERSON",
+        score=1.0,
+        source=DetectionSource.CUSTOM,
+    )
+
+
+def test_not_located_warning_names_the_terms_and_pages() -> None:
+    warning = not_located_warning(
+        [_unlocated(2, "Zorbo Quillfeather"), _unlocated(0, "Ann Example")]
+    )
+
+    assert warning.startswith("**2 detected terms could not be found on the page")
+    assert "(page 1, 3)" in warning
+    assert "`Ann Example`, `Zorbo Quillfeather`" in warning
+
+
+def _job_note(scanned: int, total: int, reading_scans: bool = True) -> str:
+    return pdf_job_size_note(
+        scanned,
+        total,
+        reading_scans=reading_scans,
+        seconds_per_page=6.0,
+        large_pages=300,
+    )
+
+
+def test_pdf_job_size_note_estimates_ocr_time_for_many_scans() -> None:
+    note = _job_note(25, 40)
+
+    # 25 pages at 6 seconds is 150 seconds: rounded up to 3 minutes.
+    assert note.startswith("**25 scanned pages, about 3 minutes to read.**")
+    assert "This PDF has" not in note
+
+
+def test_pdf_job_size_note_stays_quiet_under_a_minute() -> None:
+    assert _job_note(9, 9) == ""  # 54 seconds
+    assert _job_note(10, 10).startswith("**10 scanned pages, about 1 minute")
+
+
+def test_pdf_job_size_note_skips_the_estimate_when_scans_are_not_read() -> None:
+    assert _job_note(200, 200, reading_scans=False) == ""
+
+
+def test_pdf_job_size_note_warns_about_a_very_long_pdf() -> None:
+    note = _job_note(0, 300)
+
+    assert note.startswith("**This PDF has 300 pages.**")
+    assert _job_note(0, 299) == ""
+
+
+def test_not_located_warning_is_empty_when_everything_was_found() -> None:
+    assert not_located_warning([]) == ""
+
+
 def test_findings_from_before_a_module_reload_still_sort_and_hint() -> None:
     """Streamlit re-imports changed modules, so a finding kept in session state
     can hold a member of an older copy of ``DetectionSource``. It is equal in
@@ -640,7 +715,7 @@ def test_findings_from_before_a_module_reload_still_sort_and_hint() -> None:
 
     assert list(table["Detected text"]) == ["Across", "Care Organisation"]
     assert table.loc[0, "Hint"] == "ordinary word"
-    assert review_tab_labels(findings)[0] == "Review (1 to check)"
+    assert review_tab_labels(findings)[0] == "Review (2 terms, 1 to check)"
 
 
 def test_scanned_pages_warning_says_what_happens_to_the_pages() -> None:
@@ -648,7 +723,7 @@ def test_scanned_pages_warning_says_what_happens_to_the_pages() -> None:
     off = scanned_pages_warning([0, 2], 3, images_blacked_out=False)
 
     assert on.startswith("**1 of 3 pages is a scan** (page 1)")
-    assert "fully black" in on
+    assert "scanned image on that page is blacked out" in on
     assert off.startswith("**2 of 3 pages are scans** (page 1, 3)")
     assert "unredacted" in off
 
@@ -741,7 +816,7 @@ def test_pdf_mapping_notes_cover_missing_and_ambiguous_items() -> None:
             original_name="Zzyzx Qwertyson",
             entity_type="PERSON",
             category="",
-            pseudonym="PSN-AUTO-1A2B3",
+            pseudonym="PSN-AUTO-1A2B3C4D",
             auto=True,
             ordinal=1,
             internal_id=internal_id,
@@ -754,3 +829,73 @@ def test_pdf_mapping_notes_cover_missing_and_ambiguous_items() -> None:
     assert "1 redacted item not on the master list" in notes[0]
     assert "matched more than one" in notes[1]
     assert pdf_mapping_notes([item(False, "17728")]) == []
+
+
+def test_carry_over_keeps_only_unticked_terms_the_new_scan_found_again() -> None:
+    previous = frozenset({"salaries", "acme sample ltd"})
+    findings = [_finding("SALARIES"), _finding("Jane Test")]
+
+    assert carry_over_exclusions(previous, findings) == frozenset({"salaries"})
+
+
+def test_carry_over_of_nothing_is_nothing() -> None:
+    assert carry_over_exclusions(frozenset(), [_finding("Salaries")]) == frozenset()
+
+
+def test_carried_over_notice_says_the_terms_stay_visible() -> None:
+    one = carried_over_notice(frozenset({"salaries"}))
+    two = carried_over_notice(frozenset({"salaries", "totals"}))
+
+    assert one.startswith("Kept 1 term you unticked last time: `salaries`.")
+    assert "It stays visible" in one and "to hide it." in one
+    assert "They stay visible" in two and "to hide them." in two
+
+
+def test_where_found_tables_read_as_words_not_codes() -> None:
+    findings = [
+        Finding(
+            page=0,
+            detected_text="someone@example.org",
+            entity_type="EMAIL_ADDRESS",
+            score=1.0,
+            source=DetectionSource.CUSTOM,
+        )
+    ]
+
+    row = findings_dataframe(findings, "Page").iloc[0]
+
+    assert (row["Entity type"], row["Source"]) == ("Email address", "Typed word")
+
+
+def test_every_source_has_a_readable_label() -> None:
+    from finance_redactor.presentation.presenters import source_label
+
+    labels = {source_label(source) for source in DetectionSource}
+
+    assert len(labels) == len(DetectionSource)
+    assert all(label[0].isupper() and "_" not in label for label in labels)
+
+
+@pytest.mark.parametrize(
+    ("entity_type", "label", "why"),
+    [
+        ("URL", "Website", "Shaped like a website"),
+        ("IBAN_CODE", "IBAN", "Shaped like an IBAN"),
+        ("MPESA_NUMBER", "M-Pesa number", "Shaped like an M-Pesa number"),
+        ("KE_BANK_ACCOUNT", "Kenyan bank account", "Shaped like a Kenyan bank account"),
+        ("EMAIL_ADDRESS", "Email address", "Shaped like an email address"),
+    ],
+)
+def test_entity_codes_read_as_plain_words(
+    entity_type: str, label: str, why: str
+) -> None:
+    finding = Finding(
+        page=0,
+        detected_text="made-up value",
+        entity_type=entity_type,
+        score=1.0,
+        source=DetectionSource.PATTERN,
+    )
+
+    assert entity_label(entity_type) == label
+    assert why_found(finding) == why

@@ -8,6 +8,13 @@ the `version` field in `pyproject.toml`.
 
 ### Added
 
+- **PDF and Word scans show live progress**, like Excel's. The scanning box
+  now has a progress bar ("12 of 40 pages checked", or paragraphs for Word),
+  so a long OCR run no longer looks frozen.
+- **A Back button on the Options step**, in all three formats. It returns to
+  Upload with the file still loaded: **Continue to options** carries on with
+  your choices, and dropping in a different file starts that one fresh.
+  Before, the folded file box was the only way back.
 - **Whole table columns can be redacted in a PDF.** When a PDF holds a table,
   the Review step lists its columns under "Table columns to redact in full".
   Every entry in a chosen column gets a label, like a found name, and goes into
@@ -16,6 +23,11 @@ the `version` field in `pyproject.toml`.
   (Payee, Account No, Phone) start chosen. Tables on text pages are found by
   PyMuPDF. On scanned pages they're worked out from where the OCR'd lines sit.
   Changing the choice rebuilds the file without scanning again.
+- **The PDF Options step says up front when a run will be long.** When
+  reading the scanned pages would take a minute or more, it estimates the
+  time ("25 scanned pages, about 3 minutes to read", at a cautious 6
+  seconds a page). A PDF of 300 pages or more gets a warning to split it,
+  since a run cannot be stopped halfway.
 - **Scanned PDF pages are read with OCR.** A scanned page used to be either
   fully black or unredacted. Now its printed text is read (RapidOCR on ONNX
   Runtime; models ship with the package and run offline), names in it are
@@ -23,7 +35,7 @@ the `version` field in `pyproject.toml`.
   could not read with confidence (signatures, handwriting, stamps) is covered
   by a solid black box, so a signature's shape does not show. The page comes
   out as a single cleaned picture, with nothing hidden from the original. On
-  by default, under Customize as "Read the text on scanned pages"; about two
+  by default, under Customize as "Read the text on scanned pages"; several
   seconds a page. The Review step lists the pages read with OCR to check.
   Installing grows by about 100 MB (`rapidocr`, `onnxruntime`, OpenCV
   headless and Shapely).
@@ -59,9 +71,9 @@ the `version` field in `pyproject.toml`.
   machines let shortcut creation report success without writing anything),
   and `run.bat` re-creates the Desktop shortcut on launch if it's missing,
   for anyone who skipped the installer or deleted it.
-- **The app defaults to Streamlit's dark theme** (`.streamlit/config.toml`),
-  since the logo (`assets/data-privacy-ai-dark-nobg.svg`) is a white-on-
-  transparent SVG and was invisible on the default light background.
+- **The logo reads in both themes.** It is a white-on-transparent SVG
+  (`assets/data-privacy-ai-dark-nobg.svg`) and was invisible on a light
+  background, so the sidebar draws it on its own dark panel.
 - **A "Close the app" button in the sidebar** (`presentation/shutdown.py`)
   fully quits the tool from the browser, with one confirm step. Closing only
   the browser tab, or only the console window, used to leave the other one
@@ -82,10 +94,90 @@ the `version` field in `pyproject.toml`.
 
 ### Changed
 
+- **The Review step uses the full width of the window.** Measured in the
+  centered column, a 10-column Excel preview showed 4 columns and the review
+  table's **Show details** view hid 3 of its 8. Review now switches to the
+  wide layout; Upload, Options and Download stay centered.
+- **The app follows your light or dark preference.** Dark mode was forced
+  for the logo's sake. `.streamlit/config.toml` now defines a light and a
+  dark theme with the same blue accent, and the app follows each person's
+  system setting. The logo sits on a dark panel that works in both.
+- **Consistent, readable wording across the steps.** The step tracker says
+  "Options", like the page. The Review tab counts every term as well as the
+  guesses ("Review (57 terms, 2 to check)"), so it no longer reads as a
+  smaller job than it is. The mapping is called "mapping" everywhere: the
+  "Code list" tab is now **Mapping**. Tables on screen show "Email address"
+  and "Model guess" rather than `EMAIL_ADDRESS` and `model`, and codes that
+  read badly when capitalized get proper names ("Website", "IBAN", "M-Pesa
+  number", "Added term" instead of "Url", "Iban code", "Mpesa number",
+  "Custom"), here and in the kinds-of-information picker; the downloaded
+  CSVs keep the raw codes. An empty Review tab says nothing was found, and
+  the "Nothing here is a guess" note now also lists table columns you chose.
+  The **Hide in output?** column keeps its name: it was renamed from
+  "Redact?" on purpose, and a tick means hidden, which matches every warning
+  about terms that "will not be hidden".
+- **Each Download card does one job.** The PDF's **Safe to share** card holds
+  the download button and one line about it. The label mapping moved under
+  the cards as its own **Label mapping** section, with the note about the
+  PDF's own bracketed numbers folded into it; a PDF with nothing labelled now
+  says there is no mapping file instead of showing nothing. Excel's
+  formatting note folds under **What is not carried over**, and the warning
+  about tabs left out names the first two and "+ N more" instead of every
+  tab.
+- **The "Where found" tab is gone from Review.** The per-occurrence table
+  (page, cell or paragraph of every match) is folded under **Where each term
+  was found** at the bottom of the Review step, in all three formats. Review
+  now has two tabs (three in Excel, with Preview).
+- **The sidebar's master-list card is flatter.** **Refresh** sits on the card
+  instead of inside a "Location and refresh" expander; the workbook's path
+  and how to edit it fold into one **Where it is** expander. The summary line
+  and the "things to tidy" badge are unchanged. `data/README.md` no longer
+  points to an "Advanced settings" panel for the data-quality findings.
+- **The Review step does one job: checking what was found.** The PDF's
+  "Before you share this PDF" box (items the mapping can't decode, scanned
+  pages) moved to the Download step, next to the files. Review keeps the
+  warnings that change what you check: scanned pages to look at, and terms
+  that could not be found on the page (shown on Download too). The words box
+  and the PDF table-column picker now share one folded box, **Add something
+  the tool missed (most files need nothing here)**, under the review table;
+  the column picker shows only when the PDF has a table.
+- **Start over asks first.** The sidebar's **Start over** used to drop the
+  file, findings, review choices and downloads on one click. It now asks for
+  confirmation, like **Close the app**, and says what will be lost.
+- **The launch window points to "Close the app".** When the app starts, the
+  terminal window now says to stop it with the **Close the app** button in
+  the sidebar, on Windows and macOS/Linux alike.
+- **CI also runs on macOS**, so a dependency that ships no macOS build fails
+  there rather than on a user's Mac.
+- **Behavior change: auto-generated codes are longer, so every one differs
+  from earlier runs.** A name not on the master list gets a flagged code made
+  from a hash of the name. That hash part is now 8 characters instead of 5
+  (`PSN-AUTO-3F9A1C07`, not `PSN-AUTO-3F9A1`), because with 5 two different
+  names in one file could share a code and be merged in the crosswalk.
+  Every `*-AUTO-*` code changes, including for names already processed, so
+  codes in older outputs or crosswalks won't match new runs: re-run a file
+  rather than comparing its codes with older ones. Curated `STF-`/`VND-`/
+  `FND-` codes and PDF labels (`[001]`) are unchanged.
+- **A warning before a large Excel scan.** When the chosen columns hold 3,000
+  or more distinct values, or the workbook has 500,000 or more cells, the
+  Options step says so before you start, with a rough time (about 30 to 60
+  values a second) and a note that fewer tabs or columns make it quicker.
+- **Long Excel tabs can be paged through in the preview.** The preview stopped
+  at 500 rows with a small caption. A longer tab now gets a "Rows to preview"
+  picker (500 rows at a time) and a clear note saying how many rows and
+  highlighted cells are off screen, and that the download has every row.
+- **One column picker for every Excel tab.** The Options step drew a
+  "Columns to scan" box for each tab, so a 10-tab workbook stacked ten of
+  them. Now "Which tab's columns?" picks the tab and one box shows its
+  columns; each tab keeps its own choice. The tab list above it shows the
+  first two names and "+ N more" instead of every name, and a note names any
+  tab left with no columns chosen.
 - **A calmer, narrower page.** The app now uses Streamlit's centered layout
   instead of stretching across the whole screen, so tables, captions and
-  buttons stay in one readable column. The Excel preview shows the redacted
-  table above the original instead of squeezing them side by side.
+  buttons stay in one readable column. The Excel preview shows one full-width
+  table at a time: "Redacted" first, and a "Compare with original" tab next
+  to it switches to the original, instead of squeezing the two side by side
+  or stacking them.
 - **A tidier sidebar.** The logo is shown full width, where it can be seen.
   The master-list card fits on one line, with the file location and Refresh
   folded under "Location and refresh". Help is a link next to the privacy
@@ -218,6 +310,124 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **The sidebar buttons no longer drop the uploaded file.** Refresh on the
+  master-list card, and Cancel under Close the app, emptied the upload box
+  and sent you back to Upload, losing the review in progress. The sidebar is
+  drawn before the upload box, and those buttons restarted the page before
+  the box was drawn. They now act without restarting it. Start over's new
+  confirm step works the same way.
+- **Word's confidence slider stops at 0.85**, like Excel's. (PDF has no
+  confidence slider; it runs at fixed settings.)
+- **Going back to Options and redacting again keeps your review.** Changing
+  one option used to wipe every untick from the Review step. Terms you
+  unticked, and PDF table columns you added, now carry over to the new run
+  when it finds them again, and a note on Review lists the kept terms.
+- **A Word file uploaded after a PDF no longer keeps the PDF's results in
+  memory.** Each format cleared a different list of earlier results on a new
+  upload, and Word's left out every PDF one. All three now clear the same
+  list, including half-finished review ticks.
+- **A file edited and uploaded again under the same name is scanned again.**
+  The app used to treat an upload as new only when its name changed, so a
+  corrected `report.pdf` uploaded over the old one showed the old scan,
+  review and download. An upload is now identified by its name, size and a
+  hash of its contents.
+- **Intel Macs get a clear message instead of a setup error.** `install.sh`
+  and `run.sh` now stop on an Intel Mac and say the tool isn't supported
+  there. onnxruntime, used to read scanned pages, publishes no Intel-Mac
+  build, so setup used to fail partway with an unreadable uv error.
+- **The upload box no longer offers `.xls`.** Old-format workbooks were always
+  rejected as unreadable. The box now lists only `.xlsx`, `.pdf` and `.docx`,
+  and the error for other files says to re-save a `.xls` as `.xlsx`.
+- **Word first-page and even-page headers and footers are redacted.** Only the
+  default header and footer of each section were scanned, so a name in a
+  "Different first page" or "Different odd and even pages" header or footer
+  came through unchanged. All six are scanned now. A Word file with no header
+  or footer no longer gets an empty one added.
+- **Word tracked changes, comments, footnotes and endnotes no longer leak.**
+  Text added with Track Changes on was never checked, and deleted text stayed
+  in the file, along with the reviewer's name. Comments, and who wrote them,
+  were never touched, and nor were footnotes or endnotes. Now tracked changes
+  are accepted before the scan (added text is checked, deleted text dropped),
+  comments and the reviewer list are removed, and footnotes and endnotes are
+  checked like the body. The redacted file has no comments or change history;
+  see the troubleshooting guide.
+- **Master-list rows with the wrong Category are reported, not dropped
+  silently.** A row whose `Category` cell doesn't match its sheet (blank, a
+  different word, or no `Category` column at all) was skipped with no sign,
+  so that name was never detected. Such rows are still not loaded, but the
+  master-list card now lists them under "things to tidy" ("N row(s) skipped
+  because their Category cell doesn't match").
+- **A damaged or password-protected master list no longer crashes the app.**
+  A truncated, encrypted or locked workbook used to stop the app with a raw
+  error. It now loads 0 names like a missing file does, offers the setup
+  dialog, and the master-list card says the list could not be opened and why.
+- **Master-list names with ` - ` are no longer cut short.** Everything after
+  a spaced dash used to be stripped, so `Acme - Kenya` became `Acme` and the
+  full form never matched. Only the legacy numeric-ID suffix
+  (`Jane Doe - 10001`) is stripped now. Other names are kept whole, and the
+  part before the dash is still matched too, so nothing that matched before
+  stops matching. The master-list card lists these names ("contain ' - '").
+  If two such rows share the short part but have different Internal IDs, a
+  bare short form gets a flagged auto-code instead of a guessed ID.
+- **The master-list setup dialog no longer saves a wrong folder on one
+  click.** "Save and use this folder" was clickable even while the dialog
+  warned that the workbook wasn't there. It is now greyed out until a folder
+  is entered, and when the workbook isn't found you must tick "Save anyway:
+  the folder is still syncing" first.
+- **"Skip for now" on the master-list setup dialog is remembered.** It used
+  to ask again on every launch. The choice is now saved in
+  `~/.finance_pii_redactor/settings.json` next to the folder setting, and
+  cleared as soon as a master list loads with names, so a list that later
+  goes missing still prompts.
+- **Master-list names match with or without accents.** `Jose Garcia` in a
+  document was missed by the master-list matcher when the row said
+  `José García`, and the other way round. Both sides are now accent- and
+  case-folded one character at a time, so the redaction still covers exactly
+  the document's characters, and the match resolves to the row's curated ID
+  (unless two rows differ only by accents and have different IDs, in which
+  case it gets a flagged auto-code). This also fixes an offset bug: a
+  dotted capital `İ` anywhere before a name shifted that name's redaction one
+  character to the right. Surname-only matching stays off, as before.
+- **PDF pages with typed text over a large scanned image are read with OCR.**
+  Only pages with no text layer at all used to count as scans, so a typed
+  heading over a scanned receipt, or a scanner's searchable PDF, had its
+  picture passed through unread: a name visible only in the image survived
+  unless "Black out images" was on. A page whose images cover at least 15%
+  of it is now treated as a scan. Its text layer is still redacted by
+  search first, then the page is read with OCR and rebuilt. With OCR off or
+  not installed, such pages are listed in the scanned-pages warning.
+- **A PDF term that could not be found on the page is no longer reported as
+  hidden.** When a name was read from a page's text but no search could match
+  it on the page (a ligature or font encoding the search can't see through),
+  nothing covered it, yet the Review step counted it as redacted and Apply
+  said "Every detected term is hidden". Such terms now get their own warning
+  on the Review step, naming them and their pages, and the reassurance only
+  appears when every term was found.
+- **PDF comments, form fields, bookmarks and attachments no longer survive
+  redaction.** None of them is page text, so detection never saw them, and
+  each could carry a name: a comment or its author, a filled-in form field, a
+  bookmark title, a file attached to the document. The redacted PDF now drops
+  them all on save, as it already did for document properties. Links to
+  another page of the same PDF are kept.
+- **A PDF name that wraps onto the next line gets one label, not two.** A
+  two-word name split over a line break was covered on both lines but had its
+  `[001]` label stamped on each part. Only the first part is labelled now;
+  both are still covered.
+- **The Excel confidence slider stops at 0.85.** It went to 1.0. Above 0.85
+  the bank-account, M-Pesa and SWIFT patterns stop being masked, and above
+  0.90 every master-list match is dropped.
+- **An Excel file with nothing found can still be downloaded.** The Download
+  step used to say "Nothing was detected" and offer no file, so a workbook
+  trimmed to some tabs could not be saved. The rebuilt workbook is now
+  always offered, with the note kept above it.
+- **Excel column headers are redacted.** A name used as a column header went
+  into the download unchanged, because only cells and tab names were
+  scanned. Every header of a scanned tab is now checked, chosen column or
+  not, shows in the Review table, and is replaced and highlighted yellow.
+- **Excel IDs keep their leading zeros.** A text cell such as `0041` used to
+  come out of the redacted workbook as the number `41`. Cells are now kept as
+  written: text stays text, and numbers and dates stay numbers and dates.
+  Columns that mix text with numbers are now picked for scanning by default.
 - **Review tick boxes respond to a single click.** Every other tick or
   untick in the "Hide in output?" column was ignored, so a box seemed to
   need a double click. Each click now registers.

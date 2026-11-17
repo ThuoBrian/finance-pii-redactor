@@ -11,7 +11,13 @@ concurrency:
 
 jobs:
   lint-and-test:
-    runs-on: ubuntu-latest
+    # macOS too: a dependency pin that ships no macOS wheel (as onnxruntime
+    # did for Intel Macs) should fail here, not on a user's machine.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7

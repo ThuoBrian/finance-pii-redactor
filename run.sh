@@ -76,13 +76,21 @@ print_ready() {
     echo -e "     ${DIM}If it does not, open this address:${RESET} ${IPA_GREEN}http://127.0.0.1:8501${RESET}"
     echo ""
     echo -e "     ${YELLOW}Keep this window open while you use the app.${RESET}"
-    echo -e "     ${DIM}When you are finished, press Ctrl+C to stop the app.${RESET}"
+    echo -e "     ${DIM}When you are finished, click \"Close the app\" in the sidebar.${RESET}"
     echo ""
     echo -e " ${IPA_GREEN}====================================================================${RESET}"
     echo ""
 }
 
 print_banner
+
+# onnxruntime (used for reading scanned pages) publishes no build for Intel
+# Macs, so `uv sync` would fail with a confusing error. Stop here instead.
+if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "x86_64" ]; then
+    print_error "This Mac has an Intel processor, which the tool does not support."
+    print_hint "It runs on Apple Silicon Macs (M1 or newer), Windows and Linux."
+    exit 1
+fi
 
 # -- 1. Install uv if not already present -------------------------------------
 print_step 1 2 "Checking the setup helper"

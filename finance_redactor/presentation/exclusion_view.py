@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import pandas as pd
 import streamlit as st
 
 from finance_redactor.domain.entities import Finding
@@ -34,6 +35,7 @@ from finance_redactor.presentation.presenters import (
     REDACT_COLUMN,
     SOURCE_FILTERS,
     apply_notice,
+    carried_over_notice,
     detection_editor_dataframe,
     filter_editor_rows,
     merge_pending,
@@ -52,7 +54,12 @@ _HOW_TO_READ = (
 )
 _CLEAN_RUN = (
     "Nothing here is a guess. Every term came from your master list, words "
-    "you typed, or a strict pattern such as an email or account number."
+    "you typed, a table column you chose, or a strict pattern such as an "
+    "email or account number."
+)
+_NOTHING_FOUND = (
+    "Nothing to review: no names or private details were found. If you "
+    "expected some, check the options you scanned with."
 )
 # Rows the editor shows before it scrolls inside itself, so the Apply button
 # under it is never far away.
@@ -65,6 +72,7 @@ def render_deselect_editor(
     *,
     key_prefix: str,
     excluded: frozenset[str] = frozenset(),
+    not_located: int = 0,
 ) -> frozenset[str]:
     """Render the tickable detections table and return the terms to exclude.
 
@@ -87,6 +95,11 @@ def render_deselect_editor(
     it. ``excluded`` is the *applied* set; a change of it, or of the
     findings, resets the pending set to it.
 
+    ``not_located`` counts detected terms the last build could not find on
+    the page (PDF only). The Apply confirmation is worded on the run after the
+    rebuild, from that run's count, so it never says every term is hidden
+    when one was not found.
+
     The editor's input is built from ``base``, a copy of the pending set taken
     at the last re-key, never from the live one. Streamlit counts the input
     data as part of the editor's identity, so feeding each tick back in would
@@ -99,6 +112,7 @@ def render_deselect_editor(
     toggle, but the returned set only changes on the Apply click.
     """
     if not findings:
+        st.caption(_NOTHING_FOUND)
         return frozenset()
 
     state = st.session_state
@@ -127,9 +141,16 @@ def render_deselect_editor(
 
     # Rendered in the review step's "Review" tab, so no expander of its own.
     with st.container():
-        notice = state.pop(notice_key, None)
-        if notice:
-            st.success(notice)
+        # The set applied on the click, worded now: this run sees the
+        # rebuilt file's ``not_located`` count, the click's run did not.
+        applied = state.pop(notice_key, None)
+        if applied is not None:
+            box = st.warning if not_located else st.success
+            box(apply_notice(applied, not_located))
+        # Set by a flow that redacted again and kept the last run's unticks.
+        carried = state.pop(carried_key(key_prefix), None)
+        if carried:
+            st.info(carried_over_notice(carried))
         # Filled at the end, once this run's ticks are known; drawn here so
         # the line sits at the top where the reviewer looks first. It carries
         # the term count, so there is no separate heading.
@@ -245,12 +266,30 @@ def render_deselect_editor(
 
     status_slot.caption(review_status(overview, excluded, pending))
     if clicked:
-        state[notice_key] = apply_notice(pending)
+        state[notice_key] = pending
 
     # Ticks reach the script on every toggle, so the returned set must stay
     # the *applied* one until Apply is clicked: callers rebuild the output
     # whenever it changes. Only the click's own rerun returns the pending set.
     return pending if clicked else excluded
+
+
+def render_where_found(table: pd.DataFrame) -> None:
+    """Fold every single occurrence (page, cell or paragraph) under one expander.
+
+    The review table has one row per term; this is the per-occurrence record
+    behind it, for the rare check of where exactly a term sits. Drawn at the
+    bottom of Review, and not at all when nothing was found.
+    """
+    if table.empty:
+        return
+    with st.expander(f"Where each term was found ({plural(len(table), 'occurrence')})"):
+        st.dataframe(table, width="stretch", hide_index=True)
+
+
+def carried_key(key_prefix: str) -> str:
+    """Session key a flow sets to the unticked terms it carried into a new run."""
+    return f"{key_prefix}_review_carried"
 
 
 def unapplied_changes_note(key_prefix: str, excluded: frozenset[str]) -> str | None:

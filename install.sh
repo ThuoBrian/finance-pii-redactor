@@ -160,6 +160,16 @@ printf '     %s%s%s\n' "$IPA_GREEN" "Runs 100% on your computer - nothing is eve
 printf '\n'
 rule
 
+# -- Platform check -----------------------------------------------------------
+# onnxruntime (used for reading scanned pages) publishes no build for Intel
+# Macs, so setup would fail later with a confusing error. Stop here instead.
+if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "x86_64" ]; then
+    problem "This Mac has an Intel processor, which the tool does not support."
+    hint "It runs on Apple Silicon Macs (M1 or newer), Windows and Linux."
+    hint "Please ask a colleague with a supported computer to run it for you."
+    exit 1
+fi
+
 # -- 1. Choose a folder -------------------------------------------------------
 step 1 4 "Choosing where to install"
 INSTALL_ROOT="$(choose_install_root)"

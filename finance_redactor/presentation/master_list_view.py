@@ -5,7 +5,8 @@ every step instead of inside each format's options: how many names are loaded,
 by category, when the workbook last changed, how many data-quality issues it
 has, and a Refresh button. The issues themselves open from a badge that says
 how many there are, so a list that needs tidying is visible at a glance even
-with the details folded away.
+with the details folded away. Refresh sits on the card; the path and how to
+edit the workbook fold into one expander.
 """
 
 from __future__ import annotations
@@ -82,14 +83,19 @@ def render_master_list_card(
             with st.expander(f"{badge}[{plural(len(issues), 'thing')} to tidy]"):
                 for issue in issues:
                     _render_issue(issue)
-        with st.expander("Location and refresh"):
-            st.caption(f"`{master_list_path}`")
-            st.caption("Save and close the workbook in Excel, then Refresh.")
-            if on_refresh is not None and st.button(
+        # Refresh is the button people use, so it sits on the card itself.
+        # A callback, not st.rerun(): a rerun from the sidebar ends the run
+        # before the uploader is drawn, and Streamlit then drops the file.
+        if on_refresh is not None:
+            st.button(
                 "Refresh",
                 key="master_list_refresh",
                 width="stretch",
                 help="Re-read the master list after editing it or changing its folder.",
-            ):
-                on_refresh()
-                st.rerun()
+                on_click=on_refresh,
+            )
+        with st.expander("Where it is"):
+            st.caption(f"`{master_list_path}`")
+            st.caption(
+                "To edit it: save and close the workbook in Excel, then Refresh."
+            )

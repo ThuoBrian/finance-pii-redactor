@@ -90,6 +90,13 @@ A town or country name on its own is left alone.
 or `mailto:` behind "click here") is removed. The visible text stays and is
 checked like any other text. Excel output never keeps links.
 
+**Comments and tracked changes, in Word:** comments are removed, along with
+who wrote them. Tracked changes are accepted: inserted text becomes normal
+text and is checked, and deleted text is dropped, so neither the old wording
+nor the reviewer's name stays in the file. Footnotes, endnotes, and every
+header and footer (including first-page and even-page ones) are checked like
+the body.
+
 **Bank and payment details, in all three formats:** card numbers, IBANs,
 Kenyan bank account numbers, M-Pesa till/paybill numbers, and SWIFT/BIC
 codes. They're replaced with a fixed mask such as `[ACCOUNT]` or `[CARD]`,
@@ -112,7 +119,8 @@ it saved, and starts it up.
 irm https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/install.ps1 | iex
 ```
 
-**macOS / Linux** (open Terminal):
+**macOS (Apple Silicon) / Linux** (open Terminal). Intel Macs aren't
+supported, because a library the tool needs has no Intel-Mac build:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ThuoBrian/finance-pii-redactor/main/install.sh | bash
@@ -153,23 +161,26 @@ you to the step before, and your choices are kept.
 1. **Upload** your Excel, PDF, or Word file.
 2. **Options.** Click **Redact my file**. The recommended settings are
    already chosen; open **Customize** only if you need to, for example to
-   pick tabs and columns, or to add something the tool wouldn't know about,
-   like a codename or a case number.
+   pick tabs and columns.
 3. **Review.** The **Review** tab lists what was found, likeliest mistakes
    first. Untick anything that isn't really a name, then click **Apply
    changes** to rebuild the file without them; everything else stays
    redacted. The **Why it was found** column says why each term matched
    (**Show details** adds the technical columns). Ordinary words
    sometimes get caught, usually because someone added one to the master list
-   as a payee.
+   as a payee. For a PDF or Word file, the folded **Add something the tool
+   missed** box takes a name the scan didn't catch, a codename or a case
+   number (and, for a PDF with a table, whole columns to redact). Most files
+   need nothing there.
 4. **Download.** Two cards: **Safe to share** (Internal) and **Keep private**
-   (Confidential). Files are named `redacted-` plus the date and time, never
+   (Confidential). For a PDF, the **Label mapping** (Internal, no names)
+   sits under the cards. Files are named `redacted-` plus the date and time, never
    after your original file, and their document properties (author, title
    and the like) are cleared.
 
 The sidebar shows your master list (how many names, when it last changed,
-anything to tidy), **Start over**, **Help and troubleshooting**, and **Close
-the app**. To change which names get which codes, edit the master list
+anything to tidy), **Start over** (it asks first, since it drops the
+findings and downloads), **Help and troubleshooting**, and **Close the app**. To change which names get which codes, edit the master list
 (`Names List - Organized.xlsx`) and click **Refresh** on that card.
 
 In Excel, every cell the tool changed is highlighted in yellow, so you can

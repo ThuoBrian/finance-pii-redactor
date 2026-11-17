@@ -97,19 +97,25 @@ class PdfDocument(Protocol):
         """Return the columns of every table found in one page's text layer."""
         ...
 
+    def page_size(self, page_index: int) -> tuple[float, float]:
+        """Return one page's (width, height), in the units of its image rects."""
+        ...
+
     def redact_page(
         self,
         page_index: int,
         redactions: list[tuple[str | list[str], str]],
         *,
         blackout: bool = False,
-    ) -> None:
-        """Apply redactions to one page.
+    ) -> list[int]:
+        """Apply redactions to one page; return the indices not located.
 
         Each text redaction is ``(search_text, label)`` or
         ``([primary_search, ...fallbacks], label)``. When ``blackout`` is True,
         matched text is covered with a black box instead of labeled; images are
         always blacked out when present in ``redactions`` as ``("__IMAGE__", "")``.
+        The return value lists the indices (into ``redactions``) of the text
+        redactions that could not be found on the page, so nothing was covered.
         """
         ...
 

@@ -1,17 +1,30 @@
 [theme]
-# The logo (assets/data-privacy-ai-dark-nobg.svg) is white-on-transparent and
-# needs a dark background to be visible.
-base = "dark"
+# No forced base: with both [theme.light] and [theme.dark] defined below, the
+# app follows each person's system light or dark setting. (toolbarMode =
+# "minimal" hides Streamlit's settings menu, so there is no in-app switch.)
+# The logo is white-on-transparent, so app.py draws it on its own dark panel,
+# which reads in either theme.
+baseRadius = "0.75rem"
+buttonRadius = "0.5rem"
+# Fonts stay on Streamlit's bundled default: no web fonts, so the app makes
+# no external requests.
+
+[theme.light]
 # Blue for actions; red is kept for the Confidential download card and real
 # warnings, so it still means "careful". #2563EB clears 5.17:1 against white
-# button-label text (WCAG AA needs 4.5:1) and 3.66:1 as an accent on the dark
-# background (3:1 for UI components). The previous red, #D32F2F, was 4.98:1
-# and 3.80:1.
+# button-label text (WCAG AA needs 4.5:1) and 4.61:1 against the light
+# sidebar (#F0F2F6). The previous red, #D32F2F, was 4.98:1.
 primaryColor = "#2563EB"
-# Explicit so the contrast figures in this file stay checkable. All pairs below
-# clear WCAG AA (text >= 4.5:1, borders/UI >= 3:1) - see the checks in the
-# CHANGELOG entry. Fonts stay on Streamlit's bundled default: no web fonts, so
-# the app makes no external requests.
+# Darker blue for link text: 6.70:1 on white.
+linkColor = "#1D4ED8"
+# 4.83:1 on white (3:1 needed for borders and UI components).
+borderColor = "#6B7280"
+
+[theme.dark]
+# The same accent: 3.66:1 against the dark background (3:1 for UI
+# components). Explicit colors so the contrast figures stay checkable; all
+# pairs clear WCAG AA (text >= 4.5:1, borders/UI >= 3:1).
+primaryColor = "#2563EB"
 backgroundColor = "#0E1117"
 secondaryBackgroundColor = "#1A1D27"
 textColor = "#FAFAFA"
@@ -19,8 +32,6 @@ textColor = "#FAFAFA"
 linkColor = "#93C5FD"
 borderColor = "#6B7280"
 dataframeHeaderBackgroundColor = "#1E222D"
-baseRadius = "0.75rem"
-buttonRadius = "0.5rem"
 
 [client]
 # Hides Streamlit's developer toolbar (the "Deploy" button and its menu),

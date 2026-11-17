@@ -5,7 +5,12 @@ from __future__ import annotations
 from streamlit.testing.v1 import AppTest
 
 
-def _editor(clean: bool = False, fake_clicks: bool = False, long: bool = True) -> None:
+def _editor(
+    clean: bool = False,
+    fake_clicks: bool = False,
+    long: bool = True,
+    not_located: int = 0,
+) -> None:
     from contextlib import nullcontext
     from typing import Any
     from unittest.mock import patch
@@ -58,15 +63,19 @@ def _editor(clean: bool = False, fake_clicks: bool = False, long: bool = True) -
     applied = st.session_state.get("applied", frozenset())
     fake = patch.object(st, "data_editor", fake_editor) if fake_clicks else None
     with fake or nullcontext():
-        result = render_deselect_editor(findings, key_prefix="t", excluded=applied)
+        result = render_deselect_editor(
+            findings, key_prefix="t", excluded=applied, not_located=not_located
+        )
     if result != applied:  # what the flows do: rebuild, then rerun
         st.session_state.applied = result
         st.rerun()
 
 
-def _run(clean: bool = False, long: bool = True) -> AppTest:
+def _run(clean: bool = False, long: bool = True, not_located: int = 0) -> AppTest:
     return AppTest.from_function(
-        _editor, kwargs={"clean": clean, "long": long}, default_timeout=30
+        _editor,
+        kwargs={"clean": clean, "long": long, "not_located": not_located},
+        default_timeout=30,
     ).run()
 
 
@@ -119,6 +128,36 @@ def test_apply_confirms_once_and_then_the_notice_goes() -> None:
     ]
     at.run()
     assert not [s for s in at.success if s.value.startswith("Rebuilt the file")]
+
+
+def test_apply_says_all_hidden_only_when_it_is_true() -> None:
+    at = _run()
+    _press(at, "Untick all shown (15)")
+    _press(at, "Apply changes (15 pending)")
+    _press(at, "Tick all shown (15)")
+
+    _press(at, "Apply changes (15 pending)")
+
+    assert not at.exception
+    assert [s.value for s in at.success if s.value.startswith("Rebuilt")] == [
+        "Rebuilt the file. Every detected term is hidden."
+    ]
+
+
+def test_apply_does_not_say_all_hidden_when_a_term_was_not_found() -> None:
+    # Untick and apply, then re-tick and apply: nothing is left visible, the
+    # case where the notice would otherwise say every term is hidden.
+    at = _run(not_located=1)
+    _press(at, "Untick all shown (15)")
+    _press(at, "Apply changes (15 pending)")
+    _press(at, "Tick all shown (15)")
+
+    _press(at, "Apply changes (15 pending)")
+
+    assert not at.exception
+    messages = [m.value for m in [*at.success, *at.warning]]
+    assert not any("Every detected term is hidden" in m for m in messages)
+    assert any("1 detected term was not found on the page" in m for m in messages)
 
 
 def test_each_single_click_on_a_tick_box_counts() -> None:

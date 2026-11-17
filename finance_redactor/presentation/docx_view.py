@@ -21,13 +21,16 @@ from finance_redactor.presentation.crosswalk_view import (
     render_crosswalk_section,
 )
 from finance_redactor.presentation.exclusion_view import (
+    carried_key,
     render_deselect_editor,
     render_exclusion_warning,
+    render_where_found,
     unapplied_changes_note,
 )
 from finance_redactor.presentation.presenters import (
     ENTITY_HELP,
     THRESHOLD_HELP,
+    carry_over_exclusions,
     entity_label,
     findings_dataframe,
     merge_findings,
@@ -38,8 +41,9 @@ from finance_redactor.presentation.session import (
     output_stem,
     reset_on_new_upload,
 )
-from finance_redactor.presentation.steps import show_step
+from finance_redactor.presentation.steps import progress_bar, show_step
 from finance_redactor.presentation.words_view import (
+    additions_expander,
     render_words_box,
     typed_words,
     unapplied_words_note,
@@ -54,31 +58,13 @@ def run_docx_flow(
     steps: Any,
 ) -> None:
     """Render the Word flow: Options, Review and Download (see ``wizard``)."""
-    reset_on_new_upload(
-        uploaded,
-        "docx",
-        (
-            "df",
-            "findings",
-            "redacted_df",
-            "crosswalk",
-            "docx_buffer",
-            "docx_findings",
-            "docx_blocks",
-            "docx_crosswalk",
-            "docx_links",
-            "docx_all_findings",
-            "docx_excluded_applied",
-            "docx_scan_result",
-            "docx_run_words",
-            "excel_bytes",
-        ),
-    )
+    reset_on_new_upload(uploaded, "docx")
     if (
         wizard.current() == wizard.OPTIONS
         or st.session_state.get("docx_buffer") is None
     ):
         _options_step(uploaded, docx_service, settings, steps)
+        wizard.nav(back=("Back to upload", wizard.UPLOAD))
         return
     if wizard.current() == wizard.REVIEW:
         _review_step(uploaded, docx_service, steps)
@@ -103,10 +89,12 @@ def _options_step(
     state.setdefault("docx_entities", list(settings.supported_entities))
 
     with st.expander("Customize: kinds of information, confidence"):
+        # The detection threshold. Capped at the
+        # bank-detail pattern score: anything higher stops masking them.
         st.slider(
             "Confidence threshold",
             min_value=0.1,
-            max_value=1.0,
+            max_value=settings.max_threshold,
             step=0.05,
             help=THRESHOLD_HELP,
             key="docx_threshold",
@@ -124,15 +112,27 @@ def _options_step(
     if st.button("Redact my file", type="primary", width="stretch"):
         uploaded.seek(0)
         try:
-            with st.status("Scanning the document...", expanded=False) as status:
+            with st.status("Scanning the document...", expanded=True) as status:
                 scan_result = docx_service.scan(
                     uploaded,
                     list(state["docx_entities"]),
                     float(state["docx_threshold"]),
+                    on_progress=progress_bar("paragraph"),
                 )
                 uploaded.seek(0)
                 status.update(label="Replacing names with codes...")
                 result = docx_service.redact(uploaded, scan_result, custom_words)
+                # Back from Review: keep the terms unticked there that this
+                # run found again, rather than wiping the review.
+                carried = carry_over_exclusions(
+                    state.get("docx_excluded_applied", frozenset()), result.findings
+                )
+                built = result
+                if carried:
+                    uploaded.seek(0)
+                    built = docx_service.redact(
+                        uploaded, scan_result, custom_words, exclude=carried
+                    )
         except UnreadableFileError:
             st.error(
                 "This file could not be read as a Word document. It may be "
@@ -142,15 +142,16 @@ def _options_step(
             )
             return
         state.docx_scan_result = scan_result
-        state.docx_buffer = result.data
-        state.docx_findings = result.findings
-        state.docx_blocks = result.block_count
-        state.docx_crosswalk = result.crosswalk
-        state.docx_links = result.removed_links
+        state.docx_buffer = built.data
+        state.docx_findings = built.findings
+        state.docx_blocks = built.block_count
+        state.docx_crosswalk = built.crosswalk
+        state.docx_links = built.removed_links
         # Unfiltered baseline for the deselect editor - see pdf_view for
         # why this must not be refiltered on a re-run.
         state.docx_all_findings = result.findings
-        state.docx_excluded_applied = frozenset()
+        state.docx_excluded_applied = carried
+        state[carried_key("docx")] = carried
         # The words this result was built with; the later steps read these,
         # not the text box, which is only drawn on Options.
         state.docx_run_words = custom_words
@@ -183,13 +184,8 @@ def _review_step(uploaded: Any, docx_service: RedactDocxService, steps: Any) -> 
             )
         )
 
-    words_applied: list[str] = state.docx_run_words
-    words = render_words_box("docx", words_applied)
-
     review_findings = state.get("docx_all_findings", [])
-    tab_review, tab_mapping, tab_occurrences = st.tabs(
-        review_tab_labels(review_findings)
-    )
+    tab_review, tab_mapping = st.tabs(review_tab_labels(review_findings))
     with tab_mapping:
         render_crosswalk_section(state.docx_crosswalk)
     with tab_review:
@@ -198,13 +194,11 @@ def _review_step(uploaded: Any, docx_service: RedactDocxService, steps: Any) -> 
             key_prefix="docx",
             excluded=state.get("docx_excluded_applied", frozenset()),
         )
-    with tab_occurrences:
-        st.markdown(f"**All detections ({plural(n_entities, 'finding')})**")
-        st.dataframe(
-            findings_dataframe(docx_findings, "Paragraph"),
-            width="stretch",
-            hide_index=True,
-        )
+
+    words_applied: list[str] = state.docx_run_words
+    with additions_expander("docx", words_applied):
+        words = render_words_box("docx", words_applied)
+    render_where_found(findings_dataframe(docx_findings, "Paragraph"))
 
     if (
         excluded != state.get("docx_excluded_applied", frozenset())

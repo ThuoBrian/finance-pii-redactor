@@ -7,6 +7,7 @@ Collected here, they are the presentation layer's single rendering vocabulary.
 
 from __future__ import annotations
 
+import math
 from collections import Counter
 from collections.abc import Mapping, Sequence
 
@@ -95,7 +96,8 @@ THRESHOLD_HELP = (
     "How sure the tool must be before it hides something. Lower catches more "
     "(fewer missed names, but more words that were not names); higher catches "
     "less. Lowering it is the safe direction. If unsure, keep the default. "
-    "Do not go above 0.90 - that stops matching every name on the master list."
+    "It stops at 0.85, the highest setting that still hides bank and payment "
+    "details."
 )
 ENTITY_HELP = (
     "The kinds of sensitive information to look for: people, organizations, "
@@ -105,9 +107,41 @@ ENTITY_HELP = (
 )
 
 
+# Codes whose plain capitalized form reads wrongly ("Url", "Iban code").
+_ENTITY_LABELS = {
+    "URL": "Website",
+    "IBAN_CODE": "IBAN",
+    "SWIFT_CODE": "SWIFT code",
+    "KE_BANK_ACCOUNT": "Kenyan bank account",
+    "MPESA_NUMBER": "M-Pesa number",
+    "CUSTOM": "Added term",
+    "DATE_TIME": "Date or time",
+}
+# First words that keep their capitals mid-sentence.
+_PROPER_WORDS = ("IBAN", "SWIFT", "Kenyan", "M-Pesa")
+
+
 def entity_label(entity_type: str) -> str:
     """Readable form of an entity code, e.g. ``EMAIL_ADDRESS`` -> ``Email address``."""
-    return entity_type.replace("_", " ").capitalize()
+    return _ENTITY_LABELS.get(entity_type, entity_type.replace("_", " ").capitalize())
+
+
+# How each detection source reads on screen. Keyed on the value, not the
+# member: Streamlit re-imports changed modules, so findings kept in session
+# state can hold members of an older copy of the enum.
+_SOURCE_LABELS = {
+    DetectionSource.MODEL.value: "Model guess",
+    DetectionSource.MASTER_LIST.value: "Master list",
+    DetectionSource.CUSTOM.value: "Typed word",
+    DetectionSource.PATTERN.value: "Pattern match",
+    DetectionSource.TABLE_COLUMN.value: "Table column",
+}
+
+
+def source_label(source: DetectionSource) -> str:
+    """Readable form of a detection source, e.g. ``custom word`` -> ``Typed word``."""
+    value = str(source.value)
+    return _SOURCE_LABELS.get(value, value.capitalize())
 
 
 def plural(count: int, singular: str, plural_form: str | None = None) -> str:
@@ -169,6 +203,8 @@ def preview_styler(
 
 # Shown in the Column field of a finding that sits in a tab's name, not a cell.
 TAB_NAME_LABEL = "(tab name)"
+# Follows the header text in the Column field of a finding in a column header.
+HEADER_LABEL = "(header)"
 
 
 def excel_findings_dataframe(scan_result: WorkbookScanResult) -> pd.DataFrame:
@@ -179,9 +215,9 @@ def excel_findings_dataframe(scan_result: WorkbookScanResult) -> pd.DataFrame:
             "Row": cell.row + 1,
             "Column": cell.column,
             "Detected text": detection.text,
-            "Entity type": detection.entity_type,
+            "Entity type": entity_label(detection.entity_type),
             "Confidence": round(detection.score, 2),
-            "Source": detection.source.value,
+            "Source": source_label(detection.source),
         }
         for sheet, sheet_result in scan_result.sheets.items()
         for cell in sheet_result.findings
@@ -193,11 +229,25 @@ def excel_findings_dataframe(scan_result: WorkbookScanResult) -> pd.DataFrame:
             "Row": None,
             "Column": TAB_NAME_LABEL,
             "Detected text": detection.text,
-            "Entity type": detection.entity_type,
+            "Entity type": entity_label(detection.entity_type),
             "Confidence": round(detection.score, 2),
-            "Source": detection.source.value,
+            "Source": source_label(detection.source),
         }
         for sheet, detections in scan_result.tab_names.items()
+        for detection in detections
+    ]
+    rows += [
+        {
+            "Sheet": sheet,
+            "Row": None,
+            "Column": f"{header} {HEADER_LABEL}",
+            "Detected text": detection.text,
+            "Entity type": entity_label(detection.entity_type),
+            "Confidence": round(detection.score, 2),
+            "Source": source_label(detection.source),
+        }
+        for sheet, by_header in scan_result.headers.items()
+        for header, detections in by_header.items()
         for detection in detections
     ]
     return pd.DataFrame(rows, columns=_EXCEL_COLUMNS)
@@ -209,7 +259,8 @@ def scan_result_findings(scan_result: WorkbookScanResult) -> list[Finding]:
     Only so Excel can share :func:`detection_editor_dataframe` with the PDF
     and Word flows, which already work in ``Finding``. ``page`` carries the
     row index here, the same way it carries a paragraph ordinal in the Word
-    flow - see :func:`findings_dataframe` - and ``-1`` for a tab name.
+    flow - see :func:`findings_dataframe` - and ``-1`` for a tab name or a
+    column header.
     """
     cell_detections = [
         (cell.row, detection)
@@ -220,6 +271,11 @@ def scan_result_findings(scan_result: WorkbookScanResult) -> list[Finding]:
     name_detections = [
         (-1, detection)
         for detections in scan_result.tab_names.values()
+        for detection in detections
+    ] + [
+        (-1, detection)
+        for by_header in scan_result.headers.values()
+        for detections in by_header.values()
         for detection in detections
     ]
     return [
@@ -276,7 +332,7 @@ def pdf_review_dataframe(crosswalk: list[Assignment]) -> pd.DataFrame:
         {
             "Label": a.label,
             "Original name": a.original_name,
-            "Entity type": a.entity_type,
+            "Entity type": entity_label(a.entity_type),
             "Category": a.category or "(unknown)",
             "Internal ID": a.internal_id or "",
             "Flagged": (
@@ -310,7 +366,7 @@ def pdf_mapping_dataframe(
 
     Rows that resolved against the master list carry its raw ``Internal ID``.
     Rows that did not carry their deterministic auto-pseudonym instead (e.g.
-    ``CST-AUTO-3F9A1``) - a hash of the name, not the name, so the file stays
+    ``CST-AUTO-3F9A1C07``) - a hash of the name, not the name, so the file stays
     names-free, and content-addressed so the same unresolved entity still
     links across documents. It cannot be mistaken for a master-list ID, and
     the ``Flagged`` column says why it is there. Note the hash is a *linkage*
@@ -396,9 +452,9 @@ def findings_dataframe(findings: list[Finding], page_label: str) -> pd.DataFrame
             {
                 page_label: f.page + 1,
                 "Detected text": f.detected_text,
-                "Entity type": f.entity_type,
+                "Entity type": entity_label(f.entity_type),
                 "Confidence": round(f.score, 2),
-                "Source": f.source.value,
+                "Source": source_label(f.source),
             }
             for f in findings
         ]
@@ -450,11 +506,11 @@ _SOURCE_TIER = {
 # Filter choices for the review table: label -> the Source values it shows.
 ALL_SOURCES = "All"
 SOURCE_FILTERS = {
-    "Model guesses": DetectionSource.MODEL.value,
-    "Typed words": DetectionSource.CUSTOM.value,
-    "Table columns": DetectionSource.TABLE_COLUMN.value,
-    "Pattern matches": DetectionSource.PATTERN.value,
-    "Master list": DetectionSource.MASTER_LIST.value,
+    "Model guesses": source_label(DetectionSource.MODEL),
+    "Typed words": source_label(DetectionSource.CUSTOM),
+    "Table columns": source_label(DetectionSource.TABLE_COLUMN),
+    "Pattern matches": source_label(DetectionSource.PATTERN),
+    "Master list": source_label(DetectionSource.MASTER_LIST),
 }
 
 
@@ -472,7 +528,9 @@ def why_found(finding: Finding, hint: str = "") -> str:
         return "You typed it"
     if source == DetectionSource.TABLE_COLUMN:
         return "In a table column you chose"
-    kind = entity_label(finding.entity_type).lower()
+    kind = entity_label(finding.entity_type)
+    if not kind.startswith(_PROPER_WORDS):
+        kind = kind.lower()
     if source == DetectionSource.PATTERN:
         return f"Shaped like {_with_article(kind)}"
     # A model guess, or a source this build does not know: treat as a guess.
@@ -483,7 +541,9 @@ def why_found(finding: Finding, hint: str = "") -> str:
 
 
 def _with_article(noun: str) -> str:
-    return f"{'an' if noun[:1] in 'aeiou' else 'a'} {noun}"
+    # "an M-Pesa number": the letter M is said "em", so it takes "an".
+    vowel = noun[:1].lower() in "aeiou" or noun.startswith("M-")
+    return f"{'an' if vowel else 'a'} {noun}"
 
 
 def detection_editor_dataframe(
@@ -543,7 +603,7 @@ def detection_editor_dataframe(
             _TERM_COLUMN: finding.detected_text,
             _WHY_COLUMN: why_found(finding, hint),
             "Kind": entity_label(finding.entity_type),
-            "Source": finding.source.value,
+            "Source": source_label(finding.source),
             "Confidence": round(score, 2),
             "Hint": hint,
             "Occurrences": counts[key],
@@ -565,6 +625,30 @@ def merge_findings(
             seen.add(key)
             merged.append(finding)
     return merged
+
+
+def carry_over_exclusions(
+    previous: frozenset[str], findings: Sequence[Finding]
+) -> frozenset[str]:
+    """Return the terms unticked last run that the new run found again.
+
+    Going back to Options and redacting again must not throw away the review
+    already done. A term the new scan no longer finds has nothing to leave
+    visible, so it is dropped rather than kept as a silent exception.
+    """
+    return previous & {term_key(f.detected_text) for f in findings}
+
+
+def carried_over_notice(carried: frozenset[str]) -> str:
+    """Say which unticked terms were kept from the last run (on screen only)."""
+    terms = ", ".join(f"`{term}`" for term in sorted(carried))
+    n = len(carried)
+    it = "it" if n == 1 else "them"
+    return (
+        f"Kept {plural(n, 'term')} you unticked last time: {terms}. "
+        f"{'It stays' if n == 1 else 'They stay'} visible in this file. "
+        f"Tick {it} again and click **Apply changes** to hide {it}."
+    )
 
 
 def term_key(term: object) -> str:
@@ -598,7 +682,7 @@ def search_editor_rows(table: pd.DataFrame, text: str | None) -> pd.DataFrame:
 
 def model_guess_count(table: pd.DataFrame) -> int:
     """Return how many terms in the review table are model guesses."""
-    return int((table["Source"] == DetectionSource.MODEL.value).sum())
+    return int((table["Source"] == source_label(DetectionSource.MODEL)).sum())
 
 
 def review_tab_labels(
@@ -611,13 +695,16 @@ def review_tab_labels(
     label that changed on every tick would throw the reviewer back to the
     first tab.
     """
-    n = model_guess_count(detection_editor_dataframe(findings)) if findings else 0
-    review = f"Review ({n} to check)" if n else "Review"
+    review = "Review"
+    if findings:
+        table = detection_editor_dataframe(findings)
+        n = model_guess_count(table)
+        terms = plural(len(table), "term")
+        review = f"Review ({terms}, {n} to check)" if n else f"Review ({terms})"
     return [
         review,
         *(["Preview"] if preview else []),
-        "Code list",
-        "Where found",
+        "Mapping",
     ]
 
 
@@ -638,15 +725,81 @@ def review_status(
     return " · ".join(parts) + "."
 
 
-def apply_notice(left_visible: frozenset[str]) -> str:
-    """Return the confirmation shown once after Apply rebuilds the file."""
-    if not left_visible:
-        return "Rebuilt the file. Every detected term is hidden."
-    n = len(left_visible)
-    verb = "is" if n == 1 else "are"
+def apply_notice(left_visible: frozenset[str], not_located: int = 0) -> str:
+    """Return the confirmation shown once after Apply rebuilds the file.
+
+    "Every detected term is hidden" is said only when it is true: no term
+    left visible on purpose and none the PDF search failed to find.
+    """
+    parts = ["Rebuilt the file."]
+    if left_visible:
+        n = len(left_visible)
+        verb = "is" if n == 1 else "are"
+        parts.append(
+            f"{plural(n, 'term')} {verb} left visible; "
+            "they are listed above the download."
+        )
+    if not_located:
+        verb = "was" if not_located == 1 else "were"
+        parts.append(
+            f"{plural(not_located, 'detected term')} {verb} not found on the "
+            "page and may still show; see the warning above."
+        )
+    if len(parts) == 1:
+        parts.append("Every detected term is hidden.")
+    return " ".join(parts)
+
+
+def pdf_job_size_note(
+    scanned: int,
+    total_pages: int,
+    *,
+    reading_scans: bool,
+    seconds_per_page: float,
+    large_pages: int,
+) -> str:
+    """Say up front how long a big PDF will take; empty for a quick one.
+
+    The OCR estimate shows once reading the scans would take a minute or
+    more; the page-count warning once the file has ``large_pages`` pages.
+    """
+    parts = []
+    seconds = scanned * seconds_per_page if reading_scans else 0
+    if seconds >= 60:
+        minutes = math.ceil(seconds / 60)
+        parts.append(
+            f"**{plural(scanned, 'scanned page')}, about "
+            f"{plural(minutes, 'minute')} to read.** Scanned pages are read "
+            "one at a time; leave this tab open until the review appears."
+        )
+    if total_pages >= large_pages:
+        parts.append(
+            f"**This PDF has {plural(total_pages, 'page')}.** A file this long "
+            "can take a long time and a lot of memory, and a run cannot be "
+            "stopped halfway. Consider splitting it into smaller files."
+        )
+    return "\n\n".join(parts)
+
+
+def not_located_warning(not_located: Sequence[Finding]) -> str:
+    """Warn about detected terms the PDF search could not find on the page.
+
+    Nothing covers these: the text was read from the page, but no search
+    variant matched the page's own text (ligatures, unusual encoding). The
+    terms are listed for the operator's own screen, never logged.
+    """
+    if not not_located:
+        return ""
+    pages = sorted({f.page for f in not_located})
+    terms = ", ".join(sorted({f"`{f.detected_text}`" for f in not_located}))
+    n = len(not_located)
     return (
-        f"Rebuilt the file. {plural(n, 'term')} {verb} left visible; "
-        "they are listed above the download."
+        f"**{plural(n, 'detected term')} could not be found on the page, so "
+        f"{'it is' if n == 1 else 'they are'} not covered** ({_page_list(pages)}): "
+        f"{terms}. The text was read from the PDF, but its letters are stored "
+        "in a way the search could not match. Check those pages in the "
+        "download before sharing it; anything still showing has to be "
+        "covered by hand."
     )
 
 
@@ -656,17 +809,17 @@ def review_summary(table: pd.DataFrame) -> str:
     by_source = Counter(table["Source"])
     hinted = int((table["Hint"] != "").sum())
     parts = []
-    model = by_source[DetectionSource.MODEL.value]
+    model = by_source[source_label(DetectionSource.MODEL)]
     if model:
         guess = plural(model, "model guess", "model guesses")
         parts.append(f"{guess} ({hinted} worth a closer look)" if hinted else guess)
     for label, source in (
-        ("typed word", DetectionSource.CUSTOM.value),
-        ("table cell", DetectionSource.TABLE_COLUMN.value),
-        ("pattern match", DetectionSource.PATTERN.value),
-        ("master-list name", DetectionSource.MASTER_LIST.value),
+        ("typed word", DetectionSource.CUSTOM),
+        ("table cell", DetectionSource.TABLE_COLUMN),
+        ("pattern match", DetectionSource.PATTERN),
+        ("master-list name", DetectionSource.MASTER_LIST),
     ):
-        count = by_source[source]
+        count = by_source[source_label(source)]
         if count:
             parts.append(
                 plural(count, label, label + "es" if label.endswith("h") else None)
@@ -747,7 +900,7 @@ def pdf_mapping_notes(crosswalk: Sequence[Assignment]) -> list[str]:
     if missing:
         notes.append(
             f"**{plural(missing, 'redacted item')} not on the master list.** "
-            "They are hidden, but the code list can't say who they are later. "
+            "They are hidden, but the mapping can't say who they are later. "
             "Add them to the master list and redact again if that matters."
         )
     if ambiguous:
@@ -769,11 +922,13 @@ def scanned_pages_warning(
 ) -> str:
     """Explain what happened to scanned pages, read with OCR or not.
 
-    A scan is a picture of text with no text layer. A page OCR read had its
-    names redacted and, with image black-out on, everything it could not read
-    with confidence blacked out; it still deserves a look, because OCR can
-    misread. A page left unread comes out fully black with image black-out on,
-    and unredacted with it off.
+    A scan is a picture of text with no text layer, or a page that is mostly
+    such a picture under some typed text. A page OCR read had its names
+    redacted and, with image black-out on, everything it could not read with
+    confidence blacked out; it still deserves a look, because OCR can
+    misread. A page left unread has its scanned image blacked out with image
+    black-out on (for a plain scan, the whole page), and unredacted with it
+    off.
     """
     parts = []
     read_set = set(read)
@@ -798,8 +953,9 @@ def scanned_pages_warning(
     if unread:
         n = len(unread)
         outcome = (
-            "Black out images is on, so the download shows "
-            f"{'that page' if n == 1 else 'those pages'} fully black."
+            "Black out images is on, so the scanned image on "
+            f"{'that page' if n == 1 else 'those pages'} is blacked out in the "
+            "download."
             if images_blacked_out
             else "Black out images is off, so "
             f"{'that page goes' if n == 1 else 'those pages go'} into the download "

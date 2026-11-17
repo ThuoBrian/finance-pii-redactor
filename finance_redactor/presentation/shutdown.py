@@ -32,21 +32,32 @@ def render_quit_control() -> None:
             threading.Timer(1.5, os._exit, args=(0,)).start()
             st.stop()
 
+        # Callbacks, not st.rerun(): this is drawn before the uploader, and a
+        # rerun from here ends the run before it, so Streamlit drops the file.
+        # Cancel must leave the upload where it was.
         if st.session_state.get(_CONFIRM_KEY):
             st.warning("Close the app now? Anything not yet downloaded will be lost.")
             col_yes, col_cancel = st.columns(2)
-            if col_yes.button("Yes, close it", type="primary", width="stretch"):
-                st.session_state[_QUITTING_KEY] = True
-                st.rerun()
-            if col_cancel.button("Cancel", width="stretch"):
-                st.session_state[_CONFIRM_KEY] = False
-                st.rerun()
+            col_yes.button(
+                "Yes, close it",
+                type="primary",
+                width="stretch",
+                on_click=_set,
+                args=(_QUITTING_KEY, True),
+            )
+            col_cancel.button(
+                "Cancel", width="stretch", on_click=_set, args=(_CONFIRM_KEY, False)
+            )
             return
 
-        if st.button(
+        st.button(
             "Close the app",
             help="Fully quits the tool and closes its window",
             width="stretch",
-        ):
-            st.session_state[_CONFIRM_KEY] = True
-            st.rerun()
+            on_click=_set,
+            args=(_CONFIRM_KEY, True),
+        )
+
+
+def _set(key: str, value: bool) -> None:
+    st.session_state[key] = value

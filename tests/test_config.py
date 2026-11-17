@@ -10,8 +10,10 @@ from finance_redactor.config import (
     DEFAULT_SETTINGS,
     _resolve_data_dir,
     current_settings,
+    master_list_setup_skipped,
     read_persisted_master_list_dir,
     save_master_list_dir,
+    set_master_list_setup_skipped,
 )
 
 
@@ -119,6 +121,22 @@ def test_current_settings_reflects_a_persisted_change_without_reimport(tmp_path)
     assert after.names_dir == tmp_path / "newly-configured"
     # DEFAULT_SETTINGS itself is frozen at import time and must not change.
     assert DEFAULT_SETTINGS.names_dir == before.names_dir
+
+
+def test_setup_skip_is_off_by_default():
+    assert master_list_setup_skipped() is False
+
+
+def test_setup_skip_round_trips_and_keeps_the_saved_folder(tmp_path):
+    save_master_list_dir(tmp_path / "folder")
+
+    set_master_list_setup_skipped(True)
+    assert master_list_setup_skipped() is True
+    assert read_persisted_master_list_dir() == tmp_path / "folder"
+
+    set_master_list_setup_skipped(False)
+    assert master_list_setup_skipped() is False
+    assert read_persisted_master_list_dir() == tmp_path / "folder"
 
 
 def test_masked_financial_types_are_detected_but_never_pseudonymized():
