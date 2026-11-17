@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from finance_redactor.application.redact_docx import RedactDocxService
+from finance_redactor.application.results import DocxRedactionResult
 from finance_redactor.config import DEFAULT_SETTINGS
 from finance_redactor.domain.entities import DetectionSource, PiiDetection, Span
 from finance_redactor.domain.pseudonyms import MasterEntry
@@ -96,6 +97,20 @@ class _NameDetector:
         return detections
 
 
+def _run(
+    service: RedactDocxService,
+    doc: FakeWordDocument,
+    entities: list[str],
+    threshold: float,
+    *,
+    custom_words: list[str] | None = None,
+    exclude: frozenset[str] = frozenset(),
+) -> DocxRedactionResult:
+    """Scan, then redact: the path the app takes."""
+    scan_result = service.scan(doc, entities, threshold)
+    return service.redact(doc, scan_result, custom_words, exclude=exclude)
+
+
 def _service(detector: _NameDetector | None = None) -> RedactDocxService:
     return RedactDocxService(
         detector=detector or _NameDetector(),
@@ -106,15 +121,13 @@ def _service(detector: _NameDetector | None = None) -> RedactDocxService:
     )
 
 
-def test_execute_returns_pseudonymized_document_and_findings() -> None:
+def test_redact_returns_pseudonymized_document_and_findings() -> None:
     """The service pseudonymizes every block and records findings."""
     doc = FakeWordDocument(
         ["John paid invoice 1", "No name here", "John paid invoice 2"]
     )
-    result = _service().execute(doc, ["PERSON"], 0.35)
-
-    assert result.block_count == 3
-    assert result.entity_count == 2
+    result = _run(_service(), doc, ["PERSON"], 0.35)
+    assert len(result.findings) == 2
     assert result.data == doc.to_bytes()
     assert doc.closed is True
     assert result.findings[0].page == 0
@@ -125,7 +138,7 @@ def test_execute_returns_pseudonymized_document_and_findings() -> None:
 def test_pseudonym_is_consistent_across_blocks() -> None:
     """The same name in different blocks maps to the same pseudonym."""
     doc = FakeWordDocument(["John paid", "John approved"])
-    _service().execute(doc, ["PERSON"], 0.35)
+    _run(_service(), doc, ["PERSON"], 0.35)
 
     block_0_label = doc.replacements_by_block[0][0][1]
     block_1_label = doc.replacements_by_block[1][0][1]
@@ -136,9 +149,9 @@ def test_pseudonym_is_consistent_across_blocks() -> None:
 def test_blank_blocks_are_skipped() -> None:
     """Blocks with no text do not produce findings or replacements."""
     doc = FakeWordDocument(["", "John paid", "   "])
-    result = _service().execute(doc, ["PERSON"], 0.35)
+    result = _run(_service(), doc, ["PERSON"], 0.35)
 
-    assert result.entity_count == 1
+    assert len(result.findings) == 1
     assert 0 not in doc.replacements_by_block
     assert 2 not in doc.replacements_by_block
     assert 1 in doc.replacements_by_block
@@ -147,7 +160,7 @@ def test_blank_blocks_are_skipped() -> None:
 def test_crosswalk_lists_distinct_assignments() -> None:
     """The crosswalk contains each distinct name->pseudonym assignment once."""
     doc = FakeWordDocument(["John paid", "John approved", "Mary paid"])
-    result = _service().execute(doc, ["PERSON"], 0.35)
+    result = _run(_service(), doc, ["PERSON"], 0.35)
 
     assert len(result.crosswalk) == 2
     names = {a.original_name for a in result.crosswalk}
@@ -168,11 +181,9 @@ def test_custom_words_are_pseudonymized_and_survive_across_blocks() -> None:
         fixed_masks=DEFAULT_SETTINGS.fixed_masks,
     )
 
-    result = service.execute(
-        doc, ["PERSON"], 0.35, custom_words=["Project Nightingale"]
-    )
+    result = _run(service, doc, ["PERSON"], 0.35, custom_words=["Project Nightingale"])
 
-    assert result.entity_count == 2
+    assert len(result.findings) == 2
     labels = {
         a.pseudonym
         for a in result.crosswalk
@@ -220,9 +231,9 @@ def test_custom_words_do_not_override_an_overlapping_master_list_hit() -> None:
         fixed_masks=DEFAULT_SETTINGS.fixed_masks,
     )
 
-    result = service.execute(doc, ["PERSON"], 0.35, custom_words=["Jane Doe"])
+    result = _run(service, doc, ["PERSON"], 0.35, custom_words=["Jane Doe"])
 
-    assert result.entity_count == 1
+    assert len(result.findings) == 1
     assert result.crosswalk[0].pseudonym == "STF-10010"
     assert doc.replacements_by_block[0][0][1] == "STF-10010"
 
@@ -240,7 +251,7 @@ def test_document_is_closed_even_on_detector_error() -> None:
     service = _service(detector=FailingDetector())
 
     with pytest.raises(RuntimeError, match="detector failure"):
-        service.execute(doc, ["PERSON"], 0.35)
+        _run(service, doc, ["PERSON"], 0.35)
 
     assert doc.closed is True
 
@@ -249,7 +260,8 @@ def test_excluded_term_is_not_replaced_in_any_block() -> None:
     """Unticking a false positive drops it from the Word output too."""
     doc = FakeWordDocument(["Total salaries paid", "John approved salaries"])
 
-    result = _service().execute(
+    result = _run(
+        _service(),
         doc,
         ["PERSON"],
         0.35,
@@ -267,7 +279,8 @@ def test_excluded_term_is_not_replaced_in_any_block() -> None:
 def test_excluding_one_term_leaves_others_replaced_in_word() -> None:
     doc = FakeWordDocument(["John paid salaries"])
 
-    result = _service().execute(
+    result = _run(
+        _service(),
         doc,
         ["PERSON"],
         0.35,
@@ -311,7 +324,7 @@ def test_card_number_is_masked_and_never_reaches_the_crosswalk() -> None:
         fixed_masks=DEFAULT_SETTINGS.fixed_masks,
     )
 
-    result = service.execute(doc, ["CREDIT_CARD"], 0.35)
+    result = _run(service, doc, ["CREDIT_CARD"], 0.35)
 
     assert b"Charged to card [CARD] today" in result.data
     assert _CardDetector.card.encode() not in result.data
@@ -320,72 +333,12 @@ def test_card_number_is_masked_and_never_reaches_the_crosswalk() -> None:
 
 
 def test_link_targets_removed_on_open_are_reported() -> None:
-    result = _service().execute(
-        FakeWordDocument(["No name"], links=3), ["PERSON"], 0.35
-    )
+    result = _run(_service(), FakeWordDocument(["No name"], links=3), ["PERSON"], 0.35)
 
     assert result.removed_links == 3
 
 
 # --- scan()/redact() split -------------------------------------------------
-
-
-def test_scan_then_redact_matches_execute_for_a_custom_word() -> None:
-    """scan()+redact() with no exclusions equals execute() for a custom word."""
-    blocks = ["Total salaries paid", "No name here", "More salaries noted"]
-    service = _service()
-
-    expected = service.execute(
-        FakeWordDocument(list(blocks)), ["PERSON"], 0.35, custom_words=["salaries"]
-    )
-
-    scan_result = service.scan(FakeWordDocument(list(blocks)), ["PERSON"], 0.35)
-    actual = service.redact(FakeWordDocument(list(blocks)), scan_result, ["salaries"])
-
-    assert actual.findings == expected.findings
-    assert actual.crosswalk == expected.crosswalk
-    assert actual.data == expected.data
-
-
-def test_scan_then_redact_matches_execute_for_a_detector_sourced_match() -> None:
-    """scan()+redact() with no exclusions equals execute() for a detector hit."""
-    blocks = ["John paid invoice 1", "No name here", "John paid invoice 2"]
-    service = _service()
-
-    expected = service.execute(FakeWordDocument(list(blocks)), ["PERSON"], 0.35)
-
-    scan_result = service.scan(FakeWordDocument(list(blocks)), ["PERSON"], 0.35)
-    actual = service.redact(FakeWordDocument(list(blocks)), scan_result)
-
-    assert actual.findings == expected.findings
-    assert actual.crosswalk == expected.crosswalk
-    assert actual.data == expected.data
-
-
-def test_scan_then_redact_matches_execute_with_an_excluded_term() -> None:
-    """scan()+redact() reproduces execute()'s exclude behavior exactly."""
-    blocks = ["Total salaries paid to John"]
-    service = _service()
-
-    expected = service.execute(
-        FakeWordDocument(list(blocks)),
-        ["PERSON"],
-        0.35,
-        custom_words=["salaries"],
-        exclude=frozenset({"salaries"}),
-    )
-
-    scan_result = service.scan(FakeWordDocument(list(blocks)), ["PERSON"], 0.35)
-    actual = service.redact(
-        FakeWordDocument(list(blocks)),
-        scan_result,
-        ["salaries"],
-        exclude=frozenset({"salaries"}),
-    )
-
-    assert actual.findings == expected.findings
-    assert actual.crosswalk == expected.crosswalk
-    assert actual.data == expected.data
 
 
 def test_redact_does_not_call_the_detector_again_across_exclude_changes() -> None:
@@ -431,60 +384,9 @@ def test_scan_records_every_block_including_blank_ones() -> None:
 
     scan_result = _service().scan(doc, ["PERSON"], 0.35)
 
-    assert scan_result.block_count == 3
+    assert len(scan_result.blocks) == 3
     assert scan_result.blocks[0].detections == []
     assert scan_result.blocks[2].detections == []
-
-
-def test_scan_redact_excluded_term_is_not_replaced_in_any_block() -> None:
-    """The exclude behavior still holds when driven through scan()+redact()."""
-    doc = FakeWordDocument(["Total salaries paid", "John approved salaries"])
-    service = _service()
-    scan_result = service.scan(
-        FakeWordDocument(["Total salaries paid", "John approved salaries"]),
-        ["PERSON"],
-        0.35,
-    )
-
-    result = service.redact(
-        doc, scan_result, ["salaries"], exclude=frozenset({"salaries"})
-    )
-
-    replaced = [
-        text for block in doc.replacements_by_block.values() for _, text in block
-    ]
-    assert all("salaries" not in t for t in replaced)
-    assert all(a.original_name != "salaries" for a in result.crosswalk)
-
-
-def test_scan_redact_skips_blank_blocks() -> None:
-    """A blank block scanned as empty detections is also skipped by redact()."""
-    doc = FakeWordDocument(["", "John paid", "   "])
-    service = _service()
-    scan_result = service.scan(
-        FakeWordDocument(["", "John paid", "   "]), ["PERSON"], 0.35
-    )
-
-    result = service.redact(doc, scan_result)
-
-    assert result.entity_count == 1
-    assert 0 not in doc.replacements_by_block
-    assert 2 not in doc.replacements_by_block
-    assert 1 in doc.replacements_by_block
-
-
-def test_scan_redact_excluding_one_term_leaves_others_replaced() -> None:
-    doc = FakeWordDocument(["John paid salaries"])
-    service = _service()
-    scan_result = service.scan(
-        FakeWordDocument(["John paid salaries"]), ["PERSON"], 0.35
-    )
-
-    result = service.redact(
-        doc, scan_result, ["salaries"], exclude=frozenset({"salaries"})
-    )
-
-    assert [a.original_name for a in result.crosswalk] == ["John"]
 
 
 def test_scan_reports_progress_once_per_block() -> None:

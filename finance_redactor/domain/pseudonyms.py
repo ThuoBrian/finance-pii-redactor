@@ -7,7 +7,7 @@ file — preserving the linkage needed for error-checking and fraud monitoring
 while removing the real identity.
 
 Framework-free: this is pure domain logic, unit-testable without Presidio,
-pandas, or Streamlit.
+pandas, or a web framework.
 """
 
 from __future__ import annotations
@@ -178,6 +178,11 @@ class Assignment:
         return format_label(self.ordinal)
 
 
+# Hex characters of the name's hash in an auto-id (``PSN-AUTO-3F9A1C07``).
+# Changing it changes every auto-id, so existing mappings stop matching.
+_AUTO_HASH_LENGTH = 8
+
+
 class Pseudonymizer:
     """Assigns stable pseudonyms to detected names, recording a crosswalk.
 
@@ -190,7 +195,6 @@ class Pseudonymizer:
         self,
         master_map: Mapping[tuple[str, str], MasterEntry],
         auto_prefixes: Mapping[str, str],
-        auto_hash_length: int = 8,
         fuzzy_threshold: float = 0.84,
     ) -> None:
         """Wire the curated master map and the auto-id prefix table.
@@ -201,7 +205,6 @@ class Pseudonymizer:
         """
         self._master_map = master_map
         self._auto_prefixes = auto_prefixes
-        self._auto_hash_length = auto_hash_length
         self._fuzzy_threshold = fuzzy_threshold
         self._assignments: dict[tuple[str, str], Assignment] = {}
         self._candidates_by_type: dict[str, list[str]] = defaultdict(list)
@@ -336,7 +339,7 @@ class Pseudonymizer:
     def _auto_pseudonym(self, entity_type: str, normalized: str) -> str:
         prefix = self._auto_prefixes.get(entity_type) or entity_type[:3].upper()
         digest = hashlib.sha1(normalized.encode("utf-8")).hexdigest()
-        return f"{prefix}-AUTO-{digest[: self._auto_hash_length].upper()}"
+        return f"{prefix}-AUTO-{digest[:_AUTO_HASH_LENGTH].upper()}"
 
 
 def apply_replacements(

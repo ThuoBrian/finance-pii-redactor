@@ -14,6 +14,18 @@ updates:
         patterns:
           - "*"
 
+  # The React interface's npm packages (frontend/package-lock.json). A
+  # Dependabot PR here also needs `just web-build` and the rebuilt bundle
+  # committed, or CI's bundle check fails.
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    groups:
+      frontend-dependencies:
+        patterns:
+          - "*"
+
   # Keep the CI workflow's own actions (actions/checkout, astral-sh/setup-uv)
   # up to date too - these run with repo access, so an out-of-date action
   # pinned to an old tag is itself a supply-chain risk worth tracking.

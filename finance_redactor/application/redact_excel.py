@@ -4,7 +4,7 @@ Orchestrates: scan selected columns with a :class:`PiiDetector`, then rebuild a
 pseudonymized DataFrame by replacing each detected name with its stable
 pseudonym (curated from the master list, or a flagged auto-id). Bank and
 payment details get a fixed mask instead and stay out of the crosswalk. Pure
-orchestration - no pandas I/O (that lives in the Excel gateway) and no Streamlit.
+orchestration - no pandas I/O (that lives in the Excel gateway).
 """
 
 from __future__ import annotations
@@ -67,34 +67,6 @@ class RedactExcelService:
         self._fuzzy_threshold = fuzzy_threshold
         self._fixed_masks = fixed_masks
 
-    def scan(
-        self,
-        df: pd.DataFrame,
-        columns: list[str],
-        entities: list[str],
-        threshold: float,
-        on_progress: Callable[[int, int], None] | None = None,
-    ) -> ExcelScanResult:
-        """Detect PII across the selected columns, keyed by cell.
-
-        Each *distinct* cell value is analyzed only once and the result reused for
-        every cell holding that value (identical text yields identical spans), so
-        the detector runs O(unique values) times rather than O(rows x columns) —
-        a large saving on spreadsheets where names repeat across many rows.
-
-        ``on_progress`` (if given) is called as ``(done, total)`` after each unique
-        value is analyzed, letting the caller drive a progress bar without this
-        layer depending on any UI framework.
-        """
-        cells = _cells(df, columns)
-        cache = self._analyze(
-            list(dict.fromkeys(text for _, _, text in cells)),
-            entities,
-            threshold,
-            on_progress,
-        )
-        return ExcelScanResult(_findings(cells, cache))
-
     def scan_workbook(
         self,
         sheets: Mapping[str, pd.DataFrame],
@@ -150,33 +122,6 @@ class RedactExcelService:
                 on_progress(done, total)
         return cache
 
-    def redact(
-        self,
-        df: pd.DataFrame,
-        scan_result: ExcelScanResult,
-        columns: list[str],
-        exclude: frozenset[str] = frozenset(),
-    ) -> tuple[pd.DataFrame, list[Assignment]]:
-        """Return a pseudonymized copy of ``df`` plus the name->pseudonym crosswalk.
-
-        A single :class:`Pseudonymizer` spans the whole sheet so a name appearing
-        in many cells maps to one consistent pseudonym.
-
-        ``exclude`` is a set of already-normalized terms (see
-        ``domain/pseudonyms.normalize``) the operator ticked off in the review
-        table as false positives. Matching detections are dropped before
-        replacement, so they are neither replaced in the output nor recorded in
-        the crosswalk.
-
-        This is the reason ``scan`` and ``redact`` are separate: re-applying
-        with a different ``exclude`` set is a pure pass over an existing
-        :class:`ExcelScanResult` and never re-runs detection, so changing a
-        tick box costs nothing and never reloads the spaCy model.
-        """
-        pseudonymizer = self._new_pseudonymizer()
-        redacted = self._redact_sheet(df, scan_result, columns, exclude, pseudonymizer)
-        return redacted, pseudonymizer.crosswalk()
-
     def redact_workbook(
         self,
         sheets: Mapping[str, pd.DataFrame],
@@ -195,6 +140,13 @@ class RedactExcelService:
         A redacted header renames its column in the returned data, and the
         highlighted keys use the new name. The header cell itself is
         highlighted as row :data:`HEADER_ROW`.
+
+        ``exclude`` holds already-normalized terms (see
+        ``domain/pseudonyms.normalize``) the reviewer unticked. Matching
+        detections are dropped before replacement, so they are neither
+        replaced nor recorded in the crosswalk. This is why scanning and
+        redacting are separate: re-applying a different ``exclude`` is a pure
+        pass over the existing scan and never re-runs detection.
         """
         pseudonymizer = self._new_pseudonymizer()
         redacted_sheets = []

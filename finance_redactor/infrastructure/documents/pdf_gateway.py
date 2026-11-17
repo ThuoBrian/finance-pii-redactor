@@ -291,7 +291,7 @@ class PyMuPdfDocument:
         """Return image bounding boxes on one page as (x0, y0, x1, y1) tuples."""
         page = self._doc.load_page(page_index)
         rects: list[tuple[float, float, float, float]] = []
-        for _img_index, img in enumerate(page.get_images(full=True), start=1):
+        for img in page.get_images(full=True):
             xref = img[0]
             for rect in page.get_image_rects(xref):
                 rects.append((rect.x0, rect.y0, rect.x1, rect.y1))
@@ -374,15 +374,8 @@ class PyMuPdfDocument:
                 for item in search_item:
                     candidates.append(item)
                     candidates.extend(_search_variants(item))
-                # Deduplicate while preserving order. Relies on set.add()
-                # always returning None (falsy), so `or` always evaluates and
-                # runs the add - a deliberate idiom, not a bug.
-                seen: set[str] = set()
-                candidates = [
-                    c
-                    for c in candidates
-                    if not (c in seen or seen.add(c))  # type: ignore[func-returns-value]
-                ]
+                # Deduplicate while preserving order.
+                candidates = list(dict.fromkeys(candidates))
 
             rects: list[fitz.Rect] = []
             matched_candidate = ""

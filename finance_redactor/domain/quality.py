@@ -5,14 +5,14 @@ list workbook at load time — duplicate names, conflicting IDs, blank IDs, reus
 The repository produces them; the presentation layer renders them as warnings on the
 sidebar's master-list card so the IDs the tool emits are trustworthy.
 
-Framework-free: a plain frozen dataclass, unit-testable without pandas or Streamlit.
+Framework-free: a plain frozen dataclass, unit-testable without pandas or a web framework.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-# Severities — mapped to Streamlit widgets by the presentation layer.
+# Severities — shown as a warning or a note by the interface.
 SEVERITY_WARNING = "warning"
 SEVERITY_INFO = "info"
 

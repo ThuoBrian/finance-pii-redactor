@@ -61,7 +61,7 @@ variable if both end up set.
      your shell profile (e.g. `~/.zshrc` or `~/.bashrc`), then re-open the
      terminal before running `./run.sh`.
 3. Refresh the app in the browser and check the master-list summary in
-   the master-list card in the app's sidebar — the row counts should match what everyone else on
+   the master-list popover at the top of the app — the row counts should match what everyone else on
    the team sees. If it shows zero names, double-check the path and the
    exact filename (see below) before assuming the shared list is empty.
 
@@ -136,7 +136,7 @@ Each sheet must have these columns:
 ## Data-quality checks (shown on load)
 
 When the workbook loads, the app surfaces any of these on the master-list
-card in the sidebar, behind its "things to tidy" badge, so the IDs it emits
+popover (click the name count at the top), under "things to tidy", so the IDs it emits
 stay trustworthy:
 
 - **Rows skipped because their Category cell doesn't match** (warning) — a

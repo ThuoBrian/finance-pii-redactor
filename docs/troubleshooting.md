@@ -8,7 +8,8 @@ This file records known errors, edge cases, and their solutions when developing 
   - [`uv` is not found when running `run.sh` or `run.bat`](#uv-is-not-found-when-running-runsh-or-runbat)
   - [`en_core_web_lg` spaCy model fails to download](#en_core_web_lg-spacy-model-fails-to-download)
   - [`run.bat` crashes with `'────' is not recognized` or `do was unexpected at this time`](#runbat-crashes-with--is-not-recognized-or-do-was-unexpected-at-this-time)
-  - [Streamlit fails to start because port 8501 is in use](#streamlit-fails-to-start-because-port-8501-is-in-use)
+  - [The app fails to start because port 8501 is in use](#the-app-fails-to-start-because-port-8501-is-in-use)
+  - [After updating, the app stops with `No module named ...`](#after-updating-the-app-stops-with-no-module-named-)
   - [The same name gets a different code for different teammates](#the-same-name-gets-a-different-code-for-different-teammates)
   - [The master-list summary shows 0 names after pointing at the shared Box folder](#the-master-list-summary-shows-0-names-after-pointing-at-the-shared-box-folder)
   - [The app fails to read the master list while it is open in Excel](#the-app-fails-to-read-the-master-list-while-it-is-open-in-excel)
@@ -22,8 +23,8 @@ This file records known errors, edge cases, and their solutions when developing 
   - [PDF detects names the same way Excel and Word do](#pdf-detects-names-the-same-way-excel-and-word-do)
   - [Long multi-word names are not matched](#long-multi-word-names-are-not-matched)
   - [A name followed by a bare hyphen resolves to a flagged auto-id](#a-name-followed-by-a-bare-hyphen-resolves-to-a-flagged-auto-id)
-  - [The master-list card says there are things to tidy](#the-master-list-card-says-there-are-things-to-tidy)
-  - [Editing the master list (or fixing its location) doesn't show up until I do *something*](#editing-the-master-list-or-fixing-its-location-doesnt-show-up-until-i-do-something)
+  - [The master-list card says there are things to tidy](#the-master-list-status-says-there-are-things-to-tidy)
+  - [Editing the master list (or fixing its location) doesn't show up](#editing-the-master-list-or-fixing-its-location-doesnt-show-up)
   - [A legacy name in the old `person.txt` had an ID appended (`Name - 10001`)](#a-legacy-name-in-the-old-persontxt-had-an-id-appended-name---10001)
   - [Mixed-language text causes spaCy NER to miss names](#mixed-language-text-causes-spacy-ner-to-miss-names)
   - [Can't type an accented name (`José`, `Muñoz`, `André`) into the "words to redact" box](#cant-type-an-accented-name-josé-muñoz-andré-into-the-words-to-redact-box)
@@ -42,7 +43,7 @@ This file records known errors, edge cases, and their solutions when developing 
   - [A link no longer works in the redacted file](#a-link-no-longer-works-in-the-redacted-file)
   - [What Excel formatting is kept, and what is not](#what-excel-formatting-is-kept-and-what-is-not)
 - [Testing and linting](#testing-and-linting)
-  - [`ruff` flags `E402` for the Streamlit context guard import](#ruff-flags-e402-for-the-streamlit-context-guard-import)
+  - [CI fails with "The committed UI bundle is out of date"](#ci-fails-with-the-committed-ui-bundle-is-out-of-date)
   - [`codespell` flags HTML variable names like `thead` or `ws`](#codespell-flags-html-variable-names-like-thead-or-ws)
 
 ## Environment and setup
@@ -73,15 +74,17 @@ This file records known errors, edge cases, and their solutions when developing 
 
   For `run.sh`, also confirm it keeps **LF** (not CRLF) line endings, or the `#!/usr/bin/env bash` shebang breaks on Unix.
 
-### Streamlit fails to start because port 8501 is in use
+### The app fails to start because port 8501 is in use
 
-- **Symptom:** `Address already in use`.
-- **Cause:** Another Streamlit instance is running.
-- **Solution:** Stop the other instance, or launch on a different port:
+- **Symptom:** The black window says `Port 8501 is already in use` and closes, or nothing opens.
+- **Cause:** The app is already running (perhaps in a window you minimised), or another program uses that port.
+- **Solution:** Try http://127.0.0.1:8501/ in your browser first: it may already be open. Otherwise close the other window, or use **Close the app** in its ⋯ menu, and start again. Developers can pick another port with the `FPR_PORT` environment variable (for example `FPR_PORT=8502 just run`).
 
-  ```bash
-  uv run streamlit run app.py --server.address=127.0.0.1 --server.port 8502
-  ```
+### After updating, the app stops with `No module named ...`
+
+- **Symptom:** The black window shows `ModuleNotFoundError: No module named 'fastapi'` (or another package) right after an update.
+- **Cause:** The new version needs packages the old setup did not have. The launchers set the program up again whenever `uv.lock` changes (they keep a copy at `.venv/.synced-uv.lock`), but a launcher from before that check only did so on the very first run.
+- **Solution:** Update with the install command, which starts from a fresh folder. Or delete the `.venv` folder in the install folder and start the app again: it sets itself up once more (a few minutes).
 
 ### The same name gets a different code for different teammates
 
@@ -91,19 +94,19 @@ This file records known errors, edge cases, and their solutions when developing 
 
 ### The master-list summary shows 0 names after pointing at the shared Box folder
 
-- **Symptom:** After setting `FPR_MASTER_LIST_DIR` and restarting the app, the master-list card in the sidebar shows 0 names for every category, but there is no error message.
+- **Symptom:** After setting `FPR_MASTER_LIST_DIR` and restarting the app, the master-list count at the top shows no names, but there is no error message.
 - **Cause:** `MasterListRepository._parse` returns an empty list when the workbook is missing — by design, a bad path or a missing file shows as "0 names," not as a crash (see `finance_redactor/infrastructure/names/master_list_repository.py`). A workbook that is there but can't be read (damaged, password-protected, or locked by Excel) also loads 0 names, and the card's **things to tidy** badge then says "The master list could not be opened" and why. Remove the password or save a fresh copy, close it in Excel, and Refresh. For a missing file, any of the following put the app in that state:
   1. **The environment variable isn't actually set in the process that launched the app.** On Windows, `setx` only takes effect for *new* processes started after it runs — the terminal window you ran `setx` in does not see the update. If you launch by double-clicking `run.bat` from File Explorer rather than a freshly opened terminal, Explorer itself may need to restart (or you need to log off/on) before it picks up a `setx`'d value, not just "open a new terminal."
   2. **The path is wrong for this machine.** Box Drive does not guarantee the same literal path across users/computers (different drive letter, username, or folder nesting) — the value must be *your own* local path to the shared folder, not one copied verbatim from a colleague.
   3. **The filename doesn't match exactly**, or a sync-conflict copy was created — see [Keep the filename exactly as-is](../data/README.md#keep-the-filename-exactly-as-is) in `data/README.md`.
   4. **The file is an online-only Box placeholder that hasn't synced**, so it isn't actually present at that path yet. Right-click the shared folder in Box Drive and choose **Make Available Offline**.
-- **Solution:** The app itself now offers an easier fix for cause 1 (by far the most common): whenever 0 names are loaded, it automatically shows a **"Set up your shared master list"** dialog (`finance_redactor/presentation/master_list_setup.py`) prompting for the folder path directly in the browser — no terminal, no `setx`, no restart. It persists the choice to a small per-user settings file (`~/.finance_pii_redactor/settings.json`, via `finance_redactor.config.save_master_list_dir`) that takes precedence over `FPR_MASTER_LIST_DIR` and applies on the next page rerun. **Skip for now** is remembered in the same file, so the dialog stays closed on later launches; it opens again once a list has loaded with names and then goes back to 0. To get it back sooner, delete `master_list_setup_skipped` from that file. If you'd rather still use the environment-variable route (e.g. for a scripted/team-wide deployment), that keeps working unchanged as a fallback — check causes 2-4 above, close and reopen the terminal (or restart Explorer/log off-on if launched by double-click) before relaunching `run.bat`/`run.sh`, then confirm the row counts in the options step match what teammates on the same shared list see.
+- **Solution:** The app itself now offers an easier fix for cause 1 (by far the most common): whenever 0 names are loaded, it automatically shows a **"Set up your shared master list"** dialog (`frontend/src/components/SetupDialog.tsx`, saved through `/api/master-list/setup`) prompting for the folder path directly in the browser — no terminal, no `setx`, no restart. It persists the choice to a small per-user settings file (`~/.finance_pii_redactor/settings.json`, via `finance_redactor.config.save_master_list_dir`) that takes precedence over `FPR_MASTER_LIST_DIR` and applies straight away. **Skip for now** is remembered in the same file, so the dialog stays closed on later launches; it opens again once a list has loaded with names and then goes back to 0. To get it back sooner, delete `master_list_setup_skipped` from that file. If you'd rather still use the environment-variable route (e.g. for a scripted/team-wide deployment), that keeps working unchanged as a fallback — check causes 2-4 above, close and reopen the terminal (or restart Explorer/log off-on if launched by double-click) before relaunching `run.bat`/`run.sh`, then confirm the master-list count at the top matches what teammates on the same shared list see.
 
 ### The app fails to read the master list while it is open in Excel
 
 - **Symptom:** A `PermissionError`, `FileNotFoundError`, or a "failed to read Excel" message appears when the app starts or after refreshing the page.
 - **Cause:** Microsoft Excel locks the workbook while it is open, so the app's `pd.read_excel` call cannot access it.
-- **Solution:** Save and close the Excel workbook before launching or refreshing the app. You can edit the workbook, save it, close Excel, then click **Refresh** on the master-list card in the sidebar to pick up the changes.
+- **Solution:** Save and close the Excel workbook before launching or refreshing the app. You can edit the workbook, save it, close Excel, then click the master-list count at the top and press **Refresh** to pick up the changes.
 
 ## Code and dependencies
 
@@ -116,24 +119,24 @@ This file records known errors, edge cases, and their solutions when developing 
 ### `app.py` cannot import from `finance_redactor`
 
 - **Symptom:** `ModuleNotFoundError: No module named 'finance_redactor'`.
-- **Cause:** Running `python app.py` directly instead of via `streamlit run app.py`, or not running from the project root.
-- **Solution:** Always run from the repository root with `uv run streamlit run app.py`. If you need a standalone script, adjust `PYTHONPATH` first.
+- **Cause:** `app.py` was started in a way that does not put its own folder on Python's path, for example `python -c` or `runpy` from another directory.
+- **Solution:** Start it as a script: `just run`, `uv run python app.py` from the repository root, or `run.bat`/`run.sh`, which call the virtual environment's Python on `app.py` by its full path.
 
 ### A name gets a flagged `*-AUTO-*` code instead of my curated ID
 
 - **Symptom:** A name shows up in the crosswalk as e.g. `PSN-AUTO-3F9A1C07` with **Flagged = yes**, not the `STF-12345` you expected.
 - **Cause:** The name was detected but is **not in the master list with a curated `Internal ID`** — either it is missing, the `Internal ID` column is blank, or the spelling/spacing in the master list does not match the document text. Matching is case- and accent-insensitive and whitespace-normalized, and **alias-aware**: organization suffix equivalents (`Ltd`=`Limited`, `Inc`=`Incorporated`, `Corp`=`Corporation`, `Co`=`Company`; `LLC`/`PLC` period-tolerant) and `&`↔`and` swaps are matched automatically, so `Acme Ltd` in the list covers `Acme Limited` in a document. Spelling, word order, middle initials and surnames on their own are **not** matched.
-- **Solution:** Add the name to `data/Names List - Organized.xlsx` with the correct sheet/category and a non-blank `Internal ID`, using the exact text as it appears in the data, then click **Refresh** on the master-list card in the sidebar. The parsed master list is cached, and the cache rebuilds on the next rerun after the workbook changes; the button forces it immediately. Auto-codes are deterministic (the same unknown name always yields the same code, even across files), so existing outputs stay consistent until you re-run. The one exception is the change from 5 to 8 hash characters (see the CHANGELOG): codes made before it, like `PSN-AUTO-3F9A1`, don't match the 8-character codes made since. Check the crosswalk's **Possible match** column first — if the flagged name is a near-miss typo of a curated name (e.g. document `Micheal Sample` vs. master-list `Michael Sample`), it already names the likely intended match as a reviewer hint (`finance_redactor/domain/fuzzy.py`); this is advisory only and is never auto-applied, so you still need to fix the name (in your data or the master list) and re-run.
+- **Solution:** Add the name to `data/Names List - Organized.xlsx` with the correct sheet/category and a non-blank `Internal ID`, using the exact text as it appears in the data, then click the master-list count at the top and press **Refresh**. The parsed master list is cached, and the cache rebuilds the next time it is needed after the workbook changes; **Refresh** forces it immediately. Auto-codes are deterministic (the same unknown name always yields the same code, even across files), so existing outputs stay consistent until you re-run. The one exception is the change from 5 to 8 hash characters (see the CHANGELOG): codes made before it, like `PSN-AUTO-3F9A1`, don't match the 8-character codes made since. Check the crosswalk's **Possible match** column first — if the flagged name is a near-miss typo of a curated name (e.g. document `Micheal Sample` vs. master-list `Michael Sample`), it already names the likely intended match as a reviewer hint (`finance_redactor/domain/fuzzy.py`); this is advisory only and is never auto-applied, so you still need to fix the name (in your data or the master list) and re-run.
 
 ### An ordinary word is being redacted
 
 - **Symptom:** An everyday word is replaced in the output - `salaries`, `rent`, `transport`, `bank`. It happens on every occurrence, in every document.
-- **First, find out why it matched.** Open the **Review** tab on the Review step and read the **Why it was found** column for that word (or turn on **Show details** for the **Source** column). It tells you which of three different problems you have:
+- **First, find out why it matched.** On the Review step, read the line under that word in the findings list, which says why it was found (or tick **Show details** to see its source). It tells you which of three different problems you have:
   - **Master list** - the workbook has a row whose `Name` is that word. Someone added a payee or account called `Salaries`, and the tool matches master-list names exactly, so every occurrence of the word is now a hit in all three formats. This is the common cause in a finance master list.
   - **Model guess** - spaCy guessed. Possible in all three formats. Often an ALL-CAPS label (`SALARIES`) that the recasing pass turns into a name-shaped `Salaries` (see "ALL-CAPS names and acronym false positives" below).
   - **Typed word** - it came from the **Add something the tool missed** box on the Review step. Remove it there and click **Add and rebuild**; the box is not saved between sessions.
 - **Fix it for this document:** untick the word in the **Hide in output?** column of the **Review** tab and click **Apply changes**. The file is rebuilt without it, and everything else stays redacted. This works in all three formats and is the only lever PDF has.
-- **Fix it for good (the **Master list** case):** edit `data/Names List - Organized.xlsx` - delete the row, or make the name distinctive (`Salaries Account`, `Salaries Ltd`). A multi-word name no longer matches the bare word, because the matcher keys on the whole string. Save, close, then click **Refresh** (master-list card, sidebar). Do this rather than unticking every time: an unticked word is per-document and you would repeat it forever.
+- **Fix it for good (the **Master list** case):** edit `data/Names List - Organized.xlsx` - delete the row, or make the name distinctive (`Salaries Account`, `Salaries Ltd`). A multi-word name no longer matches the bare word, because the matcher keys on the whole string. Save, close, then press **Refresh** in the master-list popover (click the name count at the top). Do this rather than unticking every time: an unticked word is per-document and you would repeat it forever.
 - **Fix it for good (the **Model guess** case):** raise the **Confidence threshold** under **Customize** on the Options step, in Excel or Word. The Excel and Word sliders stop at **0.85** (`Settings.max_threshold`): the bank-account, M-Pesa and SWIFT patterns (`financial_recognizers.py`) score 0.85, so anything higher would stop masking them, and curated master-list matches score 0.90, so anything above that would stop matching **every** name in the workbook at once.
 - **Note on unticking:** it is a deliberate decision to leave text un-redacted, so the word appears in the downloaded file exactly as in the original. The app warns above the download button and lists what it left alone. Re-tick it and click **Apply changes** to undo.
 
@@ -142,7 +145,7 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Applies to:** PDF. In **Word**, typed words are still never looked up in the master list, so they always get a flagged `CST-AUTO-<hash>` code - that part is expected there, not a bug.
 - **Symptom:** In a PDF, a word typed into the Review step's **Add something the tool missed** box shows up in the label mapping with an `AUTO-` placeholder in the **Internal ID** column and a reason under **Flagged**, instead of a real `Internal ID`.
 - **Cause:** PDF typed words *are* resolved against the master list, so a flagged row means the lookup genuinely found nothing usable. **Flagged** says which of two things happened:
-  - `not in master list` - no row matches that name. Matching is exact on the name (accent- and case-insensitive, plus the usual organization-suffix aliases), so a typo or a reworded form will miss. Check the **Possible match** column in the review table: if it names a near-miss, that is the row you probably meant.
+  - `not in master list` - no row matches that name. Matching is exact on the name (accent- and case-insensitive, plus the usual organization-suffix aliases), so a typo or a reworded form will miss. Check **Possible match** on the Review step's **Mapping** tab: if it names a near-miss, that is the row you probably meant.
   - `ambiguous - matched several master-list rows` - two or more rows matched with **different** `Internal ID`s, so the tool refused to pick one. Writing a coin-flip ID into a mapping that carries no names would be undetectable later, so it declines instead. Fix the duplicate rows (the master-list data-quality panel in the options step already flags them) and re-run.
 - **Either way the word is still fully redacted.** The only thing missing is the ability to decode that label back to a name later. If you need that, add the name to the master list with an `Internal ID` and run again.
 - The `AUTO-` placeholder is a hash of the name, not the name, so the mapping file stays free of names. Because it is derived from the name it is also stable: the same unresolved word gets the same placeholder in every document, so two mappings can still be joined on it.
@@ -157,7 +160,7 @@ This file records known errors, edge cases, and their solutions when developing 
   - **Numbers are per-document.** `[001]` in two different PDFs is almost certainly two different entities. To track one vendor across several PDFs, join their mapping files on the **Internal ID** column - not on the label.
   - **PDF and Excel outputs of the same data will not match by eye**, since Excel still uses `VND-17728`. Cross-reference through the Internal ID.
   - **The mapping file contains no names**, so it is *Internal* rather than *Confidential* and can travel with the redacted PDF. The master list is what stays access-controlled.
-  - **If you need names in the mapping**, switch on **Also prepare a mapping with names (Confidential)** in the **Keep private** card on the Download step. It gives a second file, `<name>_crosswalk.csv`, with an `Original name` column. That file is *Confidential*, like Word's: do not keep it with the redacted PDF. The default download stays names-free and the toggle is off for every new upload.
+  - **If you need names in the mapping**, tick **Also prepare a mapping with names** in the **Keep private** card on the Download step. It gives a second file, `<name>_crosswalk.csv`, with an `Original name` column. That file is *Confidential*, like Word's: do not keep it with the redacted PDF. The default download stays names-free, and the option is off again for every new scan.
 - **Solution:** If a term needs a stable, curated ID going forward (not just a flagged one for this run), add it to `data/Names List - Organized.xlsx` as a normal master-list row instead of typing it into the custom-words box. This now helps all three formats: a curated name is detected automatically in PDF too, and only a curated name gets a decodable `Internal ID` in the PDF label mapping. The box is also not saved anywhere between sessions - you'll need to retype it (or the same text) next time, though it does survive uploading a second file in the *same* browser session without retyping.
 
 ### PDF detects names the same way Excel and Word do
@@ -182,25 +185,24 @@ This file records known errors, edge cases, and their solutions when developing 
 - **Solution:** `dedupe_overlapping` (`finance_redactor/domain/rules.py`) now breaks overlaps by source first: a master-list-sourced detection always wins over an overlapping model-sourced one, regardless of which span is longer. Same-source overlaps still use leftmost/longest as before.
 - **Workaround if you hit a similar case elsewhere:** rephrase without a bare hyphen (e.g. `Jane Doe (Springfield)`, `Jane Doe, Springfield`, or an em dash) to stop the model fusing the two into one entity — though this should no longer be necessary for names that are in the master list.
 
-### The master-list card says there are things to tidy
+### The master-list status says there are things to tidy
 
-- **Symptom:** The master-list card in the sidebar shows a **things to tidy** badge; opening it shows boxes with titles like "Cross-category duplicate", "Conflicting IDs", "Reused Internal ID", or "Blank Internal ID".
+- **Symptom:** The master-list popover (click the name count at the top) shows a **things to tidy** section, with entries like "Cross-category duplicate", "Conflicting IDs", "Reused Internal ID", or "Blank Internal ID".
 - **Cause:** On load, `MasterListRepository.quality_report()` scans the workbook and surfaces six issue kinds: rows skipped because their `Category` cell doesn't match their sheet (warning — blank, missing column or different wording; those names are not loaded and will not be detected), a name under more than one category (warning), the same name in one category with two different `Internal ID`s (warning), one `Internal ID` shared by two different names in a category (warning), a name with a blank `Internal ID` (info — supported, gets a flagged auto-code), and a single-token name that's also an ordinary English word (info — e.g. a funder literally named "Across"; every plain-English occurrence of that word gets detected too). Exact duplicate rows (same name and same ID) are benign and are **not** flagged.
-- **Solution:** Fix the offending rows in `data/Names List - Organized.xlsx` (merge duplicates, give each name a unique ID, fill in blank IDs), save and close the workbook, then click **Refresh** on the master-list card in the sidebar. The warnings clear once the workbook is clean. These are advisories — the app still runs with a dirty list, but the IDs it emits may be ambiguous, so fixing them keeps pseudonyms trustworthy.
+- **Solution:** Fix the offending rows in `data/Names List - Organized.xlsx` (merge duplicates, give each name a unique ID, fill in blank IDs), save and close the workbook, then press **Refresh** in the master-list popover. The warnings clear once the workbook is clean. These are advisories — the app still runs with a dirty list, but the IDs it emits may be ambiguous, so fixing them keeps pseudonyms trustworthy.
 
-### Editing the master list (or fixing its location) doesn't show up until I do *something*
+### Editing the master list (or fixing its location) doesn't show up
 
-- **Symptom:** You edit and save `Names List - Organized.xlsx` (or fix a wrong `FPR_MASTER_LIST_DIR`/in-app path), but the app keeps showing the old row counts, IDs, or "0 names" - nothing changes while it just sits open.
-- **Cause:** The parsed master list is cached process-wide behind `@st.cache_resource`, keyed on the workbook's path and modification time (see "Caching" in [ARCHITECTURE.md](../ARCHITECTURE.md#caching)). Streamlit only re-checks that key on a *rerun* - a widget interaction or a full page reload - never on a timer, so an edit made while the page is just sitting there has no visible effect until something triggers one.
-- **Solution:** Click the **Refresh** (master-list card, sidebar) button on the master-list card in the sidebar (`master_list_view.py`, on every step) - it force-clears the cache and reruns immediately, so you don't need to know to reload the whole browser page. This also covers the one case a plain page reload can silently miss: if the workbook's modification time hasn't actually changed yet (e.g. a Box Drive sync still copying the new version down), a reload alone reuses the stale cache since the cache key looks unchanged, while the button's explicit clear forces a fresh read regardless.
-- **If edits never show up even after a reload or a restart of the page:** check that the key arguments of `_get_master_list_bundle` in `app.py` do not start with an underscore. Streamlit leaves such arguments out of the cache key, so the cache would never rebuild (this was a real bug, fixed in the Unreleased changes).
-- **Worth knowing if two people test against the same running server:** this cache is shared across every browser session hitting that one `streamlit run` process, not per-tab - one person's refresh benefits everyone connected to it, but it also means there's no per-user "my view is different" isolation for this particular cache.
+- **Symptom:** You edit and save `Names List - Organized.xlsx` (or fix a wrong `FPR_MASTER_LIST_DIR`/in-app path), but the master-list status at the top still shows the old row counts, IDs, or "No names loaded".
+- **Cause:** The parsed master list is cached for the life of the app, keyed on the workbook's path and modification time (see "Caching" in [ARCHITECTURE.md](../ARCHITECTURE.md#caching)). The key is checked when something needs the master list (opening the status popover after a reload, or starting a scan), not on a timer. A Box Drive sync that is still copying the file down may not have changed the modification time yet, so the cache looks current.
+- **Solution:** Click the master-list status at the top of the page and press **Refresh**. It clears the cache and reads the workbook again, whatever its modification time says.
+- **Worth knowing:** the cache belongs to the running app, not to a browser tab, so two tabs open on the same app see the same master list.
 
 ### A legacy name in the old `person.txt` had an ID appended (`Name - 10001`)
 
 - **Symptom:** After migrating, a name that previously "never matched" now does.
 - **Cause:** The old plain-text lists sometimes embedded an ID in the name itself (`Jane Doe - 10001`). The recognizer searched for the *whole string* including ` - 10001`, so it almost never matched real document text — a latent bug.
-- **Solution:** The app now reads `data/Names List - Organized.xlsx` directly and strips a trailing ` - <digits>` from names on every sheet (Staff, Vendors, Funders), using the `Internal ID` column as the curated ID. If you still have legacy `.txt` lists, update `scripts/migrate_to_master_list.py` to write to the Excel workbook, or migrate manually.
+- **Solution:** The app now reads `data/Names List - Organized.xlsx` directly and strips a trailing ` - <digits>` from names on every sheet (Staff, Vendors, Funders), using the `Internal ID` column as the curated ID. If you still have legacy `.txt` lists, copy their names into the workbook by hand (the one-off migration script was removed; it is in the git history).
 - **Other text after ` - ` is kept.** Only a numeric suffix is the legacy format. A name like `Acme - Kenya` used to be cut to `Acme`, so the full form never matched. It is now kept whole, and `Acme` on its own is matched too, so a document that writes either form is caught. The master-list card lists every such name under "things to tidy" ("name(s) contain ' - '"), because the short part is redacted wherever it appears: if it is an ordinary word, rename the row. If several rows share the short part with different Internal IDs (`Acme - Kenya`, `Acme - Uganda`), a bare `Acme` is still redacted but gets a flagged auto-code instead of a guessed ID.
 
 ### Mixed-language text causes spaCy NER to miss names
@@ -332,11 +334,11 @@ This file records known errors, edge cases, and their solutions when developing 
 
 ## Testing and linting
 
-### `ruff` flags `E402` for the Streamlit context guard import
+### CI fails with "The committed UI bundle is out of date"
 
-- **Symptom:** `Module level import not at top of file` on the `streamlit.runtime.scriptrunner` import.
-- **Cause:** The import is deliberately placed at the bottom of `app.py` to avoid running `_main()` when the module is imported by tests or linters.
-- **Solution:** Keep the `# noqa: E402` comment on that import line.
+- **Symptom:** The `frontend` CI job fails after the build step with that message and a list of changed files under `finance_redactor/presentation/static/`.
+- **Cause:** Something under `frontend/` changed (code or `package-lock.json`, including a Dependabot update) but the built bundle was not rebuilt. End users run the committed bundle, so it must match the source.
+- **Solution:** Run `just web-build` and commit the changed files in `finance_redactor/presentation/static/`.
 
 ### `codespell` flags HTML variable names like `thead` or `ws`
 

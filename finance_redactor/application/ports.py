@@ -10,7 +10,7 @@ Presidio, openpyxl, and PyMuPDF.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 import pandas as pd
 
@@ -19,7 +19,6 @@ from finance_redactor.domain.ocr import Box, OcrLine
 from finance_redactor.domain.tables import TableColumn
 
 
-@runtime_checkable
 class PiiDetector(Protocol):
     """Detects PII in a single text string."""
 
@@ -43,7 +42,6 @@ class SheetFormatting(Protocol):
         ...
 
 
-@runtime_checkable
 class ExcelGateway(Protocol):
     """Reads and writes Excel workbooks."""
 
@@ -62,19 +60,16 @@ class ExcelGateway(Protocol):
     def write(
         self,
         sheets: Sequence[tuple[str, pd.DataFrame, set[tuple[int, str]]]],
-        crosswalk_df: pd.DataFrame | None,
         formats: Sequence[SheetFormatting | None] | None = None,
     ) -> bytes:
         """Serialize ``(tab name, data, highlighted (row, column) cells)`` to xlsx.
 
-        ``crosswalk_df``, when not ``None``, is written as a final,
-        unhighlighted "Crosswalk" sheet. ``formats`` gives each sheet's
-        look, in the same order as ``sheets``.
+        ``formats`` gives each sheet's look, in the same order as ``sheets``.
+        The crosswalk is never written into the workbook.
         """
         ...
 
 
-@runtime_checkable
 class PdfDocument(Protocol):
     """A mutable, open PDF being redacted page by page."""
 
@@ -175,7 +170,6 @@ class PdfDocumentFactory(Protocol):
         ...
 
 
-@runtime_checkable
 class WordDocument(Protocol):
     """A mutable, open Word (.docx) document being pseudonymized block by block.
 

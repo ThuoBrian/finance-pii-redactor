@@ -390,8 +390,8 @@ class PythonDocxDocument:
         """
         data = source.read() if hasattr(source, "read") else source
         # `source` is deliberately typed as `object` at the port boundary (it
-        # may be raw bytes or any file-like upload, e.g. Streamlit's
-        # UploadedFile) - the actual runtime contract (bytes in, either way)
+        # may be raw bytes or any file-like object, e.g. the BytesIO the web
+        # API wraps an upload in) - the actual runtime contract (bytes in, either way)
         # isn't expressible there without narrowing the port itself.
         try:
             return cls(open_docx(BytesIO(cast(bytes, data))))

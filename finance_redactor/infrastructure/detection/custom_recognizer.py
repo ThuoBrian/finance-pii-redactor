@@ -108,9 +108,6 @@ class CustomNameRecognizer(EntityRecognizer):
         automaton.make_automaton()
         return automaton
 
-    def load_analysis_pattern(self) -> None:  # noqa: D102
-        pass
-
     def analyze(
         self,
         text: str,

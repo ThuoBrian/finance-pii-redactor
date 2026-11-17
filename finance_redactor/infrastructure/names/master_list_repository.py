@@ -44,7 +44,7 @@ from finance_redactor.domain.quality import (
 
 _WHITESPACE = re.compile(r"\s+")
 # The one sanctioned legacy format: a trailing numeric ID, "Jane Doe - 10001"
-# (what scripts/migrate_to_master_list.py parsed out of person.txt). Stripped
+# (from the old plain-text person.txt lists). Stripped
 # silently. Anything else after a spaced dash ("Acme - Kenya") is part of the
 # name and is kept; see MasterRow.short_name.
 _LEGACY_ID_SUFFIX = re.compile(r"\s+-\s+\d+\s*$")
@@ -171,22 +171,25 @@ class MasterListRepository:
         canonical name — e.g. an ``Acme Ltd`` row's ``acme limited`` alias will not
         shadow a separate ``Acme Limited`` row's own ID.
         """
-        curated = [row for row in self.rows() if row.pseudonym is not None]
+        # One entry per curated row, built once and shared by its name and
+        # every alias key.
+        curated: list[tuple[MasterRow, MasterEntry]] = [
+            (
+                row,
+                MasterEntry(
+                    pseudonym=row.pseudonym,
+                    category=row.category,
+                    display_name=row.name,
+                    internal_id=row.internal_id,
+                ),
+            )
+            for row in self.rows()
+            if row.pseudonym is not None
+        ]
 
         mapping: dict[tuple[str, str], MasterEntry] = {}
-        for row in curated:
-            # The list comprehension above already guarantees this, but the
-            # type checker can't see through a filtered list's element type -
-            # assert it explicitly (also a real safety net if that filter is
-            # ever weakened by a future edit).
-            assert row.pseudonym is not None
+        for row, entry in curated:
             key = (row.entity_type, normalize(row.name))
-            entry = MasterEntry(
-                pseudonym=row.pseudonym,
-                category=row.category,
-                display_name=row.name,
-                internal_id=row.internal_id,
-            )
             existing = mapping.get(key)
             if existing is None or existing.pseudonym == entry.pseudonym:
                 mapping[key] = entry
@@ -196,19 +199,12 @@ class MasterListRepository:
         # with different IDs leave a bare "Acme" to a flagged auto-id rather
         # than a coin-flip curated one. It is still detected either way.
         short_ids: dict[tuple[str, str], set[str]] = {}
-        for row in curated:
+        for row, entry in curated:
             if row.short_name:
                 key = (row.entity_type, normalize(row.short_name))
-                short_ids.setdefault(key, set()).add(row.pseudonym or "")
+                short_ids.setdefault(key, set()).add(entry.pseudonym)
 
-        for row in curated:
-            assert row.pseudonym is not None
-            entry = MasterEntry(
-                pseudonym=row.pseudonym,
-                category=row.category,
-                display_name=row.name,
-                internal_id=row.internal_id,
-            )
+        for row, entry in curated:
             variants = list(aliases(row.name))
             if row.short_name:
                 short_key = (row.entity_type, normalize(row.short_name))
@@ -272,213 +268,151 @@ class MasterListRepository:
         """
         rows = self.rows()
         issues: list[QualityIssue] = []
-        limit = self._EXAMPLE_LIMIT
+
+        def add(
+            kind: str, severity: str, title: str, detail: str, items: list[str]
+        ) -> None:
+            """Record one issue, with capped examples, if it has any items."""
+            if not items:
+                return
+            examples, total = cap_examples(items, self._EXAMPLE_LIMIT)
+            issues.append(QualityIssue(kind, severity, title, detail, examples, total))
 
         if self._load_error:
-            issues.append(
-                QualityIssue(
-                    kind="unreadable_workbook",
-                    severity=SEVERITY_WARNING,
-                    title="The master list could not be opened",
-                    detail=(
-                        f"{self._load_error} No names are loaded, so only "
-                        "names the language model spots are redacted."
-                    ),
-                    examples=[f"`{self._path.name}`"],
-                    total=1,
-                )
+            add(
+                "unreadable_workbook",
+                SEVERITY_WARNING,
+                "The master list could not be opened",
+                f"{self._load_error} No names are loaded, so only names the "
+                "language model spots are redacted.",
+                [f"`{self._path.name}`"],
             )
 
         # Rows dropped at parse time. Listed first: these names are not
         # loaded at all, so nothing will detect them.
-        if self._skipped:
-            sheets = sorted({sheet for sheet, _ in self._skipped})
-            items = [f"`{name}` (sheet {sheet})" for sheet, name in self._skipped]
-            examples, total = cap_examples(items, limit)
-            issues.append(
-                QualityIssue(
-                    kind="category_mismatch",
-                    severity=SEVERITY_WARNING,
-                    title=(
-                        f"{len(self._skipped)} row(s) skipped because their "
-                        "Category cell doesn't match"
-                    ),
-                    detail=(
-                        "These names are not loaded and will not be detected. "
-                        "Set each row's Category to its sheet's category "
-                        f"(sheets: {', '.join(sheets)}), or add a Category "
-                        "column if the sheet has none."
-                    ),
-                    examples=examples,
-                    total=total,
-                )
-            )
+        sheets = sorted({sheet for sheet, _ in self._skipped})
+        add(
+            "category_mismatch",
+            SEVERITY_WARNING,
+            f"{len(self._skipped)} row(s) skipped because their Category cell "
+            "doesn't match",
+            "These names are not loaded and will not be detected. Set each row's "
+            f"Category to its sheet's category (sheets: {', '.join(sheets)}), or "
+            "add a Category column if the sheet has none.",
+            [f"`{name}` (sheet {sheet})" for sheet, name in self._skipped],
+        )
 
         # Names with a non-ID " - " suffix: kept whole, short form matched too.
-        dashed = [row for row in rows if row.short_name]
-        if dashed:
-            items = [
-                f"`{row.name}` also matches `{row.short_name}` ({row.category})"
-                for row in dashed
-            ]
-            examples, total = cap_examples(items, limit)
-            issues.append(
-                QualityIssue(
-                    kind="dash_in_name",
-                    severity=SEVERITY_INFO,
-                    title=f"{len(dashed)} name(s) contain ' - '",
-                    detail=(
-                        "The full name is matched, and so is the part before "
-                        "' - ' on its own. If that short part is an ordinary "
-                        "word, it will be redacted wherever it appears; if the "
-                        "dash marks an old ID, put the ID in Internal ID instead."
-                    ),
-                    examples=examples,
-                    total=total,
-                )
-            )
+        dashed = [
+            f"`{row.name}` also matches `{row.short_name}` ({row.category})"
+            for row in rows
+            if row.short_name
+        ]
+        add(
+            "dash_in_name",
+            SEVERITY_INFO,
+            f"{len(dashed)} name(s) contain ' - '",
+            "The full name is matched, and so is the part before ' - ' on its "
+            "own. If that short part is an ordinary word, it will be redacted "
+            "wherever it appears; if the dash marks an old ID, put the ID in "
+            "Internal ID instead.",
+            dashed,
+        )
 
         # (a) Cross-category duplicate names.
-        cross = self.duplicate_names()
-        if cross:
-            items = [
-                f"`{name}` appears in: {', '.join(categories)}"
-                for name, categories in cross.items()
-            ]
-            examples, total = cap_examples(items, limit)
-            issues.append(
-                QualityIssue(
-                    kind="cross_category_duplicate",
-                    severity=SEVERITY_WARNING,
-                    title=f"{len(cross)} name(s) appear under multiple categories",
-                    detail=(
-                        "This can cause conflicting pseudonyms. Keep each name in a "
-                        "single category."
-                    ),
-                    examples=examples,
-                    total=total,
-                )
-            )
+        cross = [
+            f"`{name}` appears in: {', '.join(categories)}"
+            for name, categories in self.duplicate_names().items()
+        ]
+        add(
+            "cross_category_duplicate",
+            SEVERITY_WARNING,
+            f"{len(cross)} name(s) appear under multiple categories",
+            "This can cause conflicting pseudonyms. Keep each name in a single "
+            "category.",
+            cross,
+        )
 
         # (b) Same name, same category, different Internal IDs.
         by_cat_name: dict[tuple[str, str], set[str]] = {}
         for row in rows:
-            if row.pseudonym is None:
-                continue
-            by_cat_name.setdefault((row.category, normalize(row.name)), set()).add(
-                row.pseudonym
-            )
-        conflicts = {
-            key: sorted(ids) for key, ids in by_cat_name.items() if len(ids) > 1
-        }
-        if conflicts:
-            items = [
-                f"`{name}` ({cat}) has IDs: {', '.join(ids)}"
-                for (cat, name), ids in conflicts.items()
-            ]
-            examples, total = cap_examples(items, limit)
-            issues.append(
-                QualityIssue(
-                    kind="conflicting_ids",
-                    severity=SEVERITY_WARNING,
-                    title=f"{len(conflicts)} name(s) have multiple Internal IDs",
-                    detail=(
-                        "Only one ID is used per name; the others are ignored. Merge "
-                        "the rows or pick a single ID."
-                    ),
-                    examples=examples,
-                    total=total,
-                )
-            )
+            if row.pseudonym is not None:
+                key = (row.category, normalize(row.name))
+                by_cat_name.setdefault(key, set()).add(row.pseudonym)
+        conflicts = [
+            f"`{name}` ({cat}) has IDs: {', '.join(sorted(ids))}"
+            for (cat, name), ids in by_cat_name.items()
+            if len(ids) > 1
+        ]
+        add(
+            "conflicting_ids",
+            SEVERITY_WARNING,
+            f"{len(conflicts)} name(s) have multiple Internal IDs",
+            "Only one ID is used per name; the others are ignored. Merge the rows "
+            "or pick a single ID.",
+            conflicts,
+        )
 
-        # (c) Blank Internal IDs (advisory).
+        # (c) Blank Internal IDs (advisory). Grouped by category for the examples.
         blanks_by_cat: dict[str, list[str]] = {}
         for row in rows:
             if row.pseudonym is None:
                 blanks_by_cat.setdefault(row.category, []).append(row.name)
-        blank_total = sum(len(v) for v in blanks_by_cat.values())
-        if blank_total:
-            items = [
-                f"`{name}` ({cat})"
-                for cat, names in blanks_by_cat.items()
-                for name in names
-            ]
-            examples, total = cap_examples(items, limit)
-            issues.append(
-                QualityIssue(
-                    kind="blank_ids",
-                    severity=SEVERITY_INFO,
-                    title=f"{blank_total} name(s) have no Internal ID",
-                    detail=(
-                        "They are detected but receive a flagged auto-generated ID. "
-                        "Add an Internal ID to give each a stable curated ID."
-                    ),
-                    examples=examples,
-                    total=total,
-                )
-            )
+        blanks = [
+            f"`{name}` ({cat})"
+            for cat, names in blanks_by_cat.items()
+            for name in names
+        ]
+        add(
+            "blank_ids",
+            SEVERITY_INFO,
+            f"{len(blanks)} name(s) have no Internal ID",
+            "They are detected but receive a flagged auto-generated ID. Add an "
+            "Internal ID to give each a stable curated ID.",
+            blanks,
+        )
 
         # (d) One Internal ID reused by different names within a category.
         by_cat_id: dict[tuple[str, str], set[str]] = {}
         for row in rows:
-            if row.pseudonym is None:
-                continue
-            by_cat_id.setdefault((row.category, row.pseudonym), set()).add(row.name)
-        dup_ids = {
-            key: sorted(names) for key, names in by_cat_id.items() if len(names) > 1
-        }
-        if dup_ids:
-            items = [
-                f"ID `{pid}` ({cat}) used by: {', '.join(names)}"
-                for (cat, pid), names in dup_ids.items()
-            ]
-            examples, total = cap_examples(items, limit)
-            issues.append(
-                QualityIssue(
-                    kind="duplicate_ids",
-                    severity=SEVERITY_WARNING,
-                    title=f"{len(dup_ids)} Internal ID(s) reused by multiple names",
-                    detail=(
-                        "Different names will share one pseudonym. Give each name a "
-                        "unique Internal ID."
-                    ),
-                    examples=examples,
-                    total=total,
-                )
-            )
+            if row.pseudonym is not None:
+                by_cat_id.setdefault((row.category, row.pseudonym), set()).add(row.name)
+        dup_ids = [
+            f"ID `{pid}` ({cat}) used by: {', '.join(sorted(names))}"
+            for (cat, pid), names in by_cat_id.items()
+            if len(names) > 1
+        ]
+        add(
+            "duplicate_ids",
+            SEVERITY_WARNING,
+            f"{len(dup_ids)} Internal ID(s) reused by multiple names",
+            "Different names will share one pseudonym. Give each name a unique "
+            "Internal ID.",
+            dup_ids,
+        )
 
         # (e) Single-token name that is also an ordinary English word (advisory).
-        ambiguous: dict[str, list[str]] = {}
+        ambiguous_by_cat: dict[str, list[str]] = {}
         for row in rows:
             for name in (row.name, row.short_name):
                 if not name or " " in name.strip():
                     continue
                 if name.strip().lower() in COMMON_ENGLISH_WORDS:
-                    ambiguous.setdefault(row.category, []).append(name)
-        ambiguous_total = sum(len(v) for v in ambiguous.values())
-        if ambiguous_total:
-            items = [
-                f"`{name}` ({cat})"
-                for cat, names in ambiguous.items()
-                for name in names
-            ]
-            examples, total = cap_examples(items, limit)
-            issues.append(
-                QualityIssue(
-                    kind="ambiguous_common_word",
-                    severity=SEVERITY_INFO,
-                    title=(
-                        f"{ambiguous_total} name(s) are also ordinary English words"
-                    ),
-                    detail=(
-                        "Every plain-English occurrence of the word will be "
-                        "detected, not just the entity. Confirm this is intended "
-                        "or make the name more distinctive."
-                    ),
-                    examples=examples,
-                    total=total,
-                )
-            )
+                    ambiguous_by_cat.setdefault(row.category, []).append(name)
+        ambiguous = [
+            f"`{name}` ({cat})"
+            for cat, names in ambiguous_by_cat.items()
+            for name in names
+        ]
+        add(
+            "ambiguous_common_word",
+            SEVERITY_INFO,
+            f"{len(ambiguous)} name(s) are also ordinary English words",
+            "Every plain-English occurrence of the word will be detected, not "
+            "just the entity. Confirm this is intended or make the name more "
+            "distinctive.",
+            ambiguous,
+        )
 
         return issues
 

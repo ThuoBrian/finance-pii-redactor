@@ -2,7 +2,7 @@
 
 A small, framework-free literal matcher - deliberately independent of
 Presidio/``CustomNameRecognizer``'s automaton machinery. That machinery is
-built once and cached process-wide (``app.py``'s ``_get_master_list_bundle``,
+built once and cached process-wide (``app.py``'s ``_build_master_list_bundle``,
 keyed on the master-list workbook), which is right for a ~26k-row curated
 list but wrong for a handful of words one user types for one run: routing
 them through the shared cached engine would mean either mutating it (a

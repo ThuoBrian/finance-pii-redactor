@@ -15,15 +15,13 @@ from typing import Any, cast
 
 import pandas as pd
 from openpyxl import load_workbook
-from openpyxl.styles import Font, PatternFill
+from openpyxl.styles import PatternFill
 
 from finance_redactor.domain.errors import UnreadableFileError
 from finance_redactor.infrastructure.documents import excel_formatting
 from finance_redactor.infrastructure.documents.excel_formatting import SheetFormat
 
 _HIGHLIGHT_FILL = PatternFill(fill_type="solid", fgColor="FFFF00")
-_HEADER_FONT = Font(bold=True)
-_CROSSWALK_SHEET_NAME = "Crosswalk"
 _MAX_TITLE = 31  # Excel's limit on a sheet name
 _INVALID_TITLE_CHARS = re.compile(r"[\[\]:*?/\\]")
 
@@ -85,19 +83,16 @@ class OpenpyxlExcelGateway:
     def write(
         self,
         sheets: Sequence[tuple[str, pd.DataFrame, set[tuple[int, str]]]],
-        crosswalk_df: pd.DataFrame | None,
         formats: Sequence[object | None] | None = None,
     ) -> bytes:
         """Serialize ``sheets`` to xlsx bytes, highlighting the given cells yellow.
 
         Each sheet is ``(tab name, data, highlighted (row, column) cells)``.
         Tab names are made valid for Excel (31 characters at most, none of the
-        characters Excel forbids) and unique, so two tabs that were redacted to the same name both survive.
-        ``crosswalk_df``, when given, is written as a final "Crosswalk" sheet.
-        The app passes ``None``: the crosswalk holds real names, so it leaves
-        as its own Confidential CSV and the workbook stays Internal. A source
-        tab already called "Crosswalk" is still renamed, so the name stays
-        free for the sheet.
+        characters Excel forbids) and unique, so two tabs that were redacted to
+        the same name both survive. Only these tabs are written: the crosswalk
+        holds real names, so it leaves as its own Confidential CSV and the
+        workbook stays Internal.
 
         ``formats`` (one per sheet, in order; ``None`` for no formatting) is
         what :meth:`read_formatting` returned for the source tab, applied
@@ -108,10 +103,6 @@ class OpenpyxlExcelGateway:
         with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
             for title, (_, df, _) in zip(titles, sheets, strict=True):
                 df.to_excel(writer, index=False, sheet_name=title)
-            if crosswalk_df is not None:
-                crosswalk_df.to_excel(
-                    writer, index=False, sheet_name=_CROSSWALK_SHEET_NAME
-                )
         buffer.seek(0)
 
         workbook = load_workbook(buffer)
@@ -134,18 +125,14 @@ class OpenpyxlExcelGateway:
                         row=row_idx + 2, column=col_index[col_name]
                     ).fill = _HIGHLIGHT_FILL
 
-        if crosswalk_df is not None:
-            for cell in workbook[_CROSSWALK_SHEET_NAME][1]:
-                cell.font = _HEADER_FONT
-
         out = BytesIO()
         workbook.save(out)
         return out.getvalue()
 
 
 def _sheet_titles(names: Sequence[str]) -> list[str]:
-    """Return valid, unique Excel sheet titles for ``names``; "Crosswalk" is reserved."""
-    taken = {_CROSSWALK_SHEET_NAME.lower()}
+    """Return valid, unique Excel sheet titles for ``names``."""
+    taken: set[str] = set()
     titles: list[str] = []
     for position, name in enumerate(names, start=1):
         base = _INVALID_TITLE_CHARS.sub("_", name).strip().strip("'")[:_MAX_TITLE]

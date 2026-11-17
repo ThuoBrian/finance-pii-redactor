@@ -135,9 +135,10 @@ A few things that surprise people the first time:
   online though; it's only running on your machine. If the browser doesn't
   open by itself, go to http://127.0.0.1:8501.
 - A black window opens too. **Leave it open** while you're working.
-- **When you're done, click "Close the app" in the sidebar** (in the
-  browser tab). Closing only the browser tab, or only the black window,
-  leaves the other one running - the sidebar button closes both.
+- **When you're done, choose "Close the app"** from the **⋯** menu at
+  the top right of the page. Closing only the browser tab, or only the
+  black window, leaves the other one running; **Close the app** closes
+  both.
 
 **Opening it again later:** on Windows, double-click **Finance PII
 Redactor** on your desktop, or type "Finance" in the Start menu. The
@@ -155,33 +156,44 @@ is always safe.
 
 ## Using it
 
-The app walks you through four steps, one screen at a time. **Back** takes
-you to the step before, and your choices are kept.
+The app walks you through three steps: **File**, **Review** and
+**Download**. Going back keeps your choices.
 
-1. **Upload** your Excel, PDF, or Word file.
-2. **Options.** Click **Redact my file**. The recommended settings are
-   already chosen; open **Customize** only if you need to, for example to
-   pick tabs and columns.
-3. **Review.** The **Review** tab lists what was found, likeliest mistakes
-   first. Untick anything that isn't really a name, then click **Apply
-   changes** to rebuild the file without them; everything else stays
-   redacted. The **Why it was found** column says why each term matched
-   (**Show details** adds the technical columns). Ordinary words
-   sometimes get caught, usually because someone added one to the master list
-   as a payee. For a PDF or Word file, the folded **Add something the tool
-   missed** box takes a name the scan didn't catch, a codename or a case
-   number (and, for a PDF with a table, whole columns to redact). Most files
-   need nothing there.
-4. **Download.** Two cards: **Safe to share** (Internal) and **Keep private**
-   (Confidential). For a PDF, the **Label mapping** (Internal, no names)
-   sits under the cards. Files are named `redacted-` plus the date and time, never
-   after your original file, and their document properties (author, title
-   and the like) are cleared.
+1. **File.** Drop in your Excel, PDF, or Word file, then click **Redact with
+   recommended settings**. Open **Customize** only if you need to, for
+   example to pick tabs and columns; the **?** buttons explain each option.
+   Your Customize choices are remembered for the next file until you close
+   the app. A long scan shows how far it has got and roughly how long is
+   left, and **Cancel** stops it without changing anything.
+2. **Review.** The list on the left shows what was found, likeliest
+   mistakes first, each with a line saying why it was found (**Show
+   details** adds the kind, source and confidence). **Click a term** to see
+   where it is: the **Preview** on the right jumps to the cell (Excel) or
+   page (PDF), and **‹ ›** step through every place it occurs. With the
+   keyboard, **↑ ↓** move through the list and **Space** ticks or unticks.
+   Untick anything that isn't really a name, then click **Apply changes** in
+   the bar at the bottom to rebuild the file without them; everything else
+   stays redacted. On a long list, **Worth a closer look** shows the model
+   guesses most likely to be wrong. Ordinary words sometimes get caught,
+   usually because someone added one to the master list as a payee. For a
+   PDF or Word file, the folded **Add something the tool missed** box takes
+   a name the scan didn't catch, a codename or a case number (and, for a PDF
+   with a table, whole columns to redact). Most files need nothing there.
+3. **Download.** Two cards: **Safe to share** (Internal) and **Keep private**
+   (Confidential). For a PDF, the **label mapping** (Internal, no names)
+   is in the **Safe to share** card. Each file shows **✓ Downloaded** once
+   you have it. If you try to leave, start over or close the app before
+   downloading everything, the app asks first. Files are named `redacted-`
+   plus the date and time, never after your original file, and their
+   document properties (author, title and the like) are cleared.
 
-The sidebar shows your master list (how many names, when it last changed,
-anything to tidy), **Start over** (it asks first, since it drops the
-findings and downloads), **Help and troubleshooting**, and **Close the app**. To change which names get which codes, edit the master list
-(`Names List - Organized.xlsx`) and click **Refresh** on that card.
+The bar at the top shows how many names your master list has; click it
+for the details (counts per category, when it last changed, anything to
+tidy, where the file is) and **Refresh**. The **⋯** menu has **Start over**
+(it asks first, since it drops the findings and downloads), **Help and
+troubleshooting**, and **Close the app**. To change which names get which
+codes, edit the master list (`Names List - Organized.xlsx`) and click
+**Refresh**.
 
 In Excel, every cell the tool changed is highlighted in yellow, so you can
 see at a glance what was touched. The Excel copy keeps your formatting

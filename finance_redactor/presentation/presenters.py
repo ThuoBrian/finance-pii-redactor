@@ -1,8 +1,7 @@
-"""View formatters: turn domain results into UI-ready artifacts.
+"""View formatters: turn domain results into what the interface shows.
 
-These were previously private helpers scattered inside the UI and PDF modules
-(``_build_findings_table``, ``_findings_to_dataframe``).
-Collected here, they are the presentation layer's single rendering vocabulary.
+The wording, labels, ordering and tables the API returns all come from here,
+so the screen and the downloaded files speak one vocabulary.
 """
 
 from __future__ import annotations
@@ -10,9 +9,9 @@ from __future__ import annotations
 import math
 from collections import Counter
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 
 import pandas as pd
-from pandas.io.formats.style import Styler
 
 from finance_redactor.application.ports import SheetFormatting
 from finance_redactor.application.results import WorkbookScanResult
@@ -83,12 +82,6 @@ _FLAG_NOT_CURATED = "not in master list"
 _FLAG_AMBIGUOUS = "ambiguous - matched several master-list rows"
 
 
-# Matches the fill the downloaded workbook uses (excel_gateway._HIGHLIGHT_FILL),
-# so what the reviewer sees on screen is what they get in Excel.
-HIGHLIGHT_HEX = "#FFFF00"
-# Colour alone is invisible to some readers, so a changed cell also carries
-# this prefix in its text.
-CHANGED_MARKER = "» "
 PREVIEW_MAX_ROWS = 500
 
 
@@ -126,9 +119,7 @@ def entity_label(entity_type: str) -> str:
     return _ENTITY_LABELS.get(entity_type, entity_type.replace("_", " ").capitalize())
 
 
-# How each detection source reads on screen. Keyed on the value, not the
-# member: Streamlit re-imports changed modules, so findings kept in session
-# state can hold members of an older copy of the enum.
+# How each detection source reads on screen.
 _SOURCE_LABELS = {
     DetectionSource.MODEL.value: "Model guess",
     DetectionSource.MASTER_LIST.value: "Master list",
@@ -148,57 +139,6 @@ def plural(count: int, singular: str, plural_form: str | None = None) -> str:
     """Return ``"1 name"`` / ``"2 names"``: a count with the right noun form."""
     word = singular if count == 1 else (plural_form or f"{singular}s")
     return f"{count:,} {word}"
-
-
-def _marked_positions(
-    shown: pd.DataFrame, cell_keys: set[tuple[int, str]]
-) -> set[tuple[int, int]]:
-    """Positions (row, col) in ``shown`` of the cells named by ``cell_keys``."""
-    row_pos = {label: i for i, label in enumerate(shown.index)}
-    col_pos = {label: j for j, label in enumerate(shown.columns)}
-    return {
-        (row_pos[r], col_pos[c]) for r, c in cell_keys if r in row_pos and c in col_pos
-    }
-
-
-def preview_hidden_count(
-    df: pd.DataFrame,
-    cell_keys: set[tuple[int, str]],
-    max_rows: int = PREVIEW_MAX_ROWS,
-) -> int:
-    """Count highlighted cells that fall below the row cap and so are not shown."""
-    visible = set(df.index[:max_rows])
-    return sum(
-        1
-        for r, c in cell_keys
-        if c in df.columns and r in df.index and r not in visible
-    )
-
-
-def preview_styler(
-    df: pd.DataFrame,
-    cell_keys: set[tuple[int, str]],
-    max_rows: int = PREVIEW_MAX_ROWS,
-) -> Styler:
-    """Build the on-screen preview: first ``max_rows`` rows, flagged cells marked.
-
-    Returned for ``st.dataframe``, which draws cells on a canvas as text, so a
-    cell containing markup is shown literally and nothing here needs HTML. All
-    values are turned into text, flagged cells get :data:`CHANGED_MARKER` in
-    front, and also a yellow fill (dark text, so it reads on any theme).
-    Row-capped because a preview of a very large sheet only slows the page;
-    the download always has every row, and :func:`preview_hidden_count` tells the
-    caller say how many flagged cells the cap hid.
-    """
-    shown = df.head(max_rows)
-    marked = _marked_positions(shown, cell_keys)
-    text = shown.map(lambda v: "" if pd.isna(v) else str(v))
-    for i, j in marked:
-        text.iat[i, j] = f"{CHANGED_MARKER}{text.iat[i, j]}"
-    css = pd.DataFrame("", index=text.index, columns=text.columns)
-    for i, j in marked:
-        css.iat[i, j] = f"background-color: {HIGHLIGHT_HEX}; color: #1a1a1a"
-    return text.style.apply(lambda _: css, axis=None)
 
 
 # Shown in the Column field of a finding that sits in a tab's name, not a cell.
@@ -256,10 +196,10 @@ def excel_findings_dataframe(scan_result: WorkbookScanResult) -> pd.DataFrame:
 def scan_result_findings(scan_result: WorkbookScanResult) -> list[Finding]:
     """Flatten a workbook scan result into :class:`Finding` objects.
 
-    Only so Excel can share :func:`detection_editor_dataframe` with the PDF
+    Only so Excel can share :func:`review_terms` with the PDF
     and Word flows, which already work in ``Finding``. ``page`` carries the
     row index here, the same way it carries a paragraph ordinal in the Word
-    flow - see :func:`findings_dataframe` - and ``-1`` for a tab name or a
+    flow - and ``-1`` for a tab name or a
     column header.
     """
     cell_detections = [
@@ -439,53 +379,27 @@ def pdf_mapping_with_names_dataframe(
     return pd.DataFrame(rows, columns=_PDF_MAPPING_WITH_NAMES_COLUMNS)
 
 
-def findings_dataframe(findings: list[Finding], page_label: str) -> pd.DataFrame:
-    """Render PDF/Word findings as a readable DataFrame for the UI.
-
-    Both flows reuse :class:`Finding`, whose ``page`` field holds a PDF page
-    number or a Word paragraph/block ordinal depending on the caller -
-    ``page_label`` names that column accordingly (``"Page"`` or
-    ``"Paragraph"``).
-    """
-    return pd.DataFrame(
-        [
-            {
-                page_label: f.page + 1,
-                "Detected text": f.detected_text,
-                "Entity type": entity_label(f.entity_type),
-                "Confidence": round(f.score, 2),
-                "Source": source_label(f.source),
-            }
-            for f in findings
-        ]
-    )
-
-
-# The deselect editor. One row per distinct detected term, because a word
+# The review list. One row per distinct detected term, because a word
 # appearing forty times is one decision, not forty.
-#
-# ``REDACT_COLUMN`` is public because ``exclusion_view`` needs the same name
-# to configure the checkbox column and to mark every other column read-only.
-# A second copy of the string over there would drift silently: its
-# ``disabled`` filter would stop excluding the real column, the tick boxes
-# would render read-only, and nothing would raise.
-REDACT_COLUMN = "Hide in output?"
-_TERM_COLUMN = "Detected text"
-_WHY_COLUMN = "Why it was found"
 
-_EDITOR_COLUMNS = [
-    REDACT_COLUMN,
-    _TERM_COLUMN,
-    _WHY_COLUMN,
-    "Kind",
-    "Source",
-    "Confidence",
-    "Hint",
-    "Occurrences",
-]
-# What the review table shows by default: enough to decide, nothing to decode.
-# The rest is one "Show details" toggle away.
-EDITOR_SIMPLE_COLUMNS = (REDACT_COLUMN, _TERM_COLUMN, _WHY_COLUMN)
+
+@dataclass(frozen=True)
+class ReviewTerm:
+    """One distinct detected term in the review list.
+
+    ``key`` is the normalized form the redaction services compare against
+    (see :func:`term_key`). ``source`` and ``kind`` are readable labels.
+    """
+
+    key: str
+    term: str
+    why: str
+    kind: str
+    source: str
+    confidence: float
+    hint: str
+    occurrences: int
+
 
 # A model hint, in words someone who has never heard of spaCy can act on.
 _PLAIN_HINT = {
@@ -504,7 +418,6 @@ _SOURCE_TIER = {
 }
 
 # Filter choices for the review table: label -> the Source values it shows.
-ALL_SOURCES = "All"
 SOURCE_FILTERS = {
     "Model guesses": source_label(DetectionSource.MODEL),
     "Typed words": source_label(DetectionSource.CUSTOM),
@@ -546,29 +459,21 @@ def _with_article(noun: str) -> str:
     return f"{'an' if vowel else 'a'} {noun}"
 
 
-def detection_editor_dataframe(
-    findings: Sequence[Finding], excluded: frozenset[str] = frozenset()
-) -> pd.DataFrame:
-    """Render detections as a tickable table for rejecting false positives.
+def review_terms(findings: Sequence[Finding]) -> list[ReviewTerm]:
+    """Group detections into one row per distinct term, likeliest mistakes first.
 
-    One row per distinct detected term, ordered by first appearance, with
-    ``Hide in output?`` seeded from ``excluded`` so an unticked row stays unticked
-    across reruns. Pair with :func:`excluded_terms` to read the ticks back.
-
-    ``Source`` is here on purpose: it is what tells the operator which fix
-    applies. ``master list`` means a row in the workbook matches this word, so
+    ``source`` is here on purpose: it is what tells the reviewer which fix
+    applies. ``Master list`` means a row in the workbook matches this word, so
     unticking is a per-document patch and editing the workbook is the real fix.
-    ``model`` means spaCy guessed, and the confidence threshold is a lever.
-    ``custom word`` means it came from the words box, so clearing that box
-    fixes it.
+    ``Model guess`` means spaCy guessed, and the confidence threshold is a
+    lever. ``Typed word`` means it came from the words box, so clearing that
+    box fixes it.
 
     Grouping is keyed on :func:`normalize`, matching how ``exclude`` is
-    compared in the redaction services, so a term ticked off here matches every
+    compared in the redaction services, so a term ticked off matches every
     casing and spacing of itself in the document.
     """
-    # Insertion-ordered, so ties read in order of first appearance. Counts and
-    # scores are kept in their own dicts rather than mutated inside the row
-    # dicts, which keeps every dict singly typed.
+    # Insertion-ordered, so ties read in order of first appearance.
     first_seen: dict[str, Finding] = {}
     counts: Counter[str] = Counter()
     best_score: dict[str, float] = {}
@@ -580,10 +485,7 @@ def detection_editor_dataframe(
 
     def tier_and_hint(finding: Finding) -> tuple[int, str]:
         hint = review_hint(finding.detected_text, finding.entity_type, finding.source)
-        # ``==``, not ``is``: Streamlit re-imports changed modules on a rerun,
-        # so findings kept in session state can hold members of an older copy
-        # of the enum. Those compare and hash equal but are not the same
-        # object. An unknown source sorts with the guesses, the safe end.
+        # An unknown source sorts with the guesses, the safe end.
         if finding.source == DetectionSource.MODEL:
             return (_MODEL_WITH_HINT if hint else _MODEL_PLAIN), hint
         return _SOURCE_TIER.get(finding.source, _MODEL_PLAIN), hint
@@ -597,20 +499,19 @@ def detection_editor_dataframe(
         # first appearance.
         key=lambda r: (r[0][0], r[1] if r[0][0] == _MODEL_PLAIN else 0.0, r[2]),
     )
-    rows = [
-        {
-            REDACT_COLUMN: key not in excluded,
-            _TERM_COLUMN: finding.detected_text,
-            _WHY_COLUMN: why_found(finding, hint),
-            "Kind": entity_label(finding.entity_type),
-            "Source": source_label(finding.source),
-            "Confidence": round(score, 2),
-            "Hint": hint,
-            "Occurrences": counts[key],
-        }
+    return [
+        ReviewTerm(
+            key=key,
+            term=finding.detected_text,
+            why=why_found(finding, hint),
+            kind=entity_label(finding.entity_type),
+            source=source_label(finding.source),
+            confidence=round(score, 2),
+            hint=hint,
+            occurrences=counts[key],
+        )
         for (_, hint), score, _, key, finding in ranked
     ]
-    return pd.DataFrame(rows, columns=_EDITOR_COLUMNS)
 
 
 def merge_findings(
@@ -639,115 +540,15 @@ def carry_over_exclusions(
     return previous & {term_key(f.detected_text) for f in findings}
 
 
-def carried_over_notice(carried: frozenset[str]) -> str:
-    """Say which unticked terms were kept from the last run (on screen only)."""
-    terms = ", ".join(f"`{term}`" for term in sorted(carried))
-    n = len(carried)
-    it = "it" if n == 1 else "them"
-    return (
-        f"Kept {plural(n, 'term')} you unticked last time: {terms}. "
-        f"{'It stays' if n == 1 else 'They stay'} visible in this file. "
-        f"Tick {it} again and click **Apply changes** to hide {it}."
-    )
-
-
 def term_key(term: object) -> str:
     """Return the normalized form a row is compared by (matches ``exclude``)."""
     return normalize(str(term))
 
 
-def filter_editor_rows(table: pd.DataFrame, choice: str | None) -> pd.DataFrame:
-    """Rows of the review table to show for a filter choice (display only).
-
-    ``None`` or :data:`ALL_SOURCES` shows everything. Filtering never changes
-    what is redacted: hidden rows keep their tick state.
-    """
-    source = SOURCE_FILTERS.get(choice or ALL_SOURCES)
-    if source is None:
-        return table
-    return table[table["Source"] == source]
-
-
-def search_editor_rows(table: pd.DataFrame, text: str | None) -> pd.DataFrame:
-    """Rows whose term contains ``text`` (case-insensitive); all rows if blank.
-
-    Display only, like :func:`filter_editor_rows`: hidden rows keep their state.
-    """
-    needle = (text or "").strip().casefold()
-    if not needle:
-        return table
-    terms = table[_TERM_COLUMN].astype(str).str.casefold()
-    return table[terms.str.contains(needle, regex=False)]
-
-
-def model_guess_count(table: pd.DataFrame) -> int:
-    """Return how many terms in the review table are model guesses."""
-    return int((table["Source"] == source_label(DetectionSource.MODEL)).sum())
-
-
-def review_tab_labels(
-    findings: Sequence[Finding], *, preview: bool = False
-) -> list[str]:
-    """Return the review step's tab labels, with the review tab first.
-
-    The count comes from the findings, not from the tick boxes, so the label
-    stays put while the reviewer works: Streamlit keys tabs by label, and a
-    label that changed on every tick would throw the reviewer back to the
-    first tab.
-    """
-    review = "Review"
-    if findings:
-        table = detection_editor_dataframe(findings)
-        n = model_guess_count(table)
-        terms = plural(len(table), "term")
-        review = f"Review ({terms}, {n} to check)" if n else f"Review ({terms})"
-    return [
-        review,
-        *(["Preview"] if preview else []),
-        "Mapping",
-    ]
-
-
-def review_status(
-    table: pd.DataFrame, applied: frozenset[str], pending: frozenset[str]
-) -> str:
-    """One line: what is in the table, what is left visible, what is not applied.
-
-    Builds on :func:`review_summary`, so the review tab has a single line
-    rather than two that both count the model guesses.
-    """
-    parts = [review_summary(table).removesuffix(".")]
-    if applied:
-        parts.append(f"{plural(len(applied), 'term')} left visible")
-    n_changes = len(pending ^ applied)
-    if n_changes:
-        parts.append(f"{plural(n_changes, 'change')} not applied yet")
-    return " · ".join(parts) + "."
-
-
-def apply_notice(left_visible: frozenset[str], not_located: int = 0) -> str:
-    """Return the confirmation shown once after Apply rebuilds the file.
-
-    "Every detected term is hidden" is said only when it is true: no term
-    left visible on purpose and none the PDF search failed to find.
-    """
-    parts = ["Rebuilt the file."]
-    if left_visible:
-        n = len(left_visible)
-        verb = "is" if n == 1 else "are"
-        parts.append(
-            f"{plural(n, 'term')} {verb} left visible; "
-            "they are listed above the download."
-        )
-    if not_located:
-        verb = "was" if not_located == 1 else "were"
-        parts.append(
-            f"{plural(not_located, 'detected term')} {verb} not found on the "
-            "page and may still show; see the warning above."
-        )
-    if len(parts) == 1:
-        parts.append("Every detected term is hidden.")
-    return " ".join(parts)
+def model_guess_count(terms: Sequence[ReviewTerm]) -> int:
+    """Return how many review terms are model guesses."""
+    model = source_label(DetectionSource.MODEL)
+    return sum(1 for t in terms if t.source == model)
 
 
 def pdf_job_size_note(
@@ -803,11 +604,11 @@ def not_located_warning(not_located: Sequence[Finding]) -> str:
     )
 
 
-def review_summary(table: pd.DataFrame) -> str:
-    """One line saying what is in the table, so the reviewer knows the size of the job."""
-    n = len(table)
-    by_source = Counter(table["Source"])
-    hinted = int((table["Hint"] != "").sum())
+def review_summary(terms: Sequence[ReviewTerm]) -> str:
+    """One line saying what is in the list, so the reviewer knows the size of the job."""
+    n = len(terms)
+    by_source = Counter(t.source for t in terms)
+    hinted = sum(1 for t in terms if t.hint)
     parts = []
     model = by_source[source_label(DetectionSource.MODEL)]
     if model:
@@ -825,33 +626,6 @@ def review_summary(table: pd.DataFrame) -> str:
                 plural(count, label, label + "es" if label.endswith("h") else None)
             )
     return f"{plural(n, 'term')}: " + ", ".join(parts) + "."
-
-
-def merge_pending(
-    pending: frozenset[str], shown: pd.DataFrame, edited: pd.DataFrame
-) -> frozenset[str]:
-    """Combine the unticked terms of the visible rows with those of hidden ones.
-
-    A filter hides rows without touching them, so a hidden row that was
-    unticked stays unticked and a hidden row that was ticked stays ticked.
-    """
-    shown_keys = frozenset(term_key(t) for t in shown[_TERM_COLUMN])
-    return (pending - shown_keys) | excluded_terms(edited)
-
-
-def excluded_terms(edited: pd.DataFrame) -> frozenset[str]:
-    """Read back the normalized terms the operator unticked in the editor.
-
-    The inverse of :func:`detection_editor_dataframe`. Returns normalized
-    terms, ready to hand to a redaction service's ``exclude`` argument.
-
-    A missing or empty frame yields an empty set, which means "redact
-    everything" - the safe direction if the widget state is ever lost.
-    """
-    if edited is None or edited.empty or REDACT_COLUMN not in edited.columns:
-        return frozenset()
-    unticked = edited.loc[~edited[REDACT_COLUMN].fillna(True).astype(bool)]
-    return frozenset(normalize(str(term)) for term in unticked[_TERM_COLUMN])
 
 
 def formatting_note(formats: Mapping[str, SheetFormatting], n_tabs: int) -> str:
@@ -968,3 +742,63 @@ def scanned_pages_warning(
             f"{'it' if n == 1 else 'them'} are not detected. {outcome}"
         )
     return "\n\n".join(parts)
+
+
+# Scan-size warning (see scan_size_warning). About a minute of scanning, or a
+# workbook big enough that holding it twice in memory starts to drag.
+_SLOW_SCAN_VALUES = 3_000
+_BIG_WORKBOOK_CELLS = 500_000
+_FAST_VALUES_PER_SECOND = 60
+_SLOW_VALUES_PER_SECOND = 30
+
+
+def scan_size_warning(
+    sheets: dict[str, pd.DataFrame], columns_by_sheet: dict[str, list[str]]
+) -> str | None:
+    """Warn before a scan that will take minutes or a lot of memory, else None.
+
+    The scan analyzes each distinct value once, so its time follows the
+    distinct values in the chosen columns, not the row count. The rate range
+    is rough: the real engine checked about 48 values a second on a
+    development laptop, and the master list and longer cells slow it down.
+    lean-dev: a warning only, no chunking or abort.
+    """
+    n_cells = sum(df.size for df in sheets.values())
+    distinct = len(
+        {
+            value
+            for name, df in sheets.items()
+            for col in columns_by_sheet.get(name, [])
+            if col in df.columns
+            for value in df[col].dropna().unique()
+        }
+    )
+    slow = distinct >= _SLOW_SCAN_VALUES
+    big = n_cells >= _BIG_WORKBOOK_CELLS
+    if not (slow or big):
+        return None
+    parts = [
+        f"This is a large job: {n_cells:,} cells, with {distinct:,} distinct "
+        "values in the chosen columns."
+    ]
+    if slow:
+        low = max(1, round(distinct / _FAST_VALUES_PER_SECOND / 60))
+        high = max(low + 1, round(distinct / _SLOW_VALUES_PER_SECOND / 60))
+        parts.append(f"Expect the scan to take roughly {low:,} to {high:,} minutes.")
+    if big:
+        parts.append(
+            "The whole workbook is held in memory while you work, so the "
+            "app may be slow to respond."
+        )
+    parts.append(
+        "Keep this page open while it runs. To make it quicker, choose fewer "
+        "tabs or columns under Customize."
+    )
+    return " ".join(parts)
+
+
+def name_summary(names: list[str], shown: int = 2) -> str:
+    """``"Jan, Feb + 8 more"``: the first few names, then a count of the rest."""
+    head = ", ".join(names[:shown])
+    rest = len(names) - shown
+    return f"{head} + {rest:,} more" if rest > 0 else head
