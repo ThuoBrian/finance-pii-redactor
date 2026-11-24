@@ -349,11 +349,13 @@ class RedactPdfService:
                             tables=tables,
                         )
                     raw_text = join_lines(lines).text
-                    # Normalized like a text layer, so a name the scan
-                    # hyphenates across two lines is detected whole. Spans
+                    # De-hyphenated like a text layer, so a name the scan
+                    # breaks across two lines is detected whole, but line
+                    # breaks are kept: OCR lines are often table rows, and
+                    # run together the model misses more bare names. Spans
                     # are mapped back to the joined lines when the page is
                     # rebuilt (``_rebuild_scanned_page``).
-                    normalized = normalize_pdf_text(raw_text)
+                    normalized = normalize_pdf_text(raw_text, keep_newlines=True)
                     detections = self._detector.analyze(
                         normalized.text,
                         [*_ENTITIES, *self._fixed_masks],
