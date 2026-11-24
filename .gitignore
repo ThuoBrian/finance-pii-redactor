@@ -109,3 +109,6 @@ frontend/coverage/
 .eslintcache
 npm-debug.log*
 *.log
+
+# Detection harness reports (eval/run.py); regenerate with `just eval`.
+eval/results/
