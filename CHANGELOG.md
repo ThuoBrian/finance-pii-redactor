@@ -71,6 +71,12 @@ the `version` field in `pyproject.toml`.
 
 ### Added
 
+- **Detection test harness (for developers).** `just eval` builds a
+  synthetic set of Excel, Word and PDF files with a matching made-up master
+  list, runs them through the app's real redaction, and reports how many
+  names leaked and how many words were flagged wrongly, by file type and by
+  kind of name. It uses no real data and changes nothing in the app. See
+  `eval/README.md`.
 - **PDF and Word scans show live progress**, like Excel's. The scanning box
   now has a progress bar ("12 of 40 pages checked", or paragraphs for Word),
   so a long OCR run no longer looks frozen.

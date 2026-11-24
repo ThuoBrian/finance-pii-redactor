@@ -5,7 +5,7 @@
 set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 
 # Paths the lint and format recipes cover.
-src := "app.py finance_redactor/ tests/"
+src := "app.py finance_redactor/ tests/ eval/"
 
 default:
     @just --list
@@ -48,11 +48,15 @@ fmt-check:
     uv run ruff format --check {{src}}
 
 typecheck:
-    uv run mypy app.py finance_redactor/
+    uv run mypy app.py finance_redactor/ eval/
 
 # Tests with the 80% coverage gate
 test:
     uv run pytest
+
+# Detection test harness: synthetic corpus through the real pipeline (slow)
+eval *args:
+    uv run python -m eval.run {{args}}
 
 spell:
     uv run codespell

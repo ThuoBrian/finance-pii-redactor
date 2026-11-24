@@ -62,9 +62,9 @@ just check
 `just`, these are the underlying commands:
 
 ```bash
-uv run ruff check app.py finance_redactor/ tests/
-uv run ruff format --check app.py finance_redactor/ tests/
-uv run mypy app.py finance_redactor/
+uv run ruff check app.py finance_redactor/ tests/ eval/
+uv run ruff format --check app.py finance_redactor/ tests/ eval/
+uv run mypy app.py finance_redactor/ eval/
 uv run pytest
 uv run codespell
 ```
@@ -73,6 +73,17 @@ uv run codespell
 `uv run pytest` enforces an 80% coverage floor on all of
 `finance_redactor/`, the web API included (it is tested through FastAPI's
 `TestClient`; see `tests/presentation/test_api*.py`).
+
+If you changed detection (recognizers, thresholds, matching, the PDF or
+OCR text path), run the detection harness before and after and put both
+summaries in the PR. It's slow, so it isn't part of `just check`:
+
+```bash
+just eval                                   # on main: the baseline
+just eval --baseline eval/results/<that file>.json   # on your branch
+```
+
+See [eval/README.md](eval/README.md) for what it measures.
 
 If you changed prose in `README.md`, `docs/`, or `data/README.md`, also run
 [Vale](https://vale.sh/) (config in `.vale.ini`):

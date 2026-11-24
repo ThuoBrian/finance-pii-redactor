@@ -133,5 +133,6 @@ ignore_missing_imports = true
 [tool.codespell]
 builtin = "clear,rare,informal,usage,code,names"
 ignore-words-list = "jupyter,ipa,spacy,ws,thead,GOTCHA,gotcha,master,slave,falsy"
-# Generated: third-party packages, the built UI bundle, the npm lockfile.
-skip = "uv.lock,*.txt,*.csv,./frontend/node_modules,./finance_redactor/presentation/static,package-lock.json"
+# Generated: third-party packages, the built UI bundle, the npm lockfile,
+# and the detection harness reports (OCR fragments).
+skip = "uv.lock,*.txt,*.csv,./frontend/node_modules,./finance_redactor/presentation/static,package-lock.json,./eval/results"
