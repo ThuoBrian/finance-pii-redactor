@@ -762,6 +762,59 @@ def test_a_scanned_page_is_read_with_ocr_and_rebuilt_not_searched() -> None:
     assert 0 not in doc.redactions_by_page  # no search-and-cover on that page
 
 
+class _FindsAlexSample:
+    """Detects "Alex Sample" wherever it appears whole in the analyzed text."""
+
+    def __init__(self) -> None:
+        self.texts: list[str] = []
+
+    def analyze(self, text, entities, threshold):  # noqa: ANN001 - test double
+        self.texts.append(text)
+        start = text.find("Alex Sample")
+        if start < 0:
+            return []
+        return [
+            PiiDetection(
+                entity_type="PERSON",
+                span=Span(start, start + len("Alex Sample")),
+                score=0.85,
+                text="Alex Sample",
+                source=DetectionSource.MODEL,
+            )
+        ]
+
+
+def test_a_name_hyphenated_across_scanned_lines_is_found_and_boxed_on_both() -> None:
+    from finance_redactor.domain.ocr import OcrLine
+
+    lines = [
+        OcrLine("Per diem paid to Alex Sam-", (100.0, 80.0, 360.0, 100.0), 0.97),
+        OcrLine("ple on Friday", (100.0, 110.0, 230.0, 130.0), 0.97),
+    ]
+    detector = _FindsAlexSample()
+    service = RedactPdfService(
+        open_document=_document_factory,
+        master_map={},
+        auto_prefixes={"PERSON": "PSN"},
+        detector=detector,
+        fixed_masks={},
+        ocr=FakeOcr(lines),
+    )
+    doc = FakePdfDocument([""], image_rects={0: [(0, 0, 595, 842)]})
+
+    scan = service.scan(doc)
+    result = service.redact(doc, scan, [])
+
+    assert detector.texts == ["Per diem paid to Alex Sample on Friday"]
+    assert [f.detected_text for f in result.findings] == ["Alex Sample"]
+    boxes = [box for box, _ in doc.rebuilt["names"]]
+    assert {label for _, label in doc.rebuilt["names"]} == {"[001]"}
+    # One box on each line: "Alex Sam-" ends the first, "ple" starts the second.
+    assert [(box[1], box[3]) for box in boxes] == [(80.0, 100.0), (110.0, 130.0)]
+    assert boxes[0][2] == 360.0  # runs to the end of the first line
+    assert boxes[1][0] == 100.0  # starts at the beginning of the second
+
+
 def test_an_unticked_term_on_a_scanned_page_is_left_alone() -> None:
     doc = FakePdfDocument([""], image_rects={0: [(0, 0, 595, 842)]})
     service = _ocr_service(FakeOcr(_ocr_lines()))

@@ -349,9 +349,15 @@ class RedactPdfService:
                             tables=tables,
                         )
                     raw_text = join_lines(lines).text
-                    normalized = NormalizedText(raw_text, raw_text, ())
+                    # Normalized like a text layer, so a name the scan
+                    # hyphenates across two lines is detected whole. Spans
+                    # are mapped back to the joined lines when the page is
+                    # rebuilt (``_rebuild_scanned_page``).
+                    normalized = normalize_pdf_text(raw_text)
                     detections = self._detector.analyze(
-                        raw_text, [*_ENTITIES, *self._fixed_masks], _THRESHOLD
+                        normalized.text,
+                        [*_ENTITIES, *self._fixed_masks],
+                        _THRESHOLD,
                     )
                     tables = tuple(columns_from_lines(lines))
                 bracketed = len(_BRACKETED_NUMBER.findall(normalized.text))
@@ -434,6 +440,7 @@ class RedactPdfService:
                         document,
                         page_index,
                         page.ocr_lines,
+                        page.normalized,
                         self._labelled(
                             page_index, detections, exclude, pseudonymizer, findings
                         ),
@@ -602,17 +609,22 @@ class RedactPdfService:
         document: PdfDocument,
         page_index: int,
         lines: tuple[OcrLine, ...],
+        normalized: NormalizedText,
         labelled: list[tuple[PiiDetection, str]],
         *,
         blackout: bool,
         redact_images: bool,
     ) -> None:
-        """Redact an OCR'd scanned page by rebuilding it as a cleaned picture."""
+        """Redact an OCR'd scanned page by rebuilding it as a cleaned picture.
+
+        Detection spans index ``normalized.text``; each is mapped back to the
+        joined OCR lines, so a name split across two lines gets a box on each.
+        """
         ocr = join_lines(lines)
         names: list[tuple[Box, str]] = [
             (box, label)
             for detection, label in labelled
-            for box in span_boxes(ocr, lines, detection.span)
+            for box in span_boxes(ocr, lines, normalized.to_raw_span(detection.span))
         ]
         keep = [line.box for line in lines if line.score >= _OCR_MIN_CONFIDENCE]
         document.rebuild_scanned_page(

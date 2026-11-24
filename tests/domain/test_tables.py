@@ -149,6 +149,16 @@ def test_a_wrapped_cell_not_found_whole_is_matched_line_by_line() -> None:
     assert "Alex Sample" in [d.text for d in found]
 
 
+def test_a_cell_wrapped_at_a_hyphen_matches_de_hyphenated_page_text() -> None:
+    # The cell kept the break; the normalized page text did not.
+    text = "Payee Amount\nAlex Sample 100.00"
+    columns = [TableColumn("Payee", ("Alex Sam-\nple",))]
+
+    found = column_detections(text, columns, frozenset({"payee"}), 1.0)
+
+    assert [d.text for d in found] == ["Alex Sample"]
+
+
 def test_nothing_chosen_means_no_detections() -> None:
     columns = [TableColumn("Payee", ("Alex Sample",))]
 
