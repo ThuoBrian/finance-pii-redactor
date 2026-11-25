@@ -379,6 +379,13 @@ the `version` field in `pyproject.toml`.
 
 ### Fixed
 
+- **Names split across a line on scanned PDF pages are now caught.** A
+  name hyphenated at a line break ("Alex Sam-" / "ple") was read by OCR as
+  two fragments and often missed. Scanned pages now go through the same
+  clean-up as typed PDF text, so the name is detected whole and covered on
+  both lines. Table columns chosen for redaction also match a cell that
+  wrapped at a hyphen.
+
 - **The sidebar buttons no longer drop the uploaded file.** Refresh on the
   master-list card, and Cancel under Close the app, emptied the upload box
   and sent you back to Upload, losing the review in progress. The sidebar is

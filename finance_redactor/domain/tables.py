@@ -26,6 +26,7 @@ from dataclasses import dataclass, replace
 from finance_redactor.domain.custom_words import find_custom_words
 from finance_redactor.domain.entities import DetectionSource, PiiDetection
 from finance_redactor.domain.ocr import OcrLine
+from finance_redactor.domain.pdf_text_normalizer import normalize_pdf_text
 from finance_redactor.domain.pseudonyms import normalize
 
 # A table needs a header row and at least this many rows under it.
@@ -93,6 +94,12 @@ def column_detections(
     detections: list[PiiDetection] = []
     for value in values:
         found = find_custom_words(text, [value], score)
+        if not found:
+            # The page text is de-hyphenated (pdf_text_normalizer), so a cell
+            # that wrapped at a hyphen ("Abe-\nna") reads as one word there.
+            joined = normalize_pdf_text(value).text
+            if joined != value:
+                found = find_custom_words(text, [joined], score)
         if not found:
             found = find_custom_words(text, value.splitlines(), score)
         detections.extend(
