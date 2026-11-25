@@ -89,3 +89,18 @@ def test_offset_map_length_matches_text():
     raw = "  Acme   Sup-\nplies  "
     result = normalize_pdf_text(raw)
     assert len(result.text) == len(result.offset_map)
+
+
+def test_keep_newlines_keeps_line_breaks_but_still_joins_hyphenated_ones() -> None:
+    raw = "Payee  Amount\nAlex Sam-\nple   100\n\nRobin Example"
+
+    result = normalize_pdf_text(raw, keep_newlines=True)
+
+    assert result.text == "Payee Amount\nAlex Sample 100\nRobin Example"
+    start = result.text.index("Alex Sample")
+    span = result.to_raw_span(Span(start, start + len("Alex Sample")))
+    assert raw[span.start : span.end] == "Alex Sam-\nple"
+
+
+def test_without_keep_newlines_line_breaks_become_spaces() -> None:
+    assert normalize_pdf_text("one\ntwo").text == "one two"

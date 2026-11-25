@@ -51,11 +51,17 @@ class NormalizedText:
         return Span(start, end)
 
 
-def normalize_pdf_text(raw: str) -> NormalizedText:
+def normalize_pdf_text(raw: str, *, keep_newlines: bool = False) -> NormalizedText:
     """Return a whitespace-normalized, ligature-expanded copy of ``raw``.
 
     The returned ``text`` is suitable for name detection; ``to_raw_span`` can
     translate detection spans back to ``raw`` for replacement in the PDF.
+
+    ``keep_newlines`` collapses a whitespace run that holds a line break to a
+    newline rather than a space. OCR text needs this: its lines are table
+    rows and separate fields as often as wrapped sentences, and the language
+    model misses more bare names once they run together on one line. A
+    hyphenated line break is still joined either way.
     """
     if not raw:
         return NormalizedText("", raw, ())
@@ -97,27 +103,32 @@ def normalize_pdf_text(raw: str) -> NormalizedText:
         dehyphenated.append((ch, offset))
         i += 1
 
-    # Step 3: collapse whitespace runs to a single space.
+    # Step 3: collapse whitespace runs to a single space (or to a newline,
+    # with ``keep_newlines``, when the run holds one).
     normalized: list[tuple[str, int]] = []
     in_whitespace = False
     ws_offset = 0
+    ws_char = " "
     for ch, offset in dehyphenated:
         if ch.isspace():
             if not in_whitespace:
                 in_whitespace = True
                 ws_offset = offset
+                ws_char = " "
+            if keep_newlines and ch == "\n":
+                ws_char = "\n"
             continue
         if in_whitespace:
-            normalized.append((" ", ws_offset))
+            normalized.append((ws_char, ws_offset))
             in_whitespace = False
         normalized.append((ch, offset))
     if in_whitespace:
-        normalized.append((" ", ws_offset))
+        normalized.append((ws_char, ws_offset))
 
-    # Step 4: strip leading/trailing spaces while preserving offset map.
-    while normalized and normalized[0][0] == " ":
+    # Step 4: strip leading/trailing whitespace while preserving offset map.
+    while normalized and normalized[0][0] in " \n":
         normalized.pop(0)
-    while normalized and normalized[-1][0] == " ":
+    while normalized and normalized[-1][0] in " \n":
         normalized.pop()
 
     text = "".join(ch for ch, _ in normalized)
